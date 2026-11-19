@@ -2,7 +2,7 @@
 > 这个文件是**给 AI 读的**——组员不用背它，人侧每天只需两句（见 README 与 docs/ai-开场模板.md）。任何 AI 工具开工前先读它，规则不再逐次口头交代。与它冲突时以它为准，并群里报一句。
 
 ## 1. 项目与技术栈
-- 6 人 7 天网页项目，仓库：soft-web-buaa/team-web（私有）。
+- 6 人 7 天网页项目，仓库：soft-web-buaa/team-web（公开，2026-11-19 起）。
 - 技术栈（周日组会拍板，拍板即冻结、中途不换；未拍板前按本行建议）：Vue3 + JavaScript + Element Plus；Node 24.x LTS；npm 走仓库 .npmrc 国内镜像；后端 CloudBase 云函数 + 云开发数据库。
 - 公共环境：GitHub Desktop 图形界面为主；命令行照抄命令或救火时用。
 - 里程碑：M0 前后端上线（周一）/ M1 页面全（周二）/ M2 核心功能通+刺评审（周三）/ M3 功能冻结（周五）/ M4 主体完成（周日）。
@@ -21,7 +21,7 @@
 ## 4. Git 与提交规范
 - 分支：`feature/功能-拼音`，从最新 main 开；当天开当天合。
 - 提交：前缀 `feat:/fix:/docs:/style:/refactor:/chore:` + 一句中文 ≤50 字；永远不写 "update"；一条任务一个 commit；提交前 `git status`/`git diff` 自查动了哪些文件。
-- PR：描述三行（做了什么 / 什么没过 / 下一步）+ `Closes #编号`（这句话让合并后任务自动关闭）；合并统一由组里在网页点。
+- PR：描述三行（做了什么 / 什么没过 / 下一步）+ `Closes #编号`（这句话让合并后任务自动关闭）；合并统一由组里在网页点（main 有分支保护：必须 PR、至少 1 人 approve；管理员救火除外）。
 - 红线：永不 force push；永不直接改 main；main 坏了在网页对坏 PR 点 Revert，不 reset --hard；冲突 `merge --abort` 后群里喊。
 
 ## 5. 红线与合规
