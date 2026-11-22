@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4 个 Web 候选 · 2 周可交付版</title>
+<style>
+  :root{
+    --bg:#eef2f3;
+    --card:#ffffff;
+    --ink:#0d1b1e;
+    --muted:#5f6d70;
+    --line:#d5dfe1;
+    --accent:#0b6b5b;
+    --accent-soft:#dff1ec;
+    --orange:#ff5a1f;
+    --orange-soft:#ffe7dd;
+    --navy:#12304a;
+    --shadow:0 12px 30px rgba(13,27,30,.07);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,sans-serif;
+    line-height:1.75;-webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(11,107,91,.25)}
+  a:hover{color:var(--orange);border-bottom-color:var(--orange)}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+  .mono{font-family:"Cascadia Code","SFMono-Regular",Consolas,monospace}
+
+  /* hero */
+  .hero{
+    position:relative;overflow:hidden;padding:82px 0 52px;border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(900px 420px at 85% -10%, rgba(255,90,31,.12), transparent 62%),
+      radial-gradient(700px 380px at 5% 110%, rgba(11,107,91,.11), transparent 62%),
+      linear-gradient(180deg,#f7faf9,var(--bg));
+  }
+  .hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(rgba(13,27,30,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(13,27,30,.045) 1px,transparent 1px);
+    background-size:46px 46px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.5),transparent 80%);
+  }
+  .hero .wrap{position:relative;z-index:1}
+  .kicker{
+    display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.14em;font-weight:800;
+    color:var(--accent);text-transform:uppercase;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:7px 14px;
+  }
+  .kicker i{width:7px;height:7px;border-radius:50%;background:var(--orange);display:inline-block;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+  h1{font-size:clamp(38px,6vw,72px);line-height:1.08;letter-spacing:-.045em;margin:22px 0 16px;font-weight:900}
+  h1 em{font-style:normal;color:var(--orange)}
+  .lede{font-size:clamp(16px,1.6vw,20px);color:var(--muted);max-width:820px;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px;font-size:13px;color:var(--muted)}
+  .meta span{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 11px}
+  .notice{
+    margin-top:24px;display:inline-flex;gap:10px;align-items:flex-start;
+    background:#fff8f3;border:1px solid #f3cdbd;border-left:4px solid var(--orange);
+    border-radius:0 10px 10px 0;padding:12px 15px;font-size:13px;color:#6b3a25;max-width:820px;
+  }
+  .notice b{color:#a33c13}
+
+  /* sections */
+  section{padding:62px 0}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:28px;flex-wrap:wrap}
+  .sec-num{font-size:12px;letter-spacing:.18em;font-weight:800;color:var(--orange);margin-bottom:6px}
+  h2{font-size:clamp(26px,3.2vw,40px);line-height:1.2;letter-spacing:-.03em;margin:0;font-weight:850}
+  .sec-desc{color:var(--muted);max-width:540px;margin:0;font-size:14px}
+
+  /* top cards */
+  .top4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .top-card{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:20px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .top-card::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--accent)}
+  .top-card:nth-child(2)::before{background:var(--navy)}
+  .top-card:nth-child(3)::before{background:var(--orange)}
+  .top-card:nth-child(4)::before{background:#8a5cf6}
+  .top-card .no{font-size:11px;font-weight:900;letter-spacing:.12em;color:var(--muted)}
+  .top-card h3{font-size:18px;margin:7px 0 7px;letter-spacing:-.02em;line-height:1.35}
+  .top-card p{margin:0;font-size:13px;color:var(--muted)}
+  .top-card .verdict{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);font-size:12.5px;font-weight:700;color:var(--ink)}
+  .top-card .verdict span{color:var(--orange)}
+
+  /* role framework */
+  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .role{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 17px;box-shadow:var(--shadow)}
+  .role .rid{display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;border-radius:7px;background:var(--navy);color:#fff;font-size:12px;font-weight:900;margin-bottom:7px}
+  .role b{display:block;font-size:15px;margin-bottom:3px}
+  .role p{margin:0;font-size:12.5px;color:var(--muted)}
+  .pairing{margin-top:16px;background:#0d1b1e;color:#e9efee;border-radius:13px;padding:18px 20px;font-size:13.5px;display:flex;gap:22px;flex-wrap:wrap}
+  .pairing b{color:#fff}
+  .pairing span{color:#b9c7c5}
+
+  /* matrix */
+  .matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}
+  .matrix{width:100%;border-collapse:collapse;font-size:13px;min-width:980px}
+  .matrix th,.matrix td{padding:12px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+  .matrix th{background:#e7eeef;font-size:11px;letter-spacing:.06em;color:#425254;text-transform:uppercase;white-space:nowrap}
+  .matrix td:first-child{font-weight:800;white-space:nowrap;background:#f7faf9}
+  .matrix tr:last-child td{border-bottom:0}
+  .matrix .sub{display:block;color:var(--muted);font-size:11.5px;font-weight:400;margin-top:3px}
+
+  /* project */
+  .project{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);margin-bottom:26px;overflow:hidden}
+  .project-head{padding:26px 28px 20px;border-bottom:1px solid var(--line);position:relative;background:linear-gradient(180deg,#fbfdfc,#fff)}
+  .project-no{position:absolute;right:24px;top:16px;font-size:54px;font-weight:900;line-height:1;color:transparent;-webkit-text-stroke:1px #cfdcde}
+  .project-cat{font-size:11px;font-weight:800;letter-spacing:.12em;color:var(--orange);text-transform:uppercase;margin-bottom:7px}
+  .project h3{font-size:25px;line-height:1.3;letter-spacing:-.02em;margin:0 0 7px;max-width:85%}
+  .project .one{margin:0;color:var(--muted);font-size:14px;max-width:85%}
+  .project-body{padding:22px 28px 26px;display:grid;grid-template-columns:1.1fr .9fr;gap:24px}
+  .block h4{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 9px}
+  .block ul{margin:0;padding-left:18px}
+  .block li{margin:6px 0;font-size:13.5px}
+  .block.cut li{color:#7b6a63}
+  .block.cut h4{color:#b0542e}
+  .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;margin:2px 4px 2px 0;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .tag.o{background:var(--orange-soft);color:#a33c13}
+  .tag.n{background:#e3ebf5;color:var(--navy)}
+  .strip{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:4px}
+  .strip .cell{background:#f4f8f7;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:12.5px}
+  .strip .cell b{display:block;font-size:10px;letter-spacing:.08em;color:var(--orange);margin-bottom:4px}
+  .demo{margin-top:14px;background:#0d1b1e;color:#e9efee;border-radius:11px;padding:14px 16px;font-size:13px}
+  .demo b{color:#fff;display:block;margin-bottom:4px}
+  .demo span{color:#b9c7c5}
+  .project-foot{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:14px;border-top:1px dashed var(--line);padding-top:16px}
+  .mini{font-size:12.5px}
+  .mini b{display:block;font-size:10px;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
+  .mini.risk b{color:#b0542e}
+  .mini p{margin:0;color:#425254}
+
+  /* timeline */
+  .timeline{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .day{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 14px;box-shadow:var(--shadow)}
+  .day .d{font-size:10px;font-weight:900;letter-spacing:.1em;color:var(--orange);margin-bottom:5px}
+  .day b{display:block;font-size:14px;margin-bottom:4px}
+  .day p{margin:0;font-size:12px;color:var(--muted)}
+  .freeze{margin-top:14px;background:#fff8f3;border:1px solid #f3cdbd;border-left:4px solid var(--orange);border-radius:0 10px 10px 0;padding:12px 15px;font-size:13px;color:#6b3a25}
+
+  /* score */
+  .score{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border-radius:8px;font-weight:900;font-size:13px}
+  .s5{background:var(--accent);color:#fff}.s4{background:#cfe8e2;color:var(--accent)}
+  .s3{background:#e7eeef;color:#5f6d70}.s2{background:#ffe0d3;color:#a33c13}
+  .total{font-weight:900;font-size:15px}
+  .legend{font-size:12px;color:var(--muted);margin-top:10px}
+
+  /* decision */
+  .decision{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .dec{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 19px;box-shadow:var(--shadow)}
+  .dec b{display:block;font-size:15px;margin-bottom:5px}
+  .dec p{margin:0;font-size:13px;color:var(--muted)}
+  .dec .if{color:var(--orange);font-weight:800}
+
+  .rules{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:20px 21px;box-shadow:var(--shadow)}
+  .panel h4{margin:0 0 10px;font-size:16px}
+  .panel ul{margin:0;padding-left:18px}
+  .panel li{margin:7px 0;font-size:13px}
+
+  footer{border-top:1px solid var(--line);padding:26px 0 46px;font-size:12px;color:var(--muted)}
+
+  @media (max-width:1000px){
+    .top4{grid-template-columns:1fr 1fr}
+    .roles{grid-template-columns:1fr 1fr}
+    .project-body{grid-template-columns:1fr}
+    .timeline{grid-template-columns:1fr 1fr}
+    .decision,.rules{grid-template-columns:1fr}
+  }
+  @media (max-width:640px){
+    .top4,.roles{grid-template-columns:1fr}
+    .strip,.project-foot{grid-template-columns:1fr}
+    .hero{padding:60px 0 40px}
+    section{padding:42px 0}
+  }
+  @media print{
+    body{background:#fff}.hero{background:#fff}
+    .top-card,.project,.panel,.day{box-shadow:none}
+    section{padding:30px 0}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker"><i></i> 软件课程 · 6 人小组 · 2 周冲刺版</span>
+    <h1>4 个<em>能交付</em>的<br>Web 候选方案</h1>
+    <p class="lede">基于上一版 8 个方案，移除 05 数字展，保留 01 / 03 / 04 / 06。这一版只回答两个问题：<b>2 周能做出什么</b>，以及<b>6 个人各自干什么</b>。</p>
+    <div class="meta">
+      <span>2026-11-22</span>
+      <span>工期 2 周 / 10 个工作日</span>
+      <span>4 个方案 · 4 个不同选材</span>
+      <span>6 角色 · 3 对搭档</span>
+    </div>
+    <div class="notice">
+      <div><b>已移除 05 数字展。</b> 不是它不好，而是 2 周内 3D 场景、素材、叙事、音效同时到位风险太高。除非组里有 3D/设计同学全职投入，否则不建议在 2 周冲刺里选它。</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- 总览 -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">00 / 先看结论</div>
+        <h2>四个方案，四种风险</h2>
+      </div>
+      <p class="sec-desc">如果目标是“稳过 + 好看”，选 01；如果目标是“AI 含量”，选 03；如果目标是“现场最炸”，选 06；04 只建议有实时协作强人的组碰。</p>
+    </div>
+    <div class="top4">
+      <article class="top-card">
+        <div class="no">01 / ACCESSIBILITY</div>
+        <h3>A11y Lens</h3>
+        <p>给任意网页做“关怀模式”：大字、去干扰、朗读、无障碍体检。</p>
+        <div class="verdict">2 周结论：<span>最稳，首选</span></div>
+      </article>
+      <article class="top-card">
+        <div class="no">03 / EDUCATION</div>
+        <h3>DefenseRoom</h3>
+        <p>AI 答辩陪审团：三位评委轮番追问，并定位到原文证据。</p>
+        <div class="verdict">2 周结论：<span>第二稳，AI 含量高</span></div>
+      </article>
+      <article class="top-card">
+        <div class="no">04 / COLLABORATION</div>
+        <h3>LocalFirst Canvas</h3>
+        <p>断网还能协作的白板，恢复网络自动合并。</p>
+        <div class="verdict">2 周结论：<span>高风险，高回报</span></div>
+      </article>
+      <article class="top-card">
+        <div class="no">06 / DESIGN TOOL</div>
+        <h3>Sketch2App</h3>
+        <p>纸上画线框，拍照后 30 秒变成可点击网页。</p>
+        <div class="verdict">2 周结论：<span>演示最炸，中等风险</span></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- 角色 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">01 / 组队</div>
+        <h2>6 个人怎么分，才不互相等</h2>
+      </div>
+      <p class="sec-desc">6 人不是 6 条独立流水线。按“3 对搭档”组织，每对有一个接口人，减少跨人沟通成本。</p>
+    </div>
+    <div class="roles">
+      <div class="role"><span class="rid">R1</span><b>产品 / 项目 / 答辩</b><p>定范围、砍需求、排进度、写演示脚本和答辩 PPT；所有“要不要加功能”的问题由他拍板。</p></div>
+      <div class="role"><span class="rid">R2</span><b>前端 A：视觉与交互</b><p>页面结构、视觉风格、动效、核心交互；负责“用户第一眼看到的东西”。</p></div>
+      <div class="role"><span class="rid">R3</span><b>前端 B：工程与集成</b><p>状态管理、接口联调、构建部署、代码合并；主分支的集成负责人。</p></div>
+      <div class="role"><span class="rid">R4</span><b>后端 / 数据</b><p>API、存储、文件解析、抓取、WebSocket；负责“数据进得来、存得住”。</p></div>
+      <div class="role"><span class="rid">R5</span><b>AI / 算法</b><p>模型调用、Prompt、评测集、识别/推荐/CRDT 策略；负责“效果说得清”。</p></div>
+      <div class="role"><span class="rid">R6</span><b>测试 / 质量 / 文档</b><p>用例、兼容性、断网/多端/无障碍测试、录屏、README；负责“演示不翻车”。</p></div>
+    </div>
+    <div class="pairing">
+      <div><b>Pair A：R2 + R3</b><br><span>所有用户能看到的界面与交互</span></div>
+      <div><b>Pair B：R4 + R5</b><br><span>数据、模型、接口、算法效果</span></div>
+      <div><b>Pair C：R1 + R6</b><br><span>范围、验收、演示、文档、兜底</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 分工矩阵 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">02 / 分工矩阵</div>
+        <h2>同一角色，在四个项目里分别做什么</h2>
+      </div>
+      <p class="sec-desc">先认领角色，再选项目；不要先选项目再临时抓人。每个人在每个项目里的主责都不同，但能力要求一致。</p>
+    </div>
+    <div class="matrix-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>角色</th>
+            <th>01 A11y Lens</th>
+            <th>03 DefenseRoom</th>
+            <th>04 LocalFirst Canvas</th>
+            <th>06 Sketch2App</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>R1 产品 / 答辩</td>
+            <td>范围与验收标准；演示脚本；向老师解释“扩展也是 Web 项目”<span class="sub">交付：演示脚本 + 答辩 PPT</span></td>
+            <td>评委人设与评分 rubric；高风险问题库；演示脚本<span class="sub">交付：评分表 + 题库</span></td>
+            <td>房间/协作流程；演示脚本；断网演示的叙事<span class="sub">交付：演示脚本 + 用户流程</span></td>
+            <td>组件规范（5 类）；演示脚本；导出模板验收<span class="sub">交付：组件规范 + 演示脚本</span></td>
+          </tr>
+          <tr>
+            <td>R2 前端 A</td>
+            <td>悬浮面板、字号/对比度/隐藏干扰、阅读模式覆盖层<span class="sub">交付：可交互的关怀面板</span></td>
+            <td>对话界面、流式输出、报告页、引用高亮<span class="sub">交付：对话 + 报告 UI</span></td>
+            <td>画布、便签、选中/拖动/编辑、在线光标<span class="sub">交付：白板交互</span></td>
+            <td>上传页、预览画布、简单编辑（文案/颜色）<span class="sub">交付：预览与编辑 UI</span></td>
+          </tr>
+          <tr>
+            <td>R3 前端 B</td>
+            <td>设置持久化、分享配置、恢复原样、构建与演示环境<span class="sub">交付：设置/恢复/打包</span></td>
+            <td>上传与解析结果展示、会话状态、错误处理<span class="sub">交付：上传链路 + 状态管理</span></td>
+            <td>同步状态、重连提示、导出 JSON/PNG、部署<span class="sub">交付：同步 UI + 导出</span></td>
+            <td>组件渲染器、HTML 导出、分享预览、沙箱<span class="sub">交付：渲染器 + 导出</span></td>
+          </tr>
+          <tr>
+            <td>R4 后端 / 数据</td>
+            <td>Web 主站；可选代理阅读器（公开页面）；部署与缓存<span class="sub">交付：主站 + 可选 reader</span></td>
+            <td>PDF/PPT 解析、文本分块、页码映射、会话存储<span class="sub">交付：解析 API + chunk 表</span></td>
+            <td>WebSocket 服务、房间管理、部署、心跳/重连<span class="sub">交付：可用的 WS 服务</span></td>
+            <td>上传存储、任务队列、导出服务、临时文件清理<span class="sub">交付：上传/任务 API</span></td>
+          </tr>
+          <tr>
+            <td>R5 AI / 算法</td>
+            <td>DOM 语义分块、简化策略、alt 文本建议（可选）<span class="sub">交付：分块与建议模块</span></td>
+            <td>多智能体编排、追问策略、引用约束、评分<span class="sub">交付：Agent + rubric</span></td>
+            <td>Yjs 数据模型、冲突策略、离线队列、撤销<span class="sub">交付：同步模型</span></td>
+            <td>视觉识别、JSON schema、代码生成、评测集<span class="sub">交付：识别 + 生成</span></td>
+          </tr>
+          <tr>
+            <td>R6 测试 / 文档</td>
+            <td>3 个 mock 页面；Chrome/Edge 兼容；恢复测试；录屏<span class="sub">交付：测试页 + 录屏</span></td>
+            <td>10 份 PPT 评测集；幻觉检查；引用准确性；录屏<span class="sub">交付：评测报告</span></td>
+            <td>双窗口/断网/重连测试；冲突用例；录屏<span class="sub">交付：同步测试报告</span></td>
+            <td>20 张草图评测集；识别准确率；导出验证<span class="sub">交付：评测报告</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="legend">建议：R1 不要兼任写代码的主力；R6 从 Day 1 就开始做评测集和 mock 页面，不要等到最后才“帮忙测试”。</p>
+  </div>
+</section>
+
+<!-- 方案 01 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">03 / 方案详情</div>
+        <h2>01 A11y Lens：给任意网页做“关怀模式”</h2>
+      </div>
+      <p class="sec-desc">产品形态是“浏览器扩展 + Web 主站”，不是普通网页。老师如果问“为什么不是一个网址”，答案在下面的技术边界里。</p>
+    </div>
+
+    <article class="project">
+      <div class="project-head">
+        <div class="project-no">01</div>
+        <div class="project-cat">无障碍 · 浏览器扩展 + Web 主站</div>
+        <h3>打开任意网页，一键切换成大字、去广告、可朗读的关怀版</h3>
+        <p class="one">用户安装扩展后，在任何已登录页面点一下，就能得到字号放大、干扰隐藏、正文重排、语音朗读和一份无障碍体检报告。</p>
+      </div>
+      <div class="project-body">
+        <div class="block">
+          <h4>2 周只做这些（Must-have）</h4>
+          <ul>
+            <li>Manifest V3 扩展 + 注入式悬浮面板（不依赖 sidePanel，Chrome/Edge 都能跑）</li>
+            <li>字号 100%–200%、行距、高对比、暗色模式</li>
+            <li>隐藏干扰：广告、浮层、固定导航、cookie 横幅；支持“点选删除”</li>
+            <li>Readability 阅读模式：抽取正文，覆盖层重排</li>
+            <li>TTS 朗读 + 当前句高亮 + 自动滚动</li>
+            <li>axe-core 体检报告：问题列表、严重级别、修复建议</li>
+            <li>恢复原样 + 设置持久化 + 分享配置链接</li>
+          </ul>
+        </div>
+        <div class="block cut">
+          <h4>明确不做（Cut list）</h4>
+          <ul>
+            <li>语音指令（国内 Chrome 的 SpeechRecognition 不稳定）</li>
+            <li>LLM 自动改写全文、自动生成复杂 alt 文本</li>
+            <li>账号体系、云端同步、跨设备历史</li>
+            <li>代理阅读器只作为 R4 的“有余力才做”项</li>
+            <li>移动端适配（Chrome Android 基本不支持扩展）</li>
+          </ul>
+        </div>
+        <div class="strip">
+          <div class="cell"><b>DAY 2 检查点</b>能在 3 个不同类型的页面上注入面板并放大字号</div>
+          <div class="cell"><b>DAY 5 检查点</b>阅读模式稳定，广告/浮层可隐藏，能一键恢复</div>
+          <div class="cell"><b>DAY 7 检查点</b>朗读 + 体检报告 + 设置持久化全部串通</div>
+        </div>
+        <div class="demo">
+          <b>演示脚本（90 秒）</b>
+          <span>打开本地 mock 的“小字 + 广告 + 低对比度”页面 → 一键关怀版 → 字号/对比度对比 → 点“朗读” → 打开体检报告 → 一键恢复原样 → 用一个真实公开页面收尾。</span>
+        </div>
+        <div class="project-foot">
+          <div class="mini risk"><b>风险与降级</b><p>改崩页面 → 优先用覆盖层 + 一键恢复；TTS 没中文声音 → 用 Edge 本地语音 + 预生成音频兜底；扩展安装麻烦 → 准备书签小工具和录屏备用。</p></div>
+          <div class="mini"><b>技术栈</b><p>Manifest V3、content script、Readability.js、axe-core、speechSynthesis、chrome.storage、Vite、可选 Playwright。</p></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 03 -->
+    <article class="project">
+      <div class="project-head">
+        <div class="project-no">03</div>
+        <div class="project-cat">教育 · 多智能体 + 文档问答</div>
+        <h3>DefenseRoom：AI 答辩陪审团</h3>
+        <p class="one">上传 PPT 或论文，三位性格不同的 AI 评委轮番追问；每个追问都能点回原文，最后生成一份“会被问倒的 10 个点”。</p>
+      </div>
+      <div class="project-body">
+        <div class="block">
+          <h4>2 周只做这些（Must-have）</h4>
+          <ul>
+            <li>上传 PDF/PPT → 抽取文本、页码、章节</li>
+            <li>三种评委人设：技术追问 / 产品质疑 / 毒舌压力</li>
+            <li>文字多轮追问，每轮 3 个问题，支持“继续追问”</li>
+            <li>引用定位：点击引用跳到原文页/段并高亮</li>
+            <li>结束报告：逻辑漏洞、证据不足、表达问题、预测分数</li>
+            <li>10 个高风险问题清单 + 逐页修改建议</li>
+          </ul>
+        </div>
+        <div class="block cut">
+          <h4>明确不做（Cut list）</h4>
+          <ul>
+            <li>语音对话、实时打断、视频表情分析</li>
+            <li>多人协作、账号体系、历史项目库</li>
+            <li>实时评分动画、复杂数据看板</li>
+            <li>非 PDF/PPT 格式（Word、图片先不支持）</li>
+          </ul>
+        </div>
+        <div class="strip">
+          <div class="cell"><b>DAY 3 检查点</b>10 页 PDF 能稳定解析出带页码的 chunk</div>
+          <div class="cell"><b>DAY 5 检查点</b>多轮对话 + 引用能跑通，引用可点击定位</div>
+          <div class="cell"><b>DAY 7 检查点</b>报告生成 + 高风险问题 + 逐页建议闭环</div>
+        </div>
+        <div class="demo">
+          <b>演示脚本（90 秒）</b>
+          <span>上传一份 10 页课程 PPT → 选“技术评委” → 连续追问 3 轮 → 点开一个引用，原文高亮 → 生成报告 → 展示“最容易被问倒的 3 个点”。</span>
+        </div>
+        <div class="project-foot">
+          <div class="mini risk"><b>风险与降级</b><p>解析乱 → 只支持 PDF + 纯文本 PPT；引用不准 → 按页/段存 chunk，强制模型返回 chunk id；幻觉 → 报告区分“原文事实”和“模型推断”。</p></div>
+          <div class="mini"><b>技术栈</b><p>Next.js、pdf.js / pdfplumber、python-pptx、LLM API、SSE 流式输出、Tailwind、SQLite/Postgres。</p></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 04 -->
+    <article class="project">
+      <div class="project-head">
+        <div class="project-no">04</div>
+        <div class="project-cat">协作基础设施 · 本地优先</div>
+        <h3>LocalFirst Canvas：断网也能协作的白板</h3>
+        <p class="one">两个人打开同一个网页就能协作画图；拔掉网线继续画，网络恢复后自动合并，数据只存在各自浏览器里。</p>
+      </div>
+      <div class="project-body">
+        <div class="block">
+          <h4>2 周只做这些（Must-have）</h4>
+          <ul>
+            <li>Yjs + y-websocket + y-indexeddb</li>
+            <li>便签：新增、拖动、改文字、改颜色、删除</li>
+            <li>在线光标 + 成员名字 + 在线状态</li>
+            <li>撤销/重做（Yjs UndoManager）</li>
+            <li>断网继续编辑，恢复后自动合并</li>
+            <li>导出 JSON / PNG；房间号/分享链接</li>
+          </ul>
+        </div>
+        <div class="block cut">
+          <h4>明确不做（Cut list）</h4>
+          <ul>
+            <li>图片、自由绘制、复杂图形、评论</li>
+            <li>账号体系、权限、版本历史、E2E 加密</li>
+            <li>跨公网 P2P（WebRTC 的 NAT/信令会吃掉时间）</li>
+            <li>移动端精细适配（能打开即可）</li>
+          </ul>
+        </div>
+        <div class="strip">
+          <div class="cell"><b>DAY 2 检查点</b>两个窗口同步一个便签的增删改；不通过就换方案</div>
+          <div class="cell"><b>DAY 5 检查点</b>断网编辑 + 恢复合并跑通</div>
+          <div class="cell"><b>DAY 7 检查点</b>在线光标 + 撤销 + 导出 + 重连提示</div>
+        </div>
+        <div class="demo">
+          <b>演示脚本（90 秒）</b>
+          <span>两个窗口进同一房间 → 同时拖动便签 → 断网 → 各画各的 → 恢复网络 → 内容自动合并 → 展示在线光标 → 导出 PNG。</span>
+        </div>
+        <div class="project-foot">
+          <div class="mini risk"><b>风险与降级</b><p>同步调不通 → Day 2 必须 go/no-go，失败就降级“单机白板 + 导入导出”；WebRTC 不稳 → 用 WebSocket；画布性能 → 便签用 DOM，不用 Canvas。</p></div>
+          <div class="mini"><b>技术栈</b><p>React + Vite、Yjs、y-websocket、y-indexeddb、y-protocols/awareness、Node WS server、Konva 可选。</p></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 06 -->
+    <article class="project">
+      <div class="project-head">
+        <div class="project-no">06</div>
+        <div class="project-cat">设计开发工具 · 多模态生成</div>
+        <h3>Sketch2App：纸上画个页面，30 秒变成能点的网页</h3>
+        <p class="one">拍一张手绘线框图，自动识别按钮/输入框/卡片，生成可预览的页面；改改文案和颜色，就能导出 HTML。</p>
+      </div>
+      <div class="project-body">
+        <div class="block">
+          <h4>2 周只做这些（Must-have）</h4>
+          <ul>
+            <li>上传/拍照手绘线框，自动压缩图片</li>
+            <li>视觉模型识别 5 类组件：按钮、输入框、卡片、导航、文本</li>
+            <li>返回固定 JSON schema → React 渲染器预览</li>
+            <li>文案、颜色、圆角的简单编辑</li>
+            <li>导出 HTML（Tailwind）+ 分享预览链接</li>
+            <li>识别置信度提示 + 手动纠正</li>
+          </ul>
+        </div>
+        <div class="block cut">
+          <h4>明确不做（Cut list）</h4>
+          <ul>
+            <li>拖拽式布局编辑器、自由画布</li>
+            <li>React/Next.js 代码导出（先只导 HTML）</li>
+            <li>多页面、历史版本、账号、协作</li>
+            <li>复杂动效、响应式断点、真实后端接口</li>
+          </ul>
+        </div>
+        <div class="strip">
+          <div class="cell"><b>DAY 3 检查点</b>20 张草图 → JSON schema 稳定，5 类组件能识别</div>
+          <div class="cell"><b>DAY 5 检查点</b>JSON → 页面渲染，文案/颜色可改</div>
+          <div class="cell"><b>DAY 7 检查点</b>导出 HTML + 分享预览 + 置信度提示</div>
+        </div>
+        <div class="demo">
+          <b>演示脚本（90 秒）</b>
+          <span>现场在纸上画 3 个框 → 拍照上传 → 30 秒生成页面 → 手机扫码打开 → 改标题和按钮颜色 → 导出 HTML。</span>
+        </div>
+        <div class="project-foot">
+          <div class="mini risk"><b>风险与降级</b><p>识别不准 → 限定 5 类组件 + 固定栅格 + 手动纠正；生成样式丑 → 只用一个设计系统模板；图片隐私 → 本地压缩 + 明确不长期存储。</p></div>
+          <div class="mini"><b>技术栈</b><p>Next.js、多模态 LLM、JSON Schema、React 渲染器、Tailwind、iframe sandbox、HTML 导出。</p></div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- 排期 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">04 / 2 周排期</div>
+        <h2>把 10 天当成 3 个阶段</h2>
+      </div>
+      <p class="sec-desc">前 2 天只做技术验证，不写业务；第 8 天功能冻结；最后 2 天只做演示和兜底。</p>
+    </div>
+    <div class="timeline">
+      <div class="day"><div class="d">DAY 1</div><b>启动 + Spike</b><p>建仓库、CI、接口约定；每人认领角色；跑最难的技术点。</p></div>
+      <div class="day"><div class="d">DAY 2</div><b>Go / No-Go</b><p>Spike 演示；范围冻结；API contract 定稿；不通过就换方案。</p></div>
+      <div class="day"><div class="d">DAY 3–6</div><b>主链路</b><p>两对搭档并行开发；每天 15 分钟站会；Day 5 做第一次端到端。</p></div>
+      <div class="day"><div class="d">DAY 7–8</div><b>集成 + 冻结</b><p>Day 7 全链路跑通；Day 8 功能冻结，只修 bug，不做新功能。</p></div>
+      <div class="day"><div class="d">DAY 9–10</div><b>演示 + 兜底</b><p>彩排 3 次、录屏备份、准备离线 demo；Day 10 提交。</p></div>
+    </div>
+    <div class="freeze"><b>硬规则：</b>Day 8 之后加功能，必须由 R1 同意，并且要砍掉一个同等工作量的功能。否则一律进“下版本”。</div>
+  </div>
+</section>
+
+<!-- 评分 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">05 / 选型</div>
+        <h2>按“2 周交付确定性”加权打分</h2>
+      </div>
+      <p class="sec-desc">交付确定性 ×2，其余各 ×1；5 分制。分数只用于组内对齐，不替代你们对自身能力的判断。</p>
+    </div>
+    <div class="matrix-wrap">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>方案</th><th>交付确定性 ×2</th><th>演示效果</th><th>技术含量</th><th>低撞题</th><th>6 人负载均衡</th><th>加权总分</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>01 A11y Lens</td><td><span class="score s5">5</span></td><td><span class="score s5">5</span></td><td><span class="score s3">3</span></td><td><span class="score s4">4</span></td><td><span class="score s4">4</span></td><td class="total">26</td></tr>
+          <tr><td>03 DefenseRoom</td><td><span class="score s4">4</span></td><td><span class="score s5">5</span></td><td><span class="score s4">4</span></td><td><span class="score s4">4</span></td><td><span class="score s3">3</span></td><td class="total">24</td></tr>
+          <tr><td>04 LocalFirst Canvas</td><td><span class="score s2">2</span></td><td><span class="score s5">5</span></td><td><span class="score s5">5</span></td><td><span class="score s5">5</span></td><td><span class="score s3">3</span></td><td class="total">22</td></tr>
+          <tr><td>06 Sketch2App</td><td><span class="score s3">3</span></td><td><span class="score s5">5</span></td><td><span class="score s5">5</span></td><td><span class="score s3">3</span></td><td><span class="score s4">4</span></td><td class="total">23</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="legend">读法：01 胜在“确定性”；04 输在“2 周内同步调不通就全盘皆输”；06 是“风险和演示效果都高”的中间选项。</p>
+  </div>
+</section>
+
+<!-- 决策 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">06 / 怎么拍板</div>
+        <h2>用四个问题，十分钟选出项目</h2>
+      </div>
+    </div>
+    <div class="decision">
+      <div class="dec"><b>1. 组里有人能独立搞定浏览器扩展吗？</b><p><span class="if">能</span> → 选 01，最稳；<span class="if">不能</span> → 01 也能做，但 R4 要提前准备代理阅读器或书签小工具作为备选形态。</p></div>
+      <div class="dec"><b>2. 你们更想讲“AI 故事”还是“工程故事”？</b><p><span class="if">AI 故事</span> → 03；<span class="if">工程故事</span> → 04；<span class="if">产品/设计故事</span> → 06。</p></div>
+      <div class="dec"><b>3. 有人做过 React + 实时同步吗？</b><p><span class="if">有</span> → 04 可以赌一把；<span class="if">没有</span> → 不要选 04，Day 2 的同步 spike 很可能过不了。</p></div>
+      <div class="dec"><b>4. 你们想要“稳过”还是“现场炸场”？</b><p><span class="if">稳过</span> → 01；<span class="if">炸场</span> → 06；<span class="if">两者都要</span> → 03（AI 追问 + 引用高亮，效果稳定）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 协作规则 -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">07 / 协作规则</div>
+        <h2>6 人项目最容易死在“接口对不上”</h2>
+      </div>
+    </div>
+    <div class="rules">
+      <div class="panel">
+        <h4>每天必须发生的 3 件事</h4>
+        <ul>
+          <li><b>15 分钟站会：</b>昨天做了什么、今天做什么、被什么卡住。</li>
+          <li><b>主分支可运行：</b>任何人合并前，本地必须能跑通主流程。</li>
+          <li><b>更新看板：</b>每张卡只允许“待做 / 在做 / 待验收 / 完成”四态。</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h4>四条硬规则</h4>
+        <ul>
+          <li><b>Day 2 冻结 API contract：</b>字段、错误码、示例 JSON 写进 README。</li>
+          <li><b>R3 是合并负责人：</b>其他人只提 PR，不直接推 main。</li>
+          <li><b>每个功能都有 fallback：</b>演示前必须知道“如果它挂了，用什么替代”。</li>
+          <li><b>Day 8 功能冻结：</b>之后只修 bug、只做演示优化。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    6 人软件课程小组 · 2 周冲刺版 · 2026-11-22 · 已移除 05 数字展，保留 01 / 03 / 04 / 06。
+  </div>
+</footer>
+
+</body>
+</html>
