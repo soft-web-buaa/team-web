@@ -20,7 +20,7 @@
 
 ## 协作约定（一句话版）
 - 一人一目录：只改 `src/features/<自己拼音>/`
-- main 必须走 PR，至少 1 人 approve 才能合
+- main 必须走 PR：只改 `people/` 个人文件免审计；动共享区要组长 approve
 - 提交信息：`feat:` / `fix:` 开头 + 一句中文
 - 完整版：[AGENTS.md](AGENTS.md)（AI 读）+ 群文件《03-Git协作手册.pdf》（人读）
 

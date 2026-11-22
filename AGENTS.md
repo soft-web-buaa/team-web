@@ -10,6 +10,7 @@
 
 ## 2. 目录边界（最重要的规则）
 - 每人只改 `src/features/<自己拼音>/` 自己的目录，别人目录不碰。
+- 个人素材/草稿/半成品一律放 `people/<自己 GitHub 名>/`（免审计）；只有"明天要进演示"的东西才进 `src/features/<切片>/`（要审计）。
 - 公共部分（路由、配置、样式变量、依赖 package.json、CI）只归管理员动；要动先在群里报备。
 - 一次只改一个变量/一个点；没有真实数据不许调参数、调阈值。
 
@@ -22,7 +23,10 @@
 ## 4. Git 与提交规范
 - 分支：`feature/功能-拼音`，从最新 main 开；当天开当天合。
 - 提交：前缀 `feat:/fix:/docs:/style:/refactor:/chore:` + 一句中文 ≤50 字；永远不写 "update"；一条任务一个 commit；提交前 `git status`/`git diff` 自查动了哪些文件。
-- PR：描述三行（做了什么 / 什么没过 / 下一步）+ `Closes #编号`（这句话让合并后任务自动关闭）；合并统一由组里在网页点（main 有分支保护：必须 PR、至少 1 人 approve；管理员救火除外）。
+- PR：描述三行（做了什么 / 什么没过 / 下一步）+ `Closes #编号`（这句话让合并后任务自动关闭）。审计按改动位置分流（`audit-gate` 检查，main 的必需检查）：
+  - 只改 `people/` 下个人文件 → 免审计，检查自动变绿，作者自己点 Merge；
+  - 动到 `people/` 以外（`src/`、`docs/`、配置、`.github/` 等）→ 必须组长 @naruto7 在 PR 上 Approve，检查才会变绿；没有 approve 就合不进去（管理员救火除外）。
+  - 一个 PR 里混了 `people/` 和共享区 → 按共享区算，要审计。
 - 红线：永不 force push；永不直接改 main；main 坏了在网页对坏 PR 点 Revert，不 reset --hard；冲突 `merge --abort` 后群里喊。
 
 ## 5. 红线与合规
