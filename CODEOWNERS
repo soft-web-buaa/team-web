@@ -1,10 +1,9 @@
-# CODEOWNERS —— 哪些改动会自动点名谁来看（软提醒；强制规则在下方）
+# CODEOWNERS —— 只做"改这块自动点名谁看一眼"的软提醒，不卡合并
 #
-# 强制规则不在这个文件里，在 .github/workflows/audit-gate.yml：
-#   · 只改 people/ → 免审计，自动通过，作者自己就能合
-#   · 动到 people/ 以外 → 没组长 approve 就合不进去（audit-gate 是 main 的必需检查）
+# 2026-11-22 起取消审计：main 只要走 PR，不要求 approve、不卡检查，作者自己点 Merge。
+# 本文件保留的是"谁负责哪块"的地图；被点名只是通知，不是拦路条件。
 #
-# people/ 故意不列：个人上传免审计，不打扰任何人。
+# people/ 故意不列：个人上传不打扰任何人。
 
 # 共享区：会进构建、影响所有人
 /.github/            @naruto7
