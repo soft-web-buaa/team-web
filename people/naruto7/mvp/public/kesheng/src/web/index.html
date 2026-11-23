@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>刻声：北航的十秒声片柜</title>
+  <meta name="description" content="在北航任何一个角落按住十秒，把那里的声音刻成一张能用手搓着听的铝盘。">
+  <link rel="preload" href="fonts/ks-fangsong-subset.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23D3D7DA'/%3E%3Ccircle cx='8' cy='8' r='5' fill='none' stroke='%2324304A' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='1.4' fill='%2324304A'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="mark" href="./" aria-label="刻声，回到首页">刻声</a>
+    <div class="bar-end">
+      <a class="bar-link" href="plan3d/">学院路馆藏分区图</a>
+      <p class="bar-note" id="shelf-count">柜里 1 张</p>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="desk" aria-labelledby="place">
+      <div class="tag" id="tag">
+        <p class="tag-no" id="tag-no">试-合成-01</p>
+        <h1 class="place" id="place">试音盘</h1>
+        <p class="meta" id="meta">合成的五声钟声，不是北航录音。</p>
+        <p class="hint" id="hint">在盘面上按住拖动就是搓：顺时针往前，逆时针倒放。</p>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-rec" id="btn-rec" type="button" aria-describedby="rec-note">
+          <span class="rec-dot" aria-hidden="true"></span><span class="btn-text" id="rec-text">按住刻十秒</span>
+        </button>
+        <button class="btn" id="btn-spin" type="button" aria-pressed="false">转起来</button>
+        <button class="btn" id="btn-room" type="button">测这个房间</button>
+        <button class="btn" id="btn-find" type="button">听声寻片</button>
+      </div>
+      <p class="note" id="rec-note">麦克风只在按住时打开，录音只存在这台电脑上。</p>
+
+      <fieldset class="rooms">
+        <legend>放进哪个房间听</legend>
+        <label><input type="radio" name="room" value="dry" checked> 原声</label>
+        <label><input type="radio" name="room" value="small"> 合成小房间</label>
+        <label><input type="radio" name="room" value="hall"> 合成大厅</label>
+        <label class="room-here" title="先测这个房间"><input type="radio" name="room" value="here" disabled> 这个房间</label>
+      </fieldset>
+
+      <div class="decay" id="decay" hidden>
+        <p class="decay-read" id="decay-read"></p>
+        <svg class="decay-plot" id="decay-plot" viewBox="0 0 360 132" role="img" aria-labelledby="decay-read"></svg>
+        <p class="note">拍手估算，不是声学测量。</p>
+      </div>
+
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <section class="shelf" aria-labelledby="shelf-h">
+        <h2 id="shelf-h">声片柜</h2>
+        <div class="source-switch" role="group" aria-label="看谁的声音">
+          <button class="mini" id="btn-src-mine" type="button" aria-pressed="true">我的柜子</button>
+          <button class="mini" id="btn-src-arch" type="button" aria-pressed="false">馆藏</button>
+        </div>
+        <ul class="shelf-list" id="shelf-list"></ul>
+        <div class="shelf-tools">
+          <button class="mini" id="btn-cab-export" type="button">导出整柜</button>
+          <button class="mini" id="btn-cab-import" type="button">导入</button>
+          <button class="mini" id="btn-clear" type="button">清空这台设备</button>
+          <input id="cab-file" type="file" accept=".zip,application/zip" hidden>
+        </div>
+        <p class="note" id="store-stat"></p>
+      </section>
+    </section>
+
+    <section class="turntable" aria-label="刻盘">
+      <div class="sleeve" aria-hidden="true">
+        <p class="sleeve-title">北航声片</p>
+        <p class="sleeve-sub">十秒一张，按地点与时段编目</p>
+      </div>
+      <div class="platter" id="platter">
+        <canvas id="disc" class="disc" tabindex="0" role="slider" aria-label="声片盘面"
+          aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" aria-valuetext="第 0 秒，停着"></canvas>
+        <div class="label" id="label" aria-hidden="true">
+          <span class="label-place" id="label-place">试音盘</span>
+          <span class="label-no" id="label-no">试-合成-01</span>
+        </div>
+        <svg class="rail" id="rail" viewBox="-1.1 -1.1 2.2 2.2" aria-hidden="true">
+          <line class="rail-line" x1="0" y1="-1.07" x2="0" y2="-0.33"></line>
+          <g id="rail-ticks"></g>
+          <g id="carriage" class="carriage">
+            <rect x="-0.035" y="-0.07" width="0.07" height="0.07" rx="0.008"></rect>
+            <path class="tip" d="M -0.012 0 L 0.012 0 L 0 0.03 Z"></path>
+          </g>
+        </svg>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="save" id="save">
+    <form method="dialog" id="save-form">
+      <h2>这是哪里</h2>
+      <label>钉到分区图上的地点（可跳过）
+        <select name="spot"><option value="">不钉</option></select>
+      </label>
+      <label>地点<input name="place" maxlength="20" placeholder="比如：新主楼前（钉了地点可以不写）"></label>
+      <label>校区
+        <select name="campus"><option>学院路</option><option>沙河</option></select>
+      </label>
+      <label>一句说明<input name="note" maxlength="40" placeholder="比如：早八前的晨读"></label>
+      <label>声音类型（可跳过）
+        <select name="kind">
+          <option value="">先不填</option>
+          <option value="voice">人声与人群</option>
+          <option value="move">脚步与移动</option>
+          <option value="machine">机械与设备</option>
+          <option value="signal">提示与信号</option>
+          <option value="nature">自然与天气</option>
+          <option value="space">空间与回响</option>
+          <option value="unsure">说不清</option>
+        </select>
+      </label>
+      <div class="save-actions">
+        <button class="btn" value="cancel" type="submit" formnovalidate>先不写</button>
+        <button class="btn btn-primary" value="ok" type="submit">归档</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

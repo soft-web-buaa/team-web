@@ -1,0 +1,158 @@
+{
+  "v": 1,
+  "note": "史料层（tier: archival）的选单：奥运只用本地侧试听后定稿的 o04/o05/o06（o01/o02/o03/o07 弃用，VERDICT-20261021），另加口述 1 段。只做「同一个地点，以前的声音」的对照：不进馆藏计数、不画成年轮的圈、不进寻片。音频由 tools/history-import.mjs 按 sha256 认出后放进 src/web/history/，随页面部署（用户 2026-10-20 拍板）。",
+  "license": "片段来自 B 站公开稿件，版权归原作者与上传者；随本作业页面部署展示，不二次分发。",
+  "auth": {
+    "deploy": true,
+    "status": "口头认可，书面授权待补",
+    "decided": "2026-10-20 用户拍板直接用",
+    "note": "license 已按 2026-10-21 用户裁决改为「可部署」；书面授权仍待补，补齐后改 status。"
+  },
+  "places": {
+    "XY06": {
+      "facts": [
+        {
+          "text": "2001 年 8 月落成，为第 21 届世界大学生运动会的排球比赛而建。",
+          "src": "https://zh.wikipedia.org/wiki/%E5%8C%97%E4%BA%AC%E8%88%AA%E7%A9%BA%E8%88%AA%E5%A4%A9%E5%A4%A7%E5%AD%A6%E4%BD%93%E8%82%B2%E9%A6%86",
+          "seen": "仅见摘要（云端打不开原页；本地侧另有 360 百科、票务页与 2001 大运场馆清单）"
+        },
+        {
+          "text": "2008 年 8 月，北京奥运会举重比赛在这里举行。",
+          "src": "https://news.buaa.edu.cn/info/1002/57234.htm",
+          "srcDate": "2022-10-30",
+          "seen": "打开过原页，逐字命中"
+        }
+      ]
+    },
+    "XY16": {
+      "facts": []
+    }
+  },
+  "items": [
+    {
+      "id": "hist-oly-o04",
+      "packId": "oly-o04",
+      "sha256": "4c4e2af26b9d06514ba5aae543a01c36d89ec32bbd3c11669d80fe33262fb6b9",
+      "tier": "archival",
+      "placeId": "XY06",
+      "seconds": 10,
+      "date": "2008-08-11",
+      "dateKind": "event",
+      "at": "2008-08-11",
+      "title": "北京奥运会 · 女子举重 58 公斤级决赛",
+      "event": "北京奥运会女子举重 58 公斤级决赛",
+      "what": "陈艳青卫冕那一场，赛场里的十秒。",
+      "cut": "源视频 2:12 起 10 秒",
+      "source": {
+        "site": "B 站 av97296584",
+        "page": "https://www.bilibili.com/video/av97296584",
+        "uploader": "经典体育",
+        "uploaded": "2020-03-19",
+        "kind": "搬运的赛事转播"
+      },
+      "facts": [
+        {
+          "text": "2008 年 8 月 11 日，陈艳青在北航体育馆卫冕女子举重 58 公斤级。",
+          "src": "https://www.chinanews.com/olympic/news/2008/08-12/1344964.shtml",
+          "seen": "仅见摘要"
+        }
+      ],
+      "file": "hist-oly-o04.mp3"
+    },
+    {
+      "id": "hist-oly-o05",
+      "packId": "oly-o05",
+      "sha256": "1c5e3552adcd424907257b0a2402119a3128e844f68c13dfc7444e754a644f02",
+      "tier": "archival",
+      "placeId": "XY06",
+      "seconds": 10,
+      "date": "2008-08-15",
+      "dateKind": "event",
+      "at": "2008-08-15",
+      "title": "北京奥运会 · 男子举重 85 公斤级",
+      "event": "北京奥运会男子举重 85 公斤级",
+      "what": "解说请大家屏住呼吸，看陆永关键的那一把。",
+      "cut": "源视频 14:43 起 10 秒",
+      "source": {
+        "site": "B 站 av631861137",
+        "page": "https://www.bilibili.com/video/av631861137",
+        "uploader": "吕小军举重",
+        "uploaded": "2021-07-22",
+        "kind": "搬运的赛事转播"
+      },
+      "facts": [
+        {
+          "text": "2008 年 8 月 15 日，陆永夺得男子举重 85 公斤级金牌。",
+          "src": "https://www.chinanews.com/olympic/news/2008/08-15/1349705.shtml",
+          "seen": "仅见摘要"
+        },
+        {
+          "text": "比赛在北京航空航天大学体育馆。",
+          "src": "http://www.beijingreview.cn/olympic/txt/2008-08/16/content_143142.htm",
+          "seen": "仅见摘要"
+        }
+      ],
+      "file": "hist-oly-o05.mp3"
+    },
+    {
+      "id": "hist-oly-o06",
+      "packId": "oly-o06",
+      "sha256": "d2e4a2d9f253f8f8d134aa02ff145caa46b983e16a9cad09ebddabc1edabdc50",
+      "tier": "archival",
+      "placeId": "XY06",
+      "seconds": 10,
+      "date": "2008-08-15",
+      "dateKind": "event",
+      "at": "2008-08-15",
+      "title": "北京奥运会 · 男子举重 85 公斤级",
+      "event": "北京奥运会男子举重 85 公斤级",
+      "what": "陆永那一场，赛场里的十秒。",
+      "cut": "源视频 20:36 起 10 秒",
+      "source": {
+        "site": "B 站 av631861137",
+        "page": "https://www.bilibili.com/video/av631861137",
+        "uploader": "吕小军举重",
+        "uploaded": "2021-07-22",
+        "kind": "搬运的赛事转播"
+      },
+      "facts": [
+        {
+          "text": "2008 年 8 月 15 日，陆永夺得男子举重 85 公斤级金牌。",
+          "src": "https://www.chinanews.com/olympic/news/2008/08-15/1349705.shtml",
+          "seen": "仅见摘要"
+        },
+        {
+          "text": "比赛在北京航空航天大学体育馆。",
+          "src": "http://www.beijingreview.cn/olympic/txt/2008-08/16/content_143142.htm",
+          "seen": "仅见摘要"
+        }
+      ],
+      "file": "hist-oly-o06.mp3"
+    },
+    {
+      "id": "hist-oral-ep1-125",
+      "packId": "oral-ep1-125",
+      "sha256": "cab0d468cdb9a83701e6640223b29e3e08db3fd2bfefac0c0fac894c2a04e250",
+      "tier": "archival",
+      "placeId": "XY16",
+      "seconds": 10,
+      "date": "2018-10-25",
+      "dateKind": "published",
+      "at": "2018-10-25",
+      "title": "口述北航 1 · 建校十年",
+      "event": "口述：建校时先修一号楼，再修对面的三号楼",
+      "what": "老先生讲建校：先修一号楼，然后修对面的三号楼。",
+      "cut": "源视频 1:25 起 10 秒",
+      "source": {
+        "site": "B 站 av34529365",
+        "page": "https://www.bilibili.com/video/av34529365",
+        "uploader": "北京航空航天大学（官方号）",
+        "uploaded": "2018-10-25",
+        "kind": "校史馆策划的口述历史"
+      },
+      "facts": [],
+      "unverified": "口述里的三号楼是不是今天地点表里的这座三号楼，未核实。",
+      "file": "hist-oral-ep1-125.mp3"
+    }
+  ]
+}
