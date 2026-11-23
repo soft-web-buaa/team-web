@@ -6,8 +6,8 @@ import { RouterLink, useRoute } from 'vue-router';
 import SoundCard from '../components/SoundCard.vue';
 import { TOPICS } from '../data/topics.js';
 import { MOODS } from '../data/sounds.js';
-import CohortGate from '../components/CohortGate.vue';
-import { cohortLabel } from '../data/community.js';
+import SignGate from '../components/SignGate.vue';
+import { signature } from '../data/community.js';
 import { topicById, repliesOf, createReply, soundById, reportItem, REPLY_MAX } from '../lib/store.js';
 import { say } from '../lib/toast.js';
 
@@ -64,7 +64,7 @@ async function send() {
         <li v-for="r in replies" :key="r.id">
           <p>{{ r.text }}</p>
           <p class="muted small">
-            {{ r.cohort ? cohortLabel(r.cohort) + '，' : '' }}心情：{{ r.mood }}
+            {{ signature(r) }}，心情：{{ r.mood }}
             <span v-if="r.demo" class="tag demo">示例</span>
             <span v-else-if="r.mine" class="tag real">我的</span>
             <button class="link small" type="button" :aria-label="'举报这条回应：' + r.text" @click="report(r)">举报</button>
@@ -74,7 +74,7 @@ async function send() {
       <p v-else class="empty">还没有回应。听完上面的声音，写第一句。</p>
 
       <form class="reply" novalidate @submit.prevent="send">
-        <CohortGate why="回应之前，先告诉我们你是哪一级的，不用实名。">
+        <SignGate why="回应之前，想落个款吗？">
           <label class="field">
             <span>你的回应（最多 {{ REPLY_MAX }} 字，不能放链接和号码）</span>
             <textarea v-model="text" rows="2" :maxlength="REPLY_MAX" placeholder="你听到的是什么？"></textarea>
@@ -85,7 +85,7 @@ async function send() {
           <p v-if="error" class="err" role="alert">{{ error }}</p>
           <button class="btn" type="submit" :disabled="busy">回应</button>
           <p class="muted small">现在只存在这台设备上，别人看不到。</p>
-        </CohortGate>
+        </SignGate>
       </form>
     </section>
 

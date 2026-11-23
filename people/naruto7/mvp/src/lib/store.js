@@ -8,7 +8,7 @@ import { TOPICS } from '../data/topics.js';
 import { COHORTS, SEED_HEARD, SEED_ECHOES } from '../data/community.js';
 import { blockById, pointInBlock } from '../data/campus.js';
 import { nowHour } from './time.js';
-import { validateLine } from './rules.js';
+import { validateLine, validateField } from './rules.js';
 
 const KEY = 'tjxy-mvp-v1';
 
@@ -20,6 +20,14 @@ function load() {
   }
 }
 
+/** 落款：年级、学院、名字，每一项都可以空。旧版本存的"校友教职工"归到"校友"。 */
+function normalizeMe(m) {
+  if (!m || typeof m !== 'object') return null;
+  const clean = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const c = m.cohort === '校友教职工' ? '校友' : m.cohort;
+  return { cohort: COHORTS.includes(c) ? c : '', dept: clean(m.dept, 24), name: clean(m.name, 16) };
+}
+
 const arr = (v) => (Array.isArray(v) ? v : []);
 const saved = load();
 
@@ -29,7 +37,7 @@ export const state = reactive({
   myEchoes: arr(saved.myEchoes),
   heard: arr(saved.heard),
   reported: arr(saved.reported),
-  me: saved.me && COHORTS.includes(saved.me.cohort) ? { cohort: saved.me.cohort } : null,
+  me: normalizeMe(saved.me),
 });
 
 function persist() {
@@ -120,14 +128,20 @@ export function hasMine() {
   return !!(state.mine.length || state.myReplies.length || state.myEchoes.length || state.heard.length || state.me);
 }
 
-// ———— 身份：只有入学年份 ————
+// ———— 身份：落款（年级、学院、名字，都可以不填）————
 
-export function setMe(cohort) {
-  if (!COHORTS.includes(cohort)) throw new Error('先选一个入学年份。');
+/** fields: { cohort, dept, name }，三项都可以空；全空就是"不落款"。没有验证，填什么由用户自己负责。 */
+export function setMe(fields = {}) {
+  if (fields.cohort && !COHORTS.includes(fields.cohort)) throw new Error('这个年级不在列表里。');
+  const me = normalizeMe(fields);
+  const badDept = validateField(me.dept, 24);
+  if (badDept) throw new Error(`学院：${badDept}`);
+  const badName = validateField(me.name, 16);
+  if (badName) throw new Error(`名字：${badName}`);
   const old = state.me;
   commit(
     () => {
-      state.me = { cohort };
+      state.me = me;
     },
     () => {
       state.me = old;
@@ -168,12 +182,13 @@ export function heardInfo(soundId) {
   const by = new Map();
   all.forEach((c) => by.set(c, (by.get(c) || 0) + 1));
   const rows = COHORTS.filter((c) => by.has(c)).map((c) => ({ cohort: c, n: by.get(c) }));
+  if (by.has('')) rows.push({ cohort: '', n: by.get('') }); // 没填年级的
   return { total: all.length, rows, mine, hasDemo: seed.length > 0 };
 }
 
 /** 返回切换之后"我是否听过" */
 export function toggleHeard(soundId) {
-  if (!state.me) throw new Error('先选你的入学年份。');
+  if (!state.me) throw new Error('先落个款，或者选“不落款，直接说”。');
   const i = state.heard.indexOf(soundId);
   if (i >= 0) {
     commit(
@@ -202,7 +217,7 @@ export function echoesOf(soundId) {
 export async function createEcho(soundId, { t, text }) {
   const s = soundById(soundId);
   if (!s) throw new Error('这段声音不存在。');
-  if (!state.me) throw new Error('先选你的入学年份。');
+  if (!state.me) throw new Error('先落个款，或者选“不落款，直接说”。');
   const bad = validateLine(text, ECHO_MAX);
   if (bad) throw new Error(bad);
   const dur = s.duration || 10;
@@ -211,6 +226,8 @@ export async function createEcho(soundId, { t, text }) {
     soundId,
     t: Math.min(dur, Math.max(0, Number(t) || 0)),
     cohort: state.me.cohort,
+    dept: state.me.dept,
+    name: state.me.name,
     text: String(text).trim(),
     demo: false,
     mine: true,
@@ -238,7 +255,7 @@ export const REPLY_MAX = 60;
 
 export async function createReply(topicId, { text, mood }) {
   if (!topicById(topicId)) throw new Error('这个话题不存在。');
-  if (!state.me) throw new Error('先选你的入学年份。');
+  if (!state.me) throw new Error('先落个款，或者选“不落款，直接说”。');
   const bad = validateLine(text, REPLY_MAX);
   if (bad) throw new Error(bad);
   if (!MOODS.includes(mood)) throw new Error('先选一个心情。');
@@ -248,6 +265,8 @@ export async function createReply(topicId, { text, mood }) {
     text: String(text).trim(),
     mood,
     cohort: state.me.cohort,
+    dept: state.me.dept,
+    name: state.me.name,
     demo: false,
     mine: true,
   };

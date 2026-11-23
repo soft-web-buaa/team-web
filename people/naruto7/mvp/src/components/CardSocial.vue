@@ -3,10 +3,10 @@
 // summary 只显示"几个人听过"，full 还能点"我也听过"和留回声。
 // 这里的数字和话全是示例（demo），真实的要等后端接上、别人也能看到之后才会出现。
 import { computed, ref } from 'vue';
-import CohortGate from './CohortGate.vue';
+import SignGate from './SignGate.vue';
 import { player } from '../lib/audio.js';
 import { state, heardInfo, toggleHeard, echoesOf, createEcho, reportItem, ECHO_MAX } from '../lib/store.js';
-import { cohortLabel } from '../data/community.js';
+import { signature } from '../data/community.js';
 import { say } from '../lib/toast.js';
 
 const props = defineProps({
@@ -105,14 +105,14 @@ const later = (e) => playingThis.value && e.t > player.t;
         <button class="chip" type="button" :aria-expanded="composing" @click="toggleCompose">留一句回声</button>
       </div>
 
-      <CohortGate v-if="asking && !state.me" why="先告诉我们你是哪一级的，不用实名。" @picked="runPending" />
+      <SignGate v-if="asking && !state.me" why="想落个款吗？" @picked="runPending" />
 
       <ul v-if="echoes.length" class="echoes" aria-label="回声">
         <li v-for="e in echoes" :key="e.id" :class="{ later: later(e) }">
           <span class="sec num">{{ e.t.toFixed(1) }} 秒</span>
           <span class="txt">{{ e.text }}</span>
           <span class="by small muted">
-            {{ cohortLabel(e.cohort) }}
+            {{ signature(e) }}
             <span v-if="e.demo" class="tag demo">示例</span>
             <span v-else class="tag real">我的</span>
             <button class="link small" type="button" :aria-label="'举报这条回声：' + e.text" @click="report(e)">举报</button>
@@ -122,7 +122,7 @@ const later = (e) => playingThis.value && e.t > player.t;
       <p v-else class="empty">还没有回声。播放时点“留一句回声”，把话钉在你想说的那一秒。</p>
 
       <form v-if="composing" class="compose" novalidate @submit.prevent="send">
-        <CohortGate why="留话之前，先告诉我们你是哪一级的，不用实名。">
+        <SignGate why="留话之前，想落个款吗？">
           <label class="field">
             <span>钉在第 <span class="num">{{ at.toFixed(1) }}</span> 秒</span>
             <input v-model.number="at" type="range" min="0" :max="sound.duration || 10" step="0.1" />
@@ -133,7 +133,7 @@ const later = (e) => playingThis.value && e.t > player.t;
           </label>
           <p v-if="error" class="err" role="alert">{{ error }}</p>
           <button class="btn small" type="submit">钉在这一秒</button>
-        </CohortGate>
+        </SignGate>
       </form>
     </template>
   </section>
