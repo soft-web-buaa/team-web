@@ -14,3 +14,13 @@ export function validateLine(text, max) {
   if (DIGITS_RE.test(t) || CONTACT_RE.test(t)) return '这里不能放号码或联系方式。';
   return '';
 }
+
+/** 选填的短字段（学院、名字）：空的算通过，有内容就查长度、链接、号码和联系方式 */
+export function validateField(text, max) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  if (t.length > max) return `最多 ${max} 个字。`;
+  if (URL_RE.test(t)) return '这里不能放链接。';
+  if (DIGITS_RE.test(t) || CONTACT_RE.test(t)) return '这里不能放号码或联系方式。';
+  return '';
+}

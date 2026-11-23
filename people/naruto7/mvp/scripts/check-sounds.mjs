@@ -5,6 +5,7 @@ import { TOPICS } from '../src/data/topics.js';
 import { BLOCKS } from '../src/data/campus.js';
 import { RECIPES } from '../src/lib/synth.js';
 import { COHORTS, SEED_ECHOES, SEED_HEARD } from '../src/data/community.js';
+import { DEPTS } from '../src/data/depts.js';
 import { validateLine } from '../src/lib/rules.js';
 
 const errors = [];
@@ -40,6 +41,7 @@ for (const e of SEED_ECHOES) {
   if (!s) err(`回声 ${e.id}: 引用了不存在的声音 ${e.soundId}`);
   else if (!(e.t >= 0 && e.t <= s.duration)) err(`回声 ${e.id}: t=${e.t} 超出这段声音的时长 ${s.duration} 秒`);
   if (!COHORTS.includes(e.cohort)) err(`回声 ${e.id}: 入学年份 ${e.cohort} 不在列表里`);
+  if (e.dept && !DEPTS.includes(e.dept)) err(`回声 ${e.id}: 学院 ${e.dept} 不在名单里`);
   if (!e.demo) err(`回声 ${e.id}: 预置回声必须标 demo`);
   const bad = validateLine(e.text, 40);
   if (bad) err(`回声 ${e.id}: ${bad}`);
@@ -53,6 +55,8 @@ for (const t of TOPICS) for (const r of t.replies) {
   const bad = validateLine(r.text, 60);
   if (bad) err(`话题 ${t.id} 回应 ${r.id}: ${bad}`);
 }
+
+if (new Set(DEPTS).size !== DEPTS.length) err('学院名单里有重复项');
 
 const real = SEED_SOUNDS.filter((s) => !s.demo).length;
 const demo = SEED_SOUNDS.length - real;
