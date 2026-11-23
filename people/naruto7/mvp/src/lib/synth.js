@@ -1,5 +1,6 @@
 // 示例声音：在浏览器里用 Web Audio 合成，不是真实录音，也没有版权问题。
 // 真实录音到位后，在 data/sounds.js 里给条目加 src，播放器会优先用 src。
+// trim 是音量系数，按离线渲染的均方根校到约 0.035，让几段声音连着播时响度接近（scripts 里没有这项检查，改配方后请重测）。
 // 每个配方是 build(kit)：往 kit.out 里排好整段声音，时间一律用相对本段开头的秒数。
 // 随机数全部用固定种子，每次听到的一样。本文件不碰 window，Node 里也能 import（check-sounds 要用）。
 
@@ -99,7 +100,7 @@ export const RECIPES = {
   // 图书馆闭馆铃：三下，一下比一下轻
   bell: {
     duration: 10,
-    trim: 1,
+    trim: 0.8,
     build(k) {
       const parts = [[1, 0.5, 2.8], [2.0, 0.22, 2.0], [2.76, 0.3, 1.6], [4.07, 0.12, 1.0], [5.4, 0.1, 0.8]];
       [0, 3.1, 6.2].forEach((t0, i) => {
@@ -114,7 +115,7 @@ export const RECIPES = {
   // 早八预备铃：两音一组，响三遍，底下是走廊的嘈杂
   prepbell: {
     duration: 7,
-    trim: 1,
+    trim: 1.0,
     build(k) {
       [0.6, 2.4, 4.2].forEach((t0) => {
         k.tone({ t: t0, f: 988, type: 'triangle', a: 0.01, d: 0.55, peak: 0.28 });
@@ -128,7 +129,7 @@ export const RECIPES = {
   // 清晨的鸟：两三种叫声，错开着
   birds: {
     duration: 12,
-    trim: 1,
+    trim: 3.5,
     build(k) {
       const r = k.rng(11);
       k.hiss({ t: 0, dur: 12, type: 'lowpass', f: 700, q: 0.5, peak: 0.018, a: 1.5, r: 1.5 });
@@ -153,7 +154,7 @@ export const RECIPES = {
   // 操场哨声：一长三短，后面是散开的人群
   whistle: {
     duration: 9,
-    trim: 1,
+    trim: 0.7,
     build(k) {
       const { ctx, out, at } = k;
       const blast = (t, dur, f) => {
@@ -196,7 +197,7 @@ export const RECIPES = {
   // 食堂窗口：嘈杂的底噪、餐具碰撞、一声刷卡
   canteen: {
     duration: 12,
-    trim: 1,
+    trim: 1.6,
     build(k) {
       const r = k.rng(23);
       k.murmur({ f: 420, q: 0.5, peak: 0.07, dur: 12, seed: 1 });
@@ -214,7 +215,7 @@ export const RECIPES = {
   // 雨落在车棚上：细密的雨，加上棚顶的大水滴
   rain: {
     duration: 12,
-    trim: 1,
+    trim: 0.85,
     build(k) {
       const r = k.rng(5);
       k.hiss({ t: 0, dur: 12, type: 'highpass', f: 1800, q: 0.4, peak: 0.08, a: 1, r: 1.5 });
@@ -234,7 +235,7 @@ export const RECIPES = {
   // 球场运球：运球、鞋底摩擦、球砸篮板
   basketball: {
     duration: 9,
-    trim: 1,
+    trim: 0.9,
     build(k) {
       const r = k.rng(9);
       const bounce = (t, v = 1) => {
@@ -261,7 +262,7 @@ export const RECIPES = {
   // 东门花坛的猫：两声，背景是夜里的虫鸣
   cat: {
     duration: 7,
-    trim: 1,
+    trim: 1.0,
     build(k) {
       const { ctx, out, at } = k;
       const meow = (t, f0, len) => {
