@@ -11,7 +11,11 @@ npm run dev          # 开发，默认 http://localhost:5173
 npm run build        # 构建到 dist/
 npm run check:sounds     # 声音和话题数据自检
 npm run check:contrast   # 全天颜色对比度自检
+npm run e2e              # 构建、起预览服务、跑 54 项浏览器走查，退出码 0 才算过
+npm run e2e:kesheng      # 刻声副本冒烟（刻声副本合并进来之后才有东西可测，没有就打印"跳过"）
 ```
+
+`e2e` 用本机的 Chrome 或 Edge（`puppeteer-core` 不自带浏览器）。找不到时用环境变量 `CHROME_PATH` 指定可执行文件。截图在 `.e2e-shots/`，已被 `.gitignore` 忽略。2026-11-24 的结果：54 项通过，控制台与网络问题 0。
 
 本机 Node 26 上验证过。仓库规定的是 Node 24 LTS，没有在 24 上跑过。
 
@@ -36,7 +40,7 @@ npm run check:contrast   # 全天颜色对比度自检
 
 | 做了什么 | 在哪里 |
 |---|---|
-| 身份只有入学年份：不实名，也不是完全匿名，别人看到的是"2023 级的人" | `components/CohortGate.vue`，说话之前才会问 |
+| 落款：年级（含更早、校友、教职工）、学院、名字（昵称或真名），三项都可以不填。别人看到的是"2024 级，计算机学院，阿川" | `components/SignGate.vue`，说话之前才会问，也可以选"不落款，直接说" |
 | 同听：声片卡上显示"N 人听过"和"2022 级到 2025 级的人都听过"，点"我也听过"加入 | `components/CardSocial.vue`，`lib/store.js` 的 `heardInfo`、`toggleHeard` |
 | 回声：把一句话钉在声音的某一秒，波形上有标记，播放到那一秒时它亮起来 | `CardSocial.vue`、`Wave.vue` 的 `marks` |
 | 一句话规则：最多 40 或 60 字，拦截链接、连续 7 位以上数字、"加我""私信我"之类 | `lib/rules.js` |
@@ -48,11 +52,11 @@ npm run check:contrast   # 全天颜色对比度自检
 
 ```
 src/
-  data/      声音、话题、校园分区、史料、学期（唯一数据源）
-  lib/       store（数据层）audio（播放器）synth（示例声音合成）sky（天色）clock time toast
-  components/ DayTrack CampusMap SoundCard PlayButton Wave
+  data/      声音、话题、校园分区、史料、学期、社区（落款、示例回声）、学院名单（唯一数据源）
+  lib/       store（数据层）audio（播放器）synth（示例声音合成）sky（天色）rules（一句话规则）clock time toast
+  components/ DayTrack CampusMap SoundCard PlayButton Wave CardSocial SignGate
   views/     六个页面加 404
-scripts/     check-sounds  check-contrast
+scripts/     check-sounds  check-contrast  e2e/（走查）
 public/audio/archive/  7 段校史史料（十秒片段）
 ```
 
@@ -63,7 +67,7 @@ public/audio/archive/  7 段校史史料（十秒片段）
 ## 已知的缺口
 
 - 社区层目前只在这一台设备上成立：别人留的回声你看不到，"N 人听过"里的真实增量只有你自己那 1 个。要变成真正的社区，必须接后端。
-- 入学年份是自己选的，没有任何验证。前端的链接和号码拦截可以被绕过，后端接上后要在服务端再校验一遍，并建审核队列。
+- 落款是自己填的，没有任何验证（组长 2026-11-23 定先不验证）。前端的链接和号码拦截可以被绕过，后端接上后要在服务端再校验一遍，并建审核队列。
 - 8 段声音全是示例：浏览器合成，不是真实录音。真实录音到位后，在 `src/data/sounds.js` 给条目加 `src`、`demo` 改成 `false`。
 - 校园图是分区示意，不是测绘。底图方案没定，换底图只改 `src/data/campus.js` 和 `CampusMap.vue`。
 - 麦克风录音存成 data URL 放进 localStorage，限 700 KB；只在本机，换设备看不到。
