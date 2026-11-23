@@ -1,9 +1,13 @@
 <script setup>
-// 声音的轮廓。播放时，已经播过的部分染成强调色。只是装饰，播放和停止靠旁边的按钮。
+// 声音的轮廓。播放时，已经播过的部分染成强调色；marks 是回声被钉住的位置（0 到 1），画在轮廓上方。
+// 只是装饰，播放和停止靠旁边的按钮。
 import { ref, watch, computed } from 'vue';
 import { getPeaks, player } from '../lib/audio.js';
 
-const props = defineProps({ sound: { type: Object, required: true } });
+const props = defineProps({
+  sound: { type: Object, required: true },
+  marks: { type: Array, default: () => [] },
+});
 const N = 48;
 
 const peaks = ref(null);
@@ -28,15 +32,18 @@ const ratio = computed(() =>
 const bars = computed(() => {
   const p = peaks.value;
   return Array.from({ length: N }, (_, i) => {
-    const h = p ? 3 + p[i] * 34 : 4;
-    return { x: i * 4 + 0.6, y: 20 - h / 2, h, on: (i + 0.5) / N <= ratio.value };
+    const h = p ? 3 + p[i] * 28 : 4;
+    return { x: i * 4 + 0.6, y: 28 - h / 2, h, on: (i + 0.5) / N <= ratio.value };
   });
 });
+
+const pins = computed(() => props.marks.map((m) => ({ x: Math.min(188.6, Math.max(0.6, m * 192 - 1.3)), on: m <= ratio.value })));
 </script>
 
 <template>
-  <svg class="wave" viewBox="0 0 192 40" preserveAspectRatio="none" aria-hidden="true">
+  <svg class="wave" viewBox="0 0 192 46" preserveAspectRatio="none" aria-hidden="true">
     <rect v-for="(b, i) in bars" :key="i" :x="b.x" :y="b.y" width="2.6" :height="b.h" rx="1.2" :class="{ on: b.on }" />
+    <rect v-for="(m, i) in pins" :key="'m' + i" class="pin" :class="{ on: m.on }" :x="m.x" y="1" width="2.6" height="7" rx="1.3" />
   </svg>
 </template>
 
@@ -44,7 +51,7 @@ const bars = computed(() => {
 .wave {
   display: block;
   width: 100%;
-  height: 40px;
+  height: 46px;
 }
 
 rect {
@@ -52,6 +59,14 @@ rect {
 }
 
 rect.on {
+  fill: var(--accent);
+}
+
+rect.pin {
+  fill: var(--ink);
+}
+
+rect.pin.on {
   fill: var(--accent);
 }
 </style>
