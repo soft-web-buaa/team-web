@@ -1,0 +1,20 @@
+﻿import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { viteSingleFile } from 'vite-plugin-singlefile'
+import { fileURLToPath, URL } from 'node:url'
+
+export default defineConfig({
+  base: './',
+  plugins: [vue(), viteSingleFile()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  build: {
+    outDir: 'dist-standalone',
+    assetsInlineLimit: 100_000_000,
+    cssCodeSplit: false,
+    modulePreload: false,
+  },
+})
