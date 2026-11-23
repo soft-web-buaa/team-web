@@ -1,6 +1,6 @@
 <script setup>
 // 关于：数据哪来、数了多少、素材来源、过程证据。这页是给评委和陌生人看的。
-import { counts, removeMine, state } from '../lib/store.js';
+import { counts, removeMine, hasMine } from '../lib/store.js';
 import { say } from '../lib/toast.js';
 import { weekLabel } from '../data/semester.js';
 import { ARCHIVE } from '../data/archive.js';
@@ -8,7 +8,7 @@ import { ARCHIVE } from '../data/archive.js';
 const REPO = 'https://github.com/soft-web-buaa/team-web';
 
 async function clear() {
-  if (!state.mine.length && !state.myReplies.length) {
+  if (!hasMine()) {
     say('这台设备上没有你留下的内容。');
     return;
   }
@@ -32,6 +32,16 @@ async function clear() {
       <li>另有 <span class="num">{{ ARCHIVE.length }}</span> 段校史史料，是从公开视频截下的十秒，带“史料”标记，在“时间”页，不计入上面的数。授权状态是口头认可，书面授权还在补；原作者或上传者提出异议，我们会撤下。</li>
       <li>真实录音由团队成员和身边的人在校园里录制，录制者同意使用。</li>
       <li>统计只数真实录音。数据少的时候，页面会写出 n，不下结论。</li>
+    </ul>
+  </section>
+
+  <section class="block" aria-labelledby="rule-h">
+    <h2 id="rule-h" class="section-title">在这里说话的规矩</h2>
+    <ul class="plain">
+      <li>你的身份只有入学年份，不实名，也不是完全匿名。别人看到的是“2023 级的人”。</li>
+      <li>回声和回应只能写一句话，不能放链接、号码和联系方式。</li>
+      <li>不想看到的内容可以点“举报”，它会先对你隐藏。</li>
+      <li>“人听过”的数字和现有的回声都是示例，不是真实的人说的。</li>
     </ul>
   </section>
 

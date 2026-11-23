@@ -56,7 +56,7 @@ watch(() => route.query.id, applyQuery);
     </div>
 
     <aside class="side" aria-live="polite">
-      <SoundCard v-if="selected" :key="selected.id" :sound="selected" />
+      <SoundCard v-if="selected" :key="selected.id" :sound="selected" social="full" />
       <div v-else class="hint">
         <p>点地图上的一个点，在这里听。</p>
         <p v-if="lit.length" class="muted small">

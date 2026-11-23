@@ -3,12 +3,19 @@
 import { computed } from 'vue';
 import Wave from './Wave.vue';
 import PlayButton from './PlayButton.vue';
+import CardSocial from './CardSocial.vue';
+import { echoesOf } from '../lib/store.js';
 import { fmt } from '../lib/time.js';
 import { blockById } from '../data/campus.js';
 
 const props = defineProps({
   sound: { type: Object, required: true },
   plain: { type: Boolean, default: false },
+  social: { type: String, default: 'summary' }, // none | summary | full
+});
+const marks = computed(() => {
+  const d = props.sound.duration || 10;
+  return props.social === 'full' ? echoesOf(props.sound.id).map((e) => e.t / d) : [];
 });
 const where = computed(() => {
   const b = blockById(props.sound.block);
@@ -29,9 +36,10 @@ const where = computed(() => {
     </p>
     <div class="player">
       <PlayButton :sound="sound" />
-      <Wave :sound="sound" class="w" />
+      <Wave :sound="sound" :marks="marks" class="w" />
     </div>
     <p v-if="sound.story" class="story">{{ sound.story }}</p>
+    <CardSocial v-if="social !== 'none'" :sound="sound" :mode="social" />
   </article>
 </template>
 
