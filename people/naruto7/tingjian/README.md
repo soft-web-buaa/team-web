@@ -4,10 +4,12 @@
 
 ## 跑起来
 
+最省事：双击 `启动.cmd`（或仓库外面的 `E:\走软小组\听见校园-双击启动.cmd`），浏览器会自己打开 http://127.0.0.1:8790/?screen=1 。黑窗口别关，关了网页就停。
+
 ```bash
 cd people/naruto7/tingjian
 npm install
-npm run dev              # http://127.0.0.1:5190 ，自带 /api（本机文件存储，数据在 .data/）
+npm run dev              # http://127.0.0.1:5273 ，自带 /api（本机文件存储，数据在 .data/）
 npm run build
 npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；加 --host 0.0.0.0 给局域网里的手机扫
 ```

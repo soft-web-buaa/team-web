@@ -23,6 +23,6 @@ export default defineConfig({
   base: './',
   plugins: [vue(), localApi()],
   build: { target: 'es2022', chunkSizeWarningLimit: 1200 },
-  server: { port: 5190, host: '127.0.0.1' },
-  preview: { port: 5191, host: '127.0.0.1' },
+  server: { port: 5273, host: '127.0.0.1' },
+  preview: { port: 5274, host: '127.0.0.1' },
 });
