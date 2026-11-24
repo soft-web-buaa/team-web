@@ -1,0 +1,117 @@
+<script setup>
+// 我的（我）：我留下了什么、谁回应了我。结构学黄泰霖原型的「我的」（我的地图、收藏馆、收件箱），加上刻声卡与心事盘。
+// 舞台上：只有我的盘亮成示波黄，别人的褪成灰。
+import { computed, ref, onMounted } from 'vue';
+import Paper from '../components/Paper.vue';
+import DiscRow from '../components/DiscRow.vue';
+import RingDial from '../components/RingDial.vue';
+import { L, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
+
+const tab = ref('discs');
+const mine = computed(() => { void L.version; return L.entries.filter((e) => e.mine).slice().reverse(); });
+const favs = computed(() => L.me.favs.map(entryById).filter(Boolean));
+const inbox = computed(() => L.me.inbox.map((x) => ({ ...x, e: entryById(x.discId) })).filter((x) => x.e));
+const places = computed(() => new Set(mine.value.map((e) => e.placeId)).size);
+const sems = computed(() => new Set(mine.value.map((e) => e.semester)).size);
+const sig = ref({ grade: L.identity?.grade || '', dept: L.identity?.dept || '', name: L.identity?.name || '' });
+const editing = ref(false);
+function saveSig() { setSignature(sig.value); editing.value = false; say('落款改好了：以后刻的盘用新落款，已经刻的不变。'); }
+function download() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(exportCard());
+  a.download = '刻声卡.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function pickCard(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  try { importCard(await f.text()); } catch (x) { say(`没导入：${x.message}`); }
+}
+const confirmId = ref(null);
+async function del(e) {
+  if (confirmId.value !== e.id) { confirmId.value = e.id; return; }
+  confirmId.value = null;
+  if (await deleteDisc(e)) say('删掉了。云上的声音、钉在上面的话一并删了。');
+}
+onMounted(() => refresh());
+</script>
+
+<template>
+  <Paper label="我的">
+    <p class="kicker">我 · {{ L.identity && signature(L.identity) !== '未落款' ? signature(L.identity) : '还没落款' }}</p>
+    <h1 class="h1">{{ mine.length ? `${mine.length} 张，${places} 个地方，${sems} 个学期` : '还没有刻过' }}</h1>
+    <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}</p>
+
+    <div class="row" role="tablist" aria-label="我的">
+      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['inbox', `回应我的 ${inbox.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
+    </div>
+
+    <section v-if="tab === 'discs'">
+      <div v-if="!mine.length" class="slot" aria-hidden="true"><span></span><p class="fine">第一张会放在这里</p></div>
+      <RingDial v-if="mine.length" :list="mine" :size="280" caption="我的年轮。" />
+      <ol class="discs" style="margin-top: 12px">
+        <li v-for="e in mine" :key="e.id" class="mine-row">
+          <DiscRow :e="e" />
+          <div class="acts">
+            <span v-if="e.error" class="err">{{ e.error }}</span>
+            <button type="button" class="link fine" @click="del(e)">{{ confirmId === e.id ? '再点一次，真删' : '删掉' }}</button>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section v-else-if="tab === 'favs'">
+      <ol v-if="favs.length" class="discs" style="margin-top: 12px"><DiscRow v-for="e in favs" :key="e.id" :e="e" /></ol>
+      <p v-else class="fine" style="margin-top: 14px">还没有收藏。在地点里放一张，点「收藏」。</p>
+    </section>
+
+    <section v-else-if="tab === 'inbox'">
+      <ol v-if="inbox.length" class="inbox">
+        <li v-for="(x, i) in inbox" :key="i">
+          <button type="button" class="msg" @click="play(x.e, { seek: x.kind === 'echo' ? Math.max(0, x.t - 0.4) : null })">
+            <span class="k">{{ x.kind === 'echo' ? '钉了一句话' : '也听过' }}</span>
+            <span v-if="x.kind === 'echo'" class="q">「{{ x.text }}」</span>
+            <span class="m">在你的「{{ title(x.e) }}」{{ x.kind === 'echo' ? `第 ${x.t.toFixed(1)} 秒` : '' }}{{ x.author && signature(x.author) !== '未落款' ? ` · ${signature(x.author)}` : '' }} · {{ x.at.slice(0, 10) }}</span>
+          </button>
+        </li>
+      </ol>
+      <p v-else class="fine" style="margin-top: 14px">{{ mine.length ? '还没有人回应。' : '刻过之后，别人在你的盘上钉的话、点的「也听过」会出现在这里。' }}</p>
+    </section>
+
+    <section v-else class="card">
+      <p class="h3">落款</p>
+      <template v-if="!editing">
+        <p class="show" style="font-size: 20px; margin: 0 0 8px">{{ L.identity ? signature(L.identity) : '未落款' }}</p>
+        <button type="button" class="btn small ghost" @click="editing = true">改落款</button>
+      </template>
+      <form v-else @submit.prevent="saveSig">
+        <label class="field"><span>年级</span><input v-model="sig.grade" class="input" maxlength="12" placeholder="2024级"></label>
+        <label class="field"><span>学院</span><input v-model="sig.dept" class="input" maxlength="24" placeholder="宇航学院"></label>
+        <label class="field"><span>名字（可以是昵称）</span><input v-model="sig.name" class="input" maxlength="16"></label>
+        <div class="row"><button type="submit" class="btn small">好了</button><button type="button" class="btn small ghost" @click="editing = false">算了</button></div>
+      </form>
+      <p class="h3">刻声卡</p>
+      <p class="fine">没有注册、没有密码。这台设备上有一张刻声卡，卡号只在这台设备上，云上只存它算出来的一串摘要，用来认出「这些盘是你的」。换设备时导出、在新设备上导入。卡丢了，盘还在，只是认不回来。</p>
+      <div class="row">
+        <button type="button" class="btn small ghost" :disabled="!L.identity" @click="download">导出刻声卡</button>
+        <label class="btn small ghost">导入刻声卡<input type="file" accept=".json,application/json" class="sr-only" @change="pickCard"></label>
+      </div>
+      <p class="h3">放在哪里</p>
+      <p class="fine">云上：你刻的盘（声音和元数据）、钉的话、照片、收藏。这台设备上：刻声卡、还没发出去的、你隐藏的那几条。照片的拍摄地点在你的设备上就去掉了，服务端再剥一遍。只给自己的盘也存在云上，换设备还在，只有你听得到；删掉就是真删。</p>
+    </section>
+  </Paper>
+</template>
+
+<style scoped>
+.slot { display: grid; justify-items: center; gap: 10px; margin: 30px 0 10px; }
+.slot span { width: 120px; height: 120px; border-radius: 50%; border: 1.5px dashed var(--line); background: repeating-radial-gradient(circle, transparent 0 7px, var(--hair) 7px 8px); }
+.mine-row { position: relative; }
+.mine-row :deep(li) { list-style: none; }
+.acts { display: flex; justify-content: flex-end; gap: 10px; margin: -6px 0 6px; }
+.inbox { list-style: none; padding: 0; margin: 12px 0 0; }
+.msg { display: grid; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--hair); background: none; padding: 10px 0; gap: 2px; }
+.msg .k { font-size: 12px; color: var(--ink-2); }
+.msg .q { font: 17px/1.5 var(--f-show); }
+.msg .m { font-size: 12px; color: var(--ink-2); }
+</style>

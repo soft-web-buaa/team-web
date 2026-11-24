@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.data/
+.e2e/
+.env
+.env.*
+!.env.example
+# 部署脚本拷进云函数目录的文件（源头在 server/ 与 src/）
+cloudfunctions/api/server/
+cloudfunctions/api/src/
+cloudfunctions/api/calendar.json
+cloudfunctions/api/package.json
+cloudfunctions/api/node_modules/
