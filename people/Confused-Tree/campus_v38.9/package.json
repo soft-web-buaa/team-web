@@ -1,0 +1,14 @@
+﻿{
+  "name": "buaa-xueyuan-campus-model",
+  "version": "14.0.0",
+  "private": true,
+  "type": "module",
+  "description": "声景校园 · 北航：3D 卡纸校园 + 声景档案 + 程序化 WebAudio 声景 + 声景路线 / 热力 / 明信片 / 图鉴（不加载任何音频文件）",
+  "scripts": {
+    "start": "node serve.mjs",
+    "serve": "node serve.mjs",
+    "poster": "node tools/bake-poster.mjs"
+  }
+}
+
+
