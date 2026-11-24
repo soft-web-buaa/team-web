@@ -1,0 +1,312 @@
+{
+ "v": 1,
+ "note": "示例回声：话是写出来的示例，不是哪位同学说的；声音是页面合成的。只写年级，不写学院和名字。生成：scripts/make-echo-seed.mjs",
+ "echoes": [
+  {
+   "id": "ec-demo-001",
+   "discId": "concept-033",
+   "t": 6.7,
+   "text": "铃一响，后排的人已经把书合上了。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-002",
+   "discId": "concept-033",
+   "t": 7.5,
+   "text": "毕业那天我站在楼梯口，等它响完才走。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-003",
+   "discId": "concept-030",
+   "t": 6.2,
+   "text": "考试最后十分钟，我一直盯着钟等这一声。",
+   "author": {
+    "grade": "2023级"
+   }
+  },
+  {
+   "id": "ec-demo-004",
+   "discId": "concept-017",
+   "t": 0.3,
+   "text": "楼梯口先是一阵脚步，然后有人喊了谁的名字。",
+   "author": {
+    "grade": "2020级"
+   }
+  },
+  {
+   "id": "ec-demo-005",
+   "discId": "concept-028",
+   "t": 4.4,
+   "text": "门关上以后，整间教室又回答了一遍。",
+   "author": {
+    "grade": "2024级"
+   }
+  },
+  {
+   "id": "ec-demo-006",
+   "discId": "concept-007",
+   "t": 6.9,
+   "text": "叮的一声之后，整层楼的椅子一起往后拉。",
+   "author": {
+    "grade": "2023级"
+   }
+  },
+  {
+   "id": "ec-demo-007",
+   "discId": "concept-007",
+   "t": 6.5,
+   "text": "出门的时候，管理员还在后面说慢点走。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-008",
+   "discId": "concept-016",
+   "t": 2,
+   "text": "中庭里有人咳了一声，三楼都听见了。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-009",
+   "discId": "concept-004",
+   "t": 6.3,
+   "text": "还书的人多的时候，脚步声比翻书声还响。",
+   "author": {
+    "grade": "2023级"
+   }
+  },
+  {
+   "id": "ec-demo-010",
+   "discId": "concept-012",
+   "t": 5.1,
+   "text": "约好在门口见，两个人都在问你到了吗。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-011",
+   "discId": "concept-048",
+   "t": 1.2,
+   "text": "刷过去的这一声，是我在学校的第一声。",
+   "author": {
+    "grade": "2026级"
+   }
+  },
+  {
+   "id": "ec-demo-012",
+   "discId": "concept-045",
+   "t": 6.8,
+   "text": "连廊上风大，脚步声被吹得很碎。",
+   "author": {
+    "grade": "2024级"
+   }
+  },
+  {
+   "id": "ec-demo-013",
+   "discId": "concept-051",
+   "t": 3.6,
+   "text": "铃响以后，座位上的小声说话才真正停下来。",
+   "author": {
+    "grade": "2019级"
+   }
+  },
+  {
+   "id": "ec-demo-014",
+   "discId": "concept-055",
+   "t": 7.3,
+   "text": "散场的时候，大家说话都比平时轻一点。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-015",
+   "discId": "concept-065",
+   "t": 0.3,
+   "text": "拍一下手，要等一会儿，房间才回答。",
+   "author": {
+    "grade": "2026级"
+   }
+  },
+  {
+   "id": "ec-demo-016",
+   "discId": "concept-209",
+   "t": 0.5,
+   "text": "叫到自己的号，反而没听清。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-017",
+   "discId": "concept-113",
+   "t": 3.8,
+   "text": "托盘磕在一起，就知道今天人多。",
+   "author": {
+    "grade": "2019级"
+   }
+  },
+  {
+   "id": "ec-demo-018",
+   "discId": "concept-118",
+   "t": 5.2,
+   "text": "打饭的阿姨记得我不要香菜。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-019",
+   "discId": "concept-179",
+   "t": 4.2,
+   "text": "哨声一响，才发现自己已经落后半圈。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-020",
+   "discId": "concept-185",
+   "t": 6.9,
+   "text": "九月的夜里，虫叫比操场上的人多。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-021",
+   "discId": "concept-184",
+   "t": 0.9,
+   "text": "夜跑的人都不说话，只有鞋底的声音。",
+   "author": {
+    "grade": "2024级"
+   }
+  },
+  {
+   "id": "ec-demo-022",
+   "discId": "concept-087",
+   "t": 2.4,
+   "text": "一声拍手，整个馆里转了两圈才停。",
+   "author": {
+    "grade": "2024级"
+   }
+  },
+  {
+   "id": "ec-demo-023",
+   "discId": "concept-082",
+   "t": 8.7,
+   "text": "进球那一下，我们这边先喊了出来。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-024",
+   "discId": "concept-143",
+   "t": 3.4,
+   "text": "行李箱的轮子一响，隔着门就知道谁回来了。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-025",
+   "discId": "concept-162",
+   "t": 2.5,
+   "text": "楼梯间里的回响，比教室里的好听。",
+   "author": {
+    "grade": "2023级"
+   }
+  },
+  {
+   "id": "ec-demo-026",
+   "discId": "concept-158",
+   "t": 2,
+   "text": "喜鹊叫的时候，我正在背单词。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-027",
+   "discId": "concept-220",
+   "t": 9.6,
+   "text": "银杏叶落下来的声音，要安静了才听得见。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-028",
+   "discId": "concept-230",
+   "t": 5.6,
+   "text": "下课十分钟，整栋楼像在换气。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-029",
+   "discId": "concept-111",
+   "t": 0.4,
+   "text": "夜里的泳池，水声比人声大。",
+   "author": {
+    "grade": "2026级"
+   }
+  },
+  {
+   "id": "ec-demo-030",
+   "discId": "concept-069",
+   "t": 0.5,
+   "text": "展厅太大，咳嗽也像在发言。",
+   "author": {
+    "grade": "2021级"
+   }
+  },
+  {
+   "id": "ec-demo-031",
+   "discId": "concept-079",
+   "t": 3.6,
+   "text": "门口的风，是整个博物馆里最像飞机的声音。",
+   "author": {
+    "grade": "2025级"
+   }
+  },
+  {
+   "id": "ec-demo-032",
+   "discId": "concept-171",
+   "t": 0.9,
+   "text": "刷卡之后那一声滴，我每次都怀疑没通过。",
+   "author": {
+    "grade": "2022级"
+   }
+  },
+  {
+   "id": "ec-demo-033",
+   "discId": "concept-194",
+   "t": 9.3,
+   "text": "晚上的楼梯口，只剩最后一批人。",
+   "author": {
+    "grade": "2023级"
+   }
+  },
+  {
+   "id": "ec-demo-034",
+   "discId": "concept-136",
+   "t": 1.2,
+   "text": "叫号声一响，十个人同时低头看手机。",
+   "author": {
+    "grade": "2024级"
+   }
+  }
+ ]
+}

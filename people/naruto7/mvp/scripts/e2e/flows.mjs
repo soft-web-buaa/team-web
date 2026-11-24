@@ -31,26 +31,38 @@ async function open(url, w = 1280, h = 800, mobile = false) {
 const txt = (page, sel) => page.$eval(sel, (e) => e.textContent.trim()).catch(() => null);
 const attr = (page) => page.evaluate(() => document.documentElement.dataset.period);
 
-// 1 首页：键盘拖动时间轴，天色换时段；播放不报错
+// 1 此刻页（原来的首页，现在在 /now）：键盘拖动时间轴，天色换时段；播放不报错
 {
-  const p = await open(`${BASE}?h=12#/`);
+  const p = await open(`${BASE}?h=12#/now`);
   const before = await attr(p);
   await p.focus('input[type=range]');
   for (let i = 0; i < 200; i++) await p.keyboard.press('ArrowRight');
   await sleep(300);
   const after = await attr(p);
-  ok('首页：键盘拖时间轴，天色从 ' + before + ' 变为 ' + after, before !== after);
+  ok('此刻页：键盘拖时间轴，天色从 ' + before + ' 变为 ' + after, before !== after);
   await p.click('.card .play');
   await sleep(1200);
   const playing = await p.$eval('.card .play', (e) => e.getAttribute('aria-pressed'));
-  ok('首页：点播放后按钮进入播放态', playing === 'true');
+  ok('此刻页：点播放后按钮进入播放态', playing === 'true');
   const toastMsg = await txt(p, '.toast');
-  ok('首页：播放没有弹出错误提示', !toastMsg, toastMsg || '');
+  ok('此刻页：播放没有弹出错误提示', !toastMsg, toastMsg || '');
   await p.click('.card .play');
   await sleep(300);
-  ok('首页：再点一次停止', (await p.$eval('.card .play', (e) => e.getAttribute('aria-pressed'))) === 'false');
+  ok('此刻页：再点一次停止', (await p.$eval('.card .play', (e) => e.getAttribute('aria-pressed'))) === 'false');
   await p.keyboard.press('Tab');
   await p.screenshot({ path: OUT + 'f-focus.png' });
+  await p.close();
+}
+
+// 1b 首页是留声机：整屏嵌入刻声的三维分区图（?embed=1），导航里"留声机"高亮；旧的地图页还在，只是不在导航里
+{
+  const p = await open(`${BASE}#/`);
+  const src = await p.$eval('iframe.stage', (e) => e.getAttribute('src')).catch(() => null);
+  ok('首页：整屏是留声机，嵌入的是刻声分区图', !!src && src.includes('plan3d/index.html') && src.includes('embed=1'), src || '没有 iframe');
+  const on = await p.$$eval('.nav a.is-on', (a) => a.map((x) => x.textContent.trim()));
+  ok('首页：导航里高亮的是"留声机"', on.length === 1 && on[0] === '留声机', on.join(','));
+  const h = await p.$eval('iframe.stage', (e) => Math.round(e.getBoundingClientRect().height));
+  ok('首页：留声机撑满顶栏下面的屏幕（高度 ≥ 视口的 70%）', h >= 800 * 0.7, `${h}px`);
   await p.close();
 }
 
@@ -239,7 +251,7 @@ const attr = (page) => page.evaluate(() => document.documentElement.dataset.peri
 
 // 7 手机宽度：每页无横向溢出，底部导航可点
 {
-  for (const path of ['/', '/map', '/record', '/topics', '/topics/closing', '/time', '/about']) {
+  for (const path of ['/', '/now', '/map', '/record', '/topics', '/topics/closing', '/time', '/about']) {
     const p = await open(`${BASE}?h=18.3#${path}`, 375, 780, true);
     const over = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     ok(`手机 375px：${path} 无横向溢出`, over <= 0, over > 0 ? `溢出 ${over}px` : '');

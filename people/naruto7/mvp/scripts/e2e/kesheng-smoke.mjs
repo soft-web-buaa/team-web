@@ -64,7 +64,50 @@ const overflow = (page) => page.evaluate(() => document.documentElement.scrollWi
   await sleep(3500);
   const card = await p.$eval('#card-body', (e) => e.innerText.replace(/\s+/g, ' ').trim()).catch(() => '');
   ok('分区图：点开地点卡有内容', card.length > 20, card.slice(0, 50));
+  // 回声层：打开页面时载入的那张声片带着示例回声；盘面上有对应的回声针；点一条就能跳过去
+  const ec = await p.evaluate(() => ({
+    shown: !document.getElementById('echoes').hidden,
+    pins: document.querySelectorAll('.echo-pin').length,
+    marks: window.__plan.echoMarks,
+    demoTag: [...document.querySelectorAll('.echo-line .b')].every((b) => b.textContent.includes('示例')),
+  }));
+  ok('回声：打开页面时载入的声片带着回声带', ec.shown && ec.pins > 0, `${ec.pins} 根钉`);
+  ok('回声：盘面上的回声针与回声带同数', ec.marks.n === ec.pins && ec.marks.visible, JSON.stringify(ec.marks));
+  ok('回声：示例回声每一条都标了"示例"', ec.demoTag);
+  // 链接被拦、号码被拦、正常的钉上
+  await p.click('#echo-open');
+  await p.type('#echo-text', '看 https://example.com');
+  await p.click('.echo-send');
+  const e1 = await p.$eval('#echo-err', (e) => e.textContent);
+  ok('回声：放链接被拦下并说明原因', e1 === '这里不能放链接。', e1);
+  await p.$eval('#echo-text', (e) => { e.value = ''; e.dispatchEvent(new Event('input')); });
+  await p.type('#echo-text', '加我 13800138000');
+  await p.click('.echo-send');
+  const e2 = await p.$eval('#echo-err', (e) => e.textContent);
+  ok('回声：放号码被拦下', e2 === '这里不能放号码或联系方式。', e2);
+  await p.$eval('#echo-text', (e) => { e.value = ''; e.dispatchEvent(new Event('input')); });
+  await p.type('#echo-text', '<b>我也站在这里过</b>');
+  await p.click('.echo-send');
+  await sleep(300);
+  const after = await p.evaluate(() => ({ pins: document.querySelectorAll('.echo-pin').length, marks: window.__plan.echoMarks.n,
+    text: [...document.querySelectorAll('.echo-line .w')].map((x) => x.textContent), stored: JSON.parse(localStorage.getItem('ks-echoes-v1') || '{}').mine?.length }));
+  ok('回声：正常的话钉上后回声带与盘面都多一根', after.pins === ec.pins + 1 && after.marks === ec.pins + 1, `${ec.pins} → ${after.pins}`);
+  ok('回声：<b> 原样显示，不被当成 HTML', after.text.includes('<b>我也站在这里过</b>'));
+  ok('回声：存进了这台设备', after.stored === 1, `${after.stored} 条`);
+  await p.evaluate(() => window.__plan.openPlace('XY01'));
+  await sleep(2500);
+  const cv = await p.evaluate(() => { const i = document.querySelector('.cover img'); const c = document.querySelector('.cover figcaption'); return { w: i ? i.naturalWidth : 0, cap: c ? c.textContent : '' }; });
+  ok('套子：地点卡上有照片，说明里如实写"模型照"', cv.w > 0 && cv.cap.startsWith('模型照'), `${cv.w}px，${cv.cap.slice(0, 12)}`);
   await p.screenshot({ path: OUT + 'kesheng-plan3d.png' });
+  await p.close();
+}
+
+// 1b 嵌入模式（听见校园首页里的样子）：没有"回到刻声盘"，卡片标题是首页的话
+{
+  const p = await open(PLAN + '?embed=1', { ready: true });
+  const em = await p.evaluate(() => ({ back: getComputedStyle(document.querySelector('.back-home')).display, h1: document.querySelector('#card-body h1').textContent }));
+  ok('嵌入模式：不显示"回到刻声盘"', em.back === 'none', em.back);
+  ok('嵌入模式：卡片标题是首页的话', em.h1 === '有些声音，比我们在这里待得久。', em.h1);
   await p.close();
 }
 

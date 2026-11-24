@@ -1,0 +1,85 @@
+{
+ "places": {
+  "XY01": {
+   "photo": "./sleeves/XY01.jpg",
+   "kind": "model",
+   "name": "图书馆"
+  },
+  "XY02": {
+   "photo": "./sleeves/XY02.jpg",
+   "kind": "model",
+   "name": "主楼"
+  },
+  "XY03": {
+   "photo": "./sleeves/XY03.jpg",
+   "kind": "model",
+   "name": "新主楼"
+  },
+  "XY04": {
+   "photo": "./sleeves/XY04.jpg",
+   "kind": "model",
+   "name": "晨兴音乐厅"
+  },
+  "XY05": {
+   "photo": "./sleeves/XY05.jpg",
+   "kind": "model",
+   "name": "航空航天博物馆"
+  },
+  "XY06": {
+   "photo": "./sleeves/XY06.jpg",
+   "kind": "model",
+   "name": "体育馆"
+  },
+  "XY07": {
+   "photo": "./sleeves/XY07.jpg",
+   "kind": "model",
+   "name": "游泳馆"
+  },
+  "XY08": {
+   "photo": "./sleeves/XY08.jpg",
+   "kind": "model",
+   "name": "东区食堂"
+  },
+  "XY09": {
+   "photo": "./sleeves/XY09.jpg",
+   "kind": "model",
+   "name": "北区食堂"
+  },
+  "XY10": {
+   "photo": "./sleeves/XY10.jpg",
+   "kind": "model",
+   "name": "13 公寓"
+  },
+  "XY11": {
+   "photo": "./sleeves/XY11.jpg",
+   "kind": "model",
+   "name": "第一馆"
+  },
+  "XY12": {
+   "photo": "./sleeves/XY12.jpg",
+   "kind": "model",
+   "name": "为民楼"
+  },
+  "XY13": {
+   "photo": "./sleeves/XY13.jpg",
+   "kind": "model",
+   "name": "田径场看台"
+  },
+  "XY14": {
+   "photo": "./sleeves/XY14.jpg",
+   "kind": "model",
+   "name": "合一楼"
+  },
+  "XY15": {
+   "photo": "./sleeves/XY15.jpg",
+   "kind": "model",
+   "name": "校医院"
+  },
+  "XY16": {
+   "photo": "./sleeves/XY16.jpg",
+   "kind": "model",
+   "name": "三号楼"
+  }
+ },
+ "note": "唱片套子的正面照。kind: model = 纸模型照；photo = 团队实拍（要写 by 和 date）。"
+}
