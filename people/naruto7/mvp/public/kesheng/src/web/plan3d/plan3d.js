@@ -39,6 +39,7 @@ import { resumeAt, words, MAX_LISTEN } from '../find.js';
 import { guessRecord, confirmRecord, noneRecord } from '../place-guess.js';
 import { attach as attachQuick, ensureCtx as quickCtx, status as quickStatus } from './quick.js';
 import * as echo from '../community.js';
+import * as photoLib from '../photo.js';
 
 const SLOTS = ['夜', '晨', '上午', '午', '下午', '晚'];
 const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量；r10 从 2.2 降到 1.6：模型要矮墩墩的才像摆在桌上的东西）
@@ -2014,8 +2015,11 @@ function stepEchoMarks() {
 // —— 回声带：这张声片的包络线，加上钉在某一秒的话。针走到哪一秒，那一秒的话就浮上来 ——
 // 数据与规则在 ../community.js（示例回声标「示例」，你留的只存在这台设备上）。点一根钉或一行字，声音跳到那一秒前面一点接着放。
 const EL = { box: $('echoes'), wave: $('echo-wave'), waveOn: $('echo-wave-on'), head: $('echo-head'), pins: $('echo-pins'), now: $('echo-now'), list: $('echo-list'),
-  sum: $('echo-sum'), all: $('echo-all'), open: $('echo-open'), form: $('echo-form'), at: $('echo-at'), atV: $('echo-at-v'), text: $('echo-text'), count: $('echo-count'), err: $('echo-err'), cancel: $('echo-cancel') };
-const echoState = { id: null, list: [], sec: 1, active: -2 };
+  sum: $('echo-sum'), all: $('echo-all'), open: $('echo-open'), form: $('echo-form'), at: $('echo-at'), atV: $('echo-at-v'), text: $('echo-text'), count: $('echo-count'), err: $('echo-err'), cancel: $('echo-cancel'),
+  send: document.querySelector('.echo-send'), sync: $('echo-sync'), file: $('echo-file'), photoPick: $('echo-photo-pick'), photoGot: $('echo-photo-got'), photoPrev: $('echo-photo-prev'), photoDrop: $('echo-photo-drop'),
+  consent: $('echo-consent'), consentBox: $('echo-consent-box'), photoNote: $('echo-photo-note') };
+const PHOTO_NOTE = '照片先审后显，通过之前只有你自己看得到。拍摄地点这类信息会在你的设备上去掉。';
+const echoState = { id: null, list: [], sec: 1, active: -2, sig: null };
 
 /** 包络（每 20 毫秒一格）→ 对称的波形轮廓（160 列，纵向 56）。只画真实声音的长度，不画补齐的静音。 */
 function wavePath(env, seconds) {
@@ -2045,21 +2049,40 @@ function renderEchoes() {
   EL.wave.innerHTML = `<path d="${d}"/>`;
   EL.waveOn.innerHTML = `<path d="${d}"/>`;
   EL.at.max = String(current.seconds);
-  drawEchoes();
+  EL.now.innerHTML = '';
+  delete EL.now.dataset.id;
+  echoState.sig = null;
+  drawEchoes(true);
   closeEchoForm();
+  clearPhoto();
+  echo.refresh(e.id);                  // 去云上取别人留的；取到会触发 onChange 重画
 }
 
-function drawEchoes() {
+/** 一条回声里会影响画面的部分：编号、秒、话、照片、状态。别的字段变了不必重画。 */
+const echoSig = (list) => list.map((x) => [x.id, x.t, x.text, x.local || '', x.held ? 1 : 0, x.photo ? `${x.photo.id}:${x.photo.state}` : '', x.error || ''].join('|')).join('\n');
+
+function drawEchoes(force = false) {
   const list = echo.echoesOf(echoState.id);
-  echoState.list = list; echoState.active = -2;
+  const sig = echoSig(list);
+  if (!force && sig === echoState.sig) { paintSync(); return; }   // 云上取回来的和现在画的一样：什么都不动
+  echoState.sig = sig;
+  echoState.list = list;
+  const was = echoState.active >= 0 && echoState.list[echoState.active] ? echoState.list[echoState.active].id : null;
+  echoState.active = -2;
   const s = echoState.sec;
-  EL.pins.innerHTML = list.map((x, i) => `<button type="button" class="echo-pin${x.mine ? ' is-mine' : ''}" data-i="${i}" style="left:${((x.t / s) * 100).toFixed(2)}%" aria-label="${x.t.toFixed(1)} 秒：${esc(x.text)}"></button>`).join('') + '<i class="echo-ghost" id="echo-ghost" hidden></i>';
+  EL.pins.innerHTML = list.map((x, i) => `<button type="button" class="echo-pin${x.mine ? ' is-mine' : ''}${x.photo ? ' has-photo' : ''}" data-i="${i}" style="left:${((x.t / s) * 100).toFixed(2)}%" aria-label="${x.t.toFixed(1)} 秒：${esc(x.text)}"></button>`).join('') + '<i class="echo-ghost" id="echo-ghost" hidden></i>';
   EL.list.innerHTML = list.length
-    ? list.map((x, i) => `<li data-i="${i}"><button type="button" class="echo-line" data-i="${i}"><span class="s">${x.t.toFixed(1)} 秒</span><span class="w">${esc(x.text)}</span><span class="b">${esc(echo.byline(x))}</span></button><button type="button" class="echo-del" data-id="${esc(x.id)}" aria-label="${x.mine ? '删掉' : '举报'}这条：${esc(x.text)}">${x.mine ? '删掉' : '举报'}</button></li>`).join('')
+    ? list.map((x, i) => `<li data-i="${i}"><button type="button" class="echo-line" data-i="${i}"><span class="s">${x.t.toFixed(1)} 秒</span><span class="w">${esc(x.text)}</span><span class="b">${esc(echo.byline(x))}${x.error ? ' · ' + esc(x.error) : ''}</span></button>${x.photo && echo.photoSrc(x, 'thumb') ? `<button type="button" class="echo-thumb" data-lb="${esc(echo.photoSrc(x, 'full'))}" data-cap="${esc(x.text)}" aria-label="看这张照片的大图"><img src="${esc(echo.photoSrc(x, 'thumb'))}" alt="" width="44" height="33" loading="lazy"></button>` : ''}<button type="button" class="echo-del" data-id="${esc(x.id)}" aria-label="${x.mine ? '删掉' : x.demo ? '收起' : '举报'}这条：${esc(x.text)}">${x.mine ? '删掉' : x.demo ? '收起' : '举报'}</button></li>`).join('')
     : '<li class="echo-empty">这张声片上还没有话。点「钉一句话」，把想说的钉在某一秒。</li>';
-  EL.now.textContent = '';
+  if (was) { const i = list.findIndex((x) => x.id === was); if (i >= 0) echoState.active = i; }
   EL.sum.textContent = list.length ? `这张声片上的话 · ${list.length} 条` : '这张声片上还没有话';
   syncEchoMarks();
+  if (echoState.active >= 0) {
+    EL.pins.querySelectorAll('.echo-pin').forEach((bt) => bt.classList.toggle('is-on', Number(bt.dataset.i) === echoState.active));
+    EL.list.querySelectorAll('li[data-i]').forEach((li) => li.classList.toggle('is-on', Number(li.dataset.i) === echoState.active));
+  }
+  if (!EL.form.hidden) ghostAt(Number(EL.at.value));
+  paintSync();
 }
 
 /** 每帧：针头跟着播放位置走，已经放过的一段亮起来；走到一句话的那一秒，它浮上来。 */
@@ -2075,7 +2098,28 @@ function echoLive(play) {
   echoState.active = k;
   EL.pins.querySelectorAll('.echo-pin').forEach((b) => b.classList.toggle('is-on', Number(b.dataset.i) === k));
   EL.list.querySelectorAll('li[data-i]').forEach((li) => li.classList.toggle('is-on', Number(li.dataset.i) === k));
-  EL.now.textContent = k >= 0 ? `「${list[k].text}」${echo.byline(list[k]) ? ' ' + echo.byline(list[k]) : ''}` : '';
+  paintNow(k);
+}
+
+/** 针走到一句话的那一秒：话浮上来；有照片的，照片像相纸一样显影（显影的动效在样式里，减少动效时直接显示）。 */
+function paintNow(k) {
+  const x = k >= 0 ? echoState.list[k] : null;
+  if (!x) { EL.now.innerHTML = ''; delete EL.now.dataset.id; return; }
+  if (EL.now.dataset.id === x.id) return;     // 已经浮出来了：不重建，显影动画不重放
+  EL.now.dataset.id = x.id;
+  const by = echo.byline(x), src = echo.photoSrc(x, 'thumb');
+  EL.now.innerHTML = `${src ? `<button type="button" class="echo-dev" data-lb="${esc(echo.photoSrc(x, 'full'))}" data-cap="${esc(x.text)}" aria-label="看这张照片的大图"><img src="${esc(src)}" alt="" width="64" height="48"></button>` : ''}<span class="echo-say">「${esc(x.text)}」${by ? `<i>${esc(by)}</i>` : ''}</span>`;
+}
+
+/** 角落那一行：待发出、被退回、连不上。都正常就不出现。 */
+function paintSync() {
+  if (!EL.sync) return;
+  const st = echo.status();
+  const t = st.rejected ? `有 ${st.rejected} 条被退回，原因写在那一条上，可以删掉。`
+    : st.waiting ? `有 ${st.waiting} 条还没发出去，连上网络会自动发。`
+      : st.online === false ? '暂时连不上云，看到的是上次的内容。' : '';
+  EL.sync.hidden = !t;
+  EL.sync.textContent = t;
 }
 
 async function seekEcho(i) {
@@ -2098,6 +2142,7 @@ function openEchoForm() {
   EL.at.value = String(p);
   EL.atV.textContent = p.toFixed(1);
   EL.text.value = ''; EL.count.textContent = `0/${echo.ECHO_MAX}`; EL.err.textContent = '';
+  clearPhoto();
   EL.form.hidden = false; EL.open.hidden = true; EL.open.setAttribute('aria-expanded', 'true');
   ghostAt(p);
   EL.text.focus();
@@ -2119,7 +2164,7 @@ if (EL.box) {
   EL.pins.addEventListener('click', (ev) => { const b = ev.target.closest('.echo-pin'); if (b) seekEcho(Number(b.dataset.i)); });
   EL.list.addEventListener('click', (ev) => {
     const del = ev.target.closest('.echo-del');
-    if (del) { echo.hideEcho(del.dataset.id); drawEchoes(); say('这一条收起来了。'); return; }
+    if (del) { echo.hideEcho(del.dataset.id); drawEchoes(true); say('这一条收起来了。'); return; }
     const ln = ev.target.closest('.echo-line');
     if (ln) seekEcho(Number(ln.dataset.i));
   });
@@ -2127,21 +2172,73 @@ if (EL.box) {
   EL.cancel.addEventListener('click', () => { closeEchoForm(); EL.open.focus(); });
   EL.at.addEventListener('input', () => { EL.atV.textContent = Number(EL.at.value).toFixed(1); ghostAt(Number(EL.at.value)); });
   EL.text.addEventListener('input', () => { EL.count.textContent = `${EL.text.value.length}/${echo.ECHO_MAX}`; EL.err.textContent = ''; });
-  EL.form.addEventListener('submit', (ev) => {
+  EL.file.addEventListener('change', async () => {
+    const f = EL.file.files && EL.file.files[0];
+    if (!f) return;
+    EL.err.textContent = '';
+    EL.photoNote.textContent = '在处理照片…';
+    try {
+      const got = await photoLib.prepare(f);
+      clearPhoto();
+      echoPhoto = got;
+      EL.photoPrev.src = got.previewUrl;
+      EL.photoGot.hidden = false; EL.consent.hidden = false; EL.photoPick.hidden = true;
+    } catch (err) {
+      EL.err.textContent = err.message || '读不出这张照片。';
+      EL.file.value = '';
+    }
+    EL.photoNote.textContent = PHOTO_NOTE;
+  });
+  EL.photoDrop.addEventListener('click', () => { clearPhoto(); EL.photoPick.focus(); });
+  EL.form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    EL.err.textContent = '';
+    EL.send.disabled = true;
     try {
       const id = lib.me();
-      const e = echo.addEcho({ discId: echoState.id, t: Number(EL.at.value), text: EL.text.value, dur: current.seconds,
-        author: id ? { grade: id.grade, dept: id.dept, name: id.name, key: myKey } : null });
-      drawEchoes();
+      const photo = echoPhoto ? { thumb: echoPhoto.thumb, full: echoPhoto.full, consent: EL.consentBox.checked } : null;
+      const e = await echo.addEcho({ discId: echoState.id, t: Number(EL.at.value), text: EL.text.value, dur: current.seconds,
+        author: id ? { grade: id.grade, dept: id.dept, name: id.name } : null, photo, placeId: current.e.placeId || null });
+      clearPhoto();
+      drawEchoes(true);
       closeEchoForm();
       EL.open.focus();
-      say(`钉在第 ${e.t.toFixed(1)} 秒了。只在这台设备上，别人暂时看不到。`);
+      say(`钉在第 ${e.t.toFixed(1)} 秒了。${photo ? '照片先审后显，通过之前只有你自己看得到。' : ''}连得上云就马上发，连不上先放在这台设备上，连上自动发。`);
     } catch (err) {
       EL.err.textContent = err.message || '没有钉上，再试一次。';
+    } finally {
+      EL.send.disabled = false;
     }
   });
 }
+
+// 要配的照片：本机处理好（缩小、去定位信息），勾了同意才能发
+let echoPhoto = null;
+function clearPhoto() {
+  if (echoPhoto && echoPhoto.previewUrl) URL.revokeObjectURL(echoPhoto.previewUrl);
+  echoPhoto = null;
+  if (!EL.file) return;
+  EL.file.value = ''; EL.consentBox.checked = false;
+  EL.photoGot.hidden = true; EL.consent.hidden = true; EL.photoPick.hidden = false;
+}
+
+// 灯箱：回声带、列表、地点页的照片点开都用它
+const LB = { dlg: $('lightbox'), img: $('lightbox-img'), cap: $('lightbox-cap'), close: $('lightbox-close') };
+if (LB.dlg) {
+  document.addEventListener('click', (ev) => {
+    const hit = ev.target.closest && ev.target.closest('[data-lb]');
+    if (!hit) return;
+    ev.preventDefault();
+    LB.img.src = hit.dataset.lb; LB.img.alt = hit.dataset.cap || '照片'; LB.cap.textContent = hit.dataset.cap || '';
+    LB.dlg.showModal();
+  });
+  LB.close.addEventListener('click', () => LB.dlg.close());
+  LB.dlg.addEventListener('click', (ev) => { if (ev.target === LB.dlg) LB.dlg.close(); });
+}
+
+// 云那头有变化（别人留了话、我的发出去了、被退回了）：重画；页面开着时每 15 秒去取一次，别人的话几秒后就能在这里看到
+echo.onChange(() => { if (echoState.id) drawEchoes(); if (state.view === 'place') paintPlacePhotos(state.place); });
+setInterval(() => { if (echoState.id && !document.hidden) echo.refresh(echoState.id); }, 15000);
 
 els.play.addEventListener('click', async () => {
   if (!current) return;
@@ -3123,6 +3220,14 @@ function renderZone() {
 /** 唱片套子的正面：这个地点的一张照片，右边露出半张盘。照片是辅：它只是套子，声音才是里面的唱片。
  *  kind 'model' = 留声机上那座纸模型的照片（scripts/make-sleeve-photos.mjs 拍的）；'photo' = 团队实拍，要写拍摄人和日期。 */
 function coverHTML(p) {
+  const latest = echo.placePhotos(p.id).filter((x) => x.state === 'ok').pop();   // 最近一张审核通过的社区照片，换掉模型照
+  if (latest) {
+    return `<figure class="cover is-photo">
+    <div class="cover-disc" aria-hidden="true"></div>
+    <button type="button" class="cover-open" data-lb="${esc(latest.full)}" data-cap="${esc(p.name)} · ${esc(String(latest.at).slice(0, 10))}" aria-label="看${esc(p.name)}这张照片的大图"><img src="${esc(latest.full)}" alt="${esc(p.name)}的社区照片" width="800" height="600" decoding="async"></button>
+    <figcaption>来自社区 · ${esc(String(latest.at).slice(0, 10))}</figcaption>
+  </figure>`;
+  }
   const s = (sleeveData.places || {})[p.id];
   if (!s || !s.photo) return '';
   const real = s.kind === 'photo';
@@ -3132,6 +3237,31 @@ function coverHTML(p) {
     <img src="${esc(s.photo)}" alt="${esc(p.name)}${real ? '的实拍照片' : '的纸模型照片'}" width="800" height="600" decoding="async">
     <figcaption>${cap}</figcaption>
   </figure>`;
+}
+
+/** 这个地点的照片印样：一张一格，按时间排，最新的在前。审核中的只有上传的人自己看得到，并且写着"审核中"。 */
+function stripInner(pid) {
+  const list = echo.placePhotos(pid);
+  if (!list.length) return '<p class="fine">这里还没有人配过照片。钉一句话的时候可以配一张。</p>';
+  const name = placeById.get(pid).name;
+  return `<ol class="strip">${list.slice(-12).reverse().map((x) => {
+    const day = String(x.at).slice(0, 10), wait = x.mine && x.state === 'pending';
+    return `<li><button type="button" class="strip-ph${wait ? ' is-pending' : ''}" data-lb="${esc(x.full)}" data-cap="${esc(name)} · ${esc(day)}"><img src="${esc(x.src)}" alt="" width="96" height="72" loading="lazy"><span>${esc(day)}${wait ? ' · 审核中' : ''}</span></button></li>`;
+  }).join('')}</ol>`;
+}
+let lastPaint = { pid: null, strip: '', cover: '' };
+/** 云上的照片到了（或变了）：只换印样和套子，不重画整张卡（重画会把滚动位置和正在做的事弄丢）。 */
+function paintPlacePhotos(pid) {
+  if (state.view !== 'place' || state.place !== pid) return;
+  const strip = els.card.querySelector('#photo-strip');
+  if (!strip) return;
+  const sHtml = stripInner(pid), cHtml = coverHTML(placeById.get(pid));
+  if (lastPaint.pid === pid && lastPaint.strip === sHtml && lastPaint.cover === cHtml) return;
+  lastPaint = { pid, strip: sHtml, cover: cHtml };
+  strip.innerHTML = sHtml;
+  const cov = els.card.querySelector('figure.cover');
+  if (cHtml && cov) cov.outerHTML = cHtml;
+  else if (cHtml) els.card.querySelector('.back').insertAdjacentHTML('afterend', cHtml);
 }
 
 function renderPlace() {
@@ -3147,10 +3277,13 @@ function renderPlace() {
     ${landedHTML(p.id)}
     ${ringSVG(ringsOf(entries, p.id))}
     ${pastHTML(p.id)}
+    <section class="photos" aria-labelledby="photos-h"><h3 class="sub" id="photos-h">这里的照片</h3><div id="photo-strip">${stripInner(p.id)}</div></section>
     <button type="button" class="rec" aria-describedby="rec-note"><i aria-hidden="true"></i><span>按住，在这里刻十秒</span></button>
     <p class="fine" id="rec-note">麦克风只在按住时打开；键盘按空格。</p>
     ${items ? `<h3 class="sub">这里的声音</h3><ol class="voices">${items}</ol>${here.length > 40 ? `<p class="fine">只列最近 40 张，共 ${counts(here).total} 张。</p>` : ''}` : ''}`;
   wirePlace(p.id);
+  lastPaint = { pid: p.id, strip: stripInner(p.id), cover: coverHTML(p) };
+  echo.refreshPlace(p.id);             // 去云上取这个地点的照片；到了会触发 onChange，只换印样和套子
 }
 
 function wirePlace(pid) {
@@ -3749,6 +3882,7 @@ if (renderer) {
     risen: () => [...zoneObj.values()].every((o) => o.rise >= 1), get light() { return light.to ? light.to.name : light.cur.name; },
     settled: () => !light.to && !light.queue.length && light.cur.name === lightGoal(),
     marksScreen: () => { const R = els.canvas.getBoundingClientRect(); return echoMarks.items.map((m) => { const h = m.obj.userData.head; const v = new THREE.Vector3(); h.getWorldPosition(v); v.project(camera); return { i: m.i, t: m.t, x: R.left + ((v.x + 1) / 2) * R.width, y: R.top + ((1 - v.y) / 2) * R.height, mine: echoState.list[m.i] && echoState.list[m.i].mine }; }); },
+    refreshEchoes: () => echo.refresh(echoState.id),
     get echoMarks() { return { n: echoMarks.items.length, visible: !!(echoMarks.group && echoMarks.group.visible), active: echoState.active }; },
     get season() { return scene4.cur; }, get frames() { return frameCount; }, get quality() { return { mode: quality.mode, median: quality.median ?? null }; }, get flying() { return !!fly || !!(zoom && zoom.t0); }, zoomTo: (dir) => powersOfTen(dir, 1200), get zoomed() { return !!(zoom && zoom.at === 'close'); },
     dbg: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, name: light.cur.name, night: U.uNight.value, sun: sun.intensity, hemi: hemi.intensity, exp: renderer.toneMappingExposure, frames: frameCount }), get playing() { return current && current.e.no; }, get rate() { return report.rate; } };
