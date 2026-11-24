@@ -799,3 +799,119 @@ body.is-shelf .quick, body.is-shelf .quick-note { opacity: 0; pointer-events: no
 .tag.mk-user .mk { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); vertical-align: 0; }
 /* hidden 要赢过上面的 display:flex / grid（柜子、盖章、标尺） */
 .shelf[hidden], .first[hidden], .scale[hidden] { display: none; }
+
+/* —— 回声带：播放器里这张声片的包络线，钉在某一秒的话竖在线上。针走到那一秒，那句话浮上来 —— */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.echoes { margin-top: calc(var(--u) * 2); }
+.echo-track { position: relative; height: 64px; padding-top: 6px; }
+.echo-track svg { position: absolute; left: 0; right: 0; top: 6px; width: 100%; height: 56px; }
+#echo-wave path { fill: rgba(242, 244, 243, 0.26); }
+#echo-wave-on path { fill: var(--scope); }
+#echo-wave-on { clip-path: inset(0 100% 0 0); }
+.echo-head { position: absolute; left: 0; top: 6px; bottom: 0; width: 1px; background: var(--paper); pointer-events: none; }
+.echo-pins { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.echo-pin { position: absolute; top: 0; bottom: 0; width: 24px; margin-left: -12px; padding: 0; border: 0; background: none; cursor: pointer; }
+.echo-pin::before { content: ""; position: absolute; left: 50%; top: 6px; bottom: 0; width: 1px; background: rgba(242, 244, 243, 0.5); }
+.echo-pin::after { content: ""; position: absolute; left: 50%; top: 1px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; background: var(--paper); box-shadow: 0 0 0 2px var(--ink); transition: transform 0.2s; }
+.echo-pin.is-mine::after { background: var(--scope); }
+.echo-pin.is-on::after { background: var(--scope); transform: scale(1.5); }
+.echo-pin.is-on::before { background: var(--scope); }
+.echo-pin:focus-visible { outline: 2px solid var(--scope); outline-offset: -2px; }
+.echo-ghost { position: absolute; top: 1px; bottom: 0; width: 0; border-left: 1px dashed var(--scope); pointer-events: none; }
+.echo-ghost::before { content: ""; position: absolute; left: -5px; top: 0; width: 9px; height: 9px; border: 1px solid var(--scope); border-radius: 50%; background: var(--ink); }
+.echo-ghost[hidden] { display: none; }
+.echo-now { min-height: 3.2em; margin: 4px 0 0; color: var(--paper); font: 400 1.0625rem/1.55 var(--fang); overflow-wrap: anywhere; }
+.echo-list { list-style: none; margin: var(--u) 0 0; padding: 0; border-top: 1px solid rgba(211, 215, 218, 0.25); max-height: 9.5rem; overflow: auto; }
+.echo-list li { display: flex; align-items: stretch; border-bottom: 1px solid rgba(211, 215, 218, 0.15); }
+.echo-list li.is-on { background: rgba(230, 190, 58, 0.14); }
+.echo-line { display: grid; grid-template-columns: 3.6em 1fr; gap: 0 10px; flex: 1; min-width: 0; min-height: 44px; padding: 6px 4px; border: 0; background: none; color: var(--paper); text-align: left; cursor: pointer; }
+.echo-line .s { grid-row: span 2; align-self: center; color: var(--scope); font: 400 0.875rem/1 var(--hei); font-variant-numeric: tabular-nums; }
+.echo-line .w { font: 400 0.9375rem/1.45 var(--fang); overflow-wrap: anywhere; }
+.echo-line .b { color: var(--alu); font: 400 0.75rem/1.3 var(--hei); }
+.echo-del { min-width: 44px; padding: 0 6px; border: 0; background: none; color: var(--alu); font: 400 0.75rem/1 var(--hei); cursor: pointer; }
+.echo-del:hover { color: var(--paper); text-decoration: underline; }
+.echo-line:focus-visible, .echo-del:focus-visible { outline: 2px solid var(--scope); outline-offset: -2px; }
+.echo-empty { padding: 10px 4px; color: var(--alu); font: 400 0.875rem/1.6 var(--hei); }
+.echo-open { display: block; margin-top: var(--u); min-height: 40px; padding: 0 14px; border: 1px solid var(--alu); border-radius: 2px; background: transparent; color: var(--paper); font: 400 1rem/1 var(--fang); cursor: pointer; }
+.echo-open:hover { border-color: var(--scope); color: var(--scope); }
+.echo-open:focus-visible { outline: 2px solid var(--scope); outline-offset: 2px; }
+.echo-form { display: grid; gap: var(--u); margin-top: var(--u); padding-top: var(--u); border-top: 1px solid rgba(211, 215, 218, 0.25); }
+.echo-at { display: grid; gap: 4px; color: var(--alu); font: 400 0.875rem/1.3 var(--hei); }
+.echo-at b { color: var(--scope); font-weight: 400; font-variant-numeric: tabular-nums; }
+.echo-at input { width: 100%; accent-color: var(--scope); }
+.echo-text { position: relative; display: block; }
+.echo-text input { width: 100%; min-height: 44px; padding: 0 3.6em 0 12px; border: 1px solid var(--alu); border-radius: 2px; background: rgba(242, 244, 243, 0.08); color: var(--paper); font: 400 1rem/1 var(--fang); }
+.echo-text input::placeholder { color: rgba(211, 215, 218, 0.7); }
+.echo-text input:focus-visible { outline: 2px solid var(--scope); outline-offset: 1px; }
+.echo-text i { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--alu); font: 400 0.75rem/1 var(--hei); font-style: normal; font-variant-numeric: tabular-nums; }
+.echo-err { margin: 0; min-height: 1.2em; color: var(--scope); font: 400 0.8125rem/1.4 var(--hei); }
+.echo-actions { display: flex; gap: var(--u); }
+.echo-send, .echo-cancel { min-height: 40px; padding: 0 16px; border: 1px solid var(--paper); border-radius: 2px; font: 400 1rem/1 var(--fang); cursor: pointer; }
+.echo-send { background: var(--paper); color: var(--ink); }
+.echo-cancel { background: transparent; color: var(--paper); border-color: var(--alu); }
+.echo-send:focus-visible, .echo-cancel:focus-visible { outline: 2px solid var(--scope); outline-offset: 2px; }
+.echoes[hidden], .echo-form[hidden], .echo-open[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .echo-pin::after { transition: none; } }
+
+/* 桌面：播放器钉在馆藏卡底部。卡片内容再长，正在放的声片和钉在它上面的话也一直看得见。手机上卡片在画面下方，保持原样 */
+@media (min-width: 881px) {
+  .player { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -14px 24px -12px rgba(21, 28, 44, 0.55); }
+  .echo-list { max-height: 5.6rem; }
+}
+
+/* 完整回声列表折进一行：默认只留当前浮出的那一句，播放器不再吃掉整张卡片 */
+.echo-all { margin-top: 4px; }
+.echo-all summary { display: flex; align-items: center; min-height: 40px; color: var(--alu); font: 400 0.875rem/1.3 var(--hei); cursor: pointer; list-style: none; border-top: 1px solid rgba(211, 215, 218, 0.2); }
+.echo-all summary::-webkit-details-marker { display: none; }
+.echo-all summary::after { content: "展开"; margin-left: auto; color: var(--paper); font-size: 0.8125rem; }
+.echo-all[open] summary::after { content: "收起"; }
+.echo-all summary:focus-visible { outline: 2px solid var(--scope); outline-offset: -2px; }
+.echo-all .echo-list { margin-top: 0; border-top: 0; max-height: 11rem; }
+.echo-now { min-height: 1.6em; }
+@media (min-width: 881px) {
+  .player { max-height: 56%; overflow: auto; }
+  .echo-all[open] .echo-list { max-height: 7rem; }
+}
+.player { flex-shrink: 0; }
+
+/* 手机：卡片很长，播放器原来躺在最底下，要滚两屏才看见回声带。改成排在卡片最前面，紧贴上面的盘：看着盘，听着声，读着钉在这一秒的话 */
+@media (max-width: 880px) {
+  .player { order: -1; margin-top: 0; }
+  .echo-list { max-height: 6.5rem; }
+}
+
+/* —— 唱片套子的正面：照片是辅。纸板套子，右边露出半张盘；鼠标移上去盘往外抽一点（回应动作，不自己动） —— */
+.cover { position: relative; margin: 0 0 calc(var(--u) * 2); padding-right: 12%; }
+.cover img { position: relative; z-index: 1; display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; background: var(--alu);
+  box-shadow: 3px 0 8px rgba(21, 28, 44, 0.28), 0 0 0 1px rgba(21, 28, 44, 0.08); }
+.cover-disc { position: absolute; z-index: 0; right: 0; top: 7%; width: 56%; aspect-ratio: 1; border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--ink) 0 11%, var(--scope) 11.5% 13%, #0C0D10 13.5% 15%, transparent 15.5%),
+    repeating-radial-gradient(circle, #0C0D10 0 2px, #1B2230 2px 3px);
+  transition: transform 0.45s cubic-bezier(.2,.7,.2,1); }
+.cover:hover .cover-disc { transform: translateX(7%); }
+.cover figcaption { margin-top: 6px; color: var(--lathe); font: 400 0.75rem/1.5 var(--hei); }
+.cover.is-photo figcaption { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .cover-disc { transition: none; } }
+
+/* 播放器压紧：名字、波形、浮出的那句话、展开行、四个钮，一共不超过三百来像素 */
+.echo-row { display: flex; align-items: flex-start; gap: 10px; margin-top: 2px; }
+.echo-row .echo-now { flex: 1; min-width: 0; margin: 4px 0 0; }
+.echo-row .echo-open { flex: none; margin-top: 0; }
+.player { padding: calc(var(--u) * 2) calc(var(--u) * 3.5) calc(var(--u) * 2); }
+.clip-no { font-size: 1.1875rem; }
+.clip-note { margin-top: 2px; font-size: 1rem; }
+.clip-meta { margin-top: 2px; font-size: 0.75rem; }
+.echoes { margin-top: var(--u); }
+.controls { margin-top: var(--u); }
+.controls button { min-height: 36px; padding: 0 12px; min-width: 64px; }
+.echo-track { height: 54px; }
+.echo-track svg { height: 46px; }
+.echo-head { top: 6px; }
+@media (min-width: 881px) {
+  .player { max-height: 46%; }
+}
+
+/* 嵌在听见校园首页里：外面已经有导航，这里不再放"回到刻声盘"；柜子链接让到它原来的位置 */
+.is-embed .back-home { display: none; }
+.is-embed .cab-link { top: calc(var(--u) * 2.5); }

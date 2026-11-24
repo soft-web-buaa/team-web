@@ -38,6 +38,7 @@ import { FUNC_CARD, ERA, ROOF_PAPER, POOL_STONE, STYLE, tintOf, facadeOf, offset
 import { resumeAt, words, MAX_LISTEN } from '../find.js';
 import { guessRecord, confirmRecord, noneRecord } from '../place-guess.js';
 import { attach as attachQuick, ensureCtx as quickCtx, status as quickStatus } from './quick.js';
+import * as echo from '../community.js';
 
 const SLOTS = ['夜', '晨', '上午', '午', '下午', '晚'];
 const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量；r10 从 2.2 降到 1.6：模型要矮墩墩的才像摆在桌上的东西）
@@ -51,6 +52,10 @@ const COL = { paper: '#F2F4F3', alu: '#D3D7DA', lathe: '#515C6A', ink: '#24304A'
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // 画质：默认自动——开场落定后量 45 帧，中位帧时长超过 40 ms 就关掉环境光遮蔽、像素比降到 1。?q=full 强制全开，?q=lite 直接用省电档
 const Q = new URLSearchParams(location.search).get('q');
+// ?embed=1：嵌在听见校园首页里。没有"回到刻声盘"，卡片的标题换成首页的话（样式见 plan3d.css 的 .is-embed）
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) document.documentElement.classList.add('is-embed');
+const HOME_LINE = '有些声音，比我们在这里待得久。';
 const quality = { mode: Q === 'lite' ? 'lite' : 'full', auto: Q !== 'full' && Q !== 'lite', samples: [], last: 0 };
 
 const $ = (id) => document.getElementById(id);
@@ -68,7 +73,7 @@ if (new URLSearchParams(location.search).has('concept')) {
   u.searchParams.delete('concept');
   window.history.replaceState(null, '', u);   // 本文件下面有个叫 history 的 const（史料），这里必须写全
 }
-const [campus, cal, pub, localRecs, demo, archivalRaw, hist] = await Promise.all([
+const [campus, cal, pub, localRecs, demo, archivalRaw, hist, echoLoad, sleeveData] = await Promise.all([
   fetch('./campus-xy.json').then((r) => r.json()),
   fetch('../data/calendar.json').then((r) => r.json()).catch(() => null),
   lib.fetchCatalog('../'),
@@ -76,6 +81,8 @@ const [campus, cal, pub, localRecs, demo, archivalRaw, hist] = await Promise.all
   fetch('./demo-catalog.json').then((r) => r.json()).catch(() => ({ entries: [] })),
   lib.fetchArchival('../'),            // 史料：取不到（--public 构建、没入藏）就是没有
   lib.fetchHistory('../'),
+  echo.load('./echo-seed.json'),       // 回声：示例回声 + 这台设备上留的。取不到就是没有，页面照常
+  fetch('./sleeves.json').then((r) => (r.ok ? r.json() : { places: {} })).catch(() => ({ places: {} })),   // 唱片套子的照片：纸模型照，或团队的实拍
 ]);
 const zoneById = new Map(campus.zones.map((z) => [z.id, z]));
 const placeById = new Map(campus.places.map((p) => [p.id, p]));
@@ -244,6 +251,7 @@ function buildScene() {
   rebuildBands();
   buildCampus();
   buildPins();
+  buildEchoMarks();
   buildCarriage();
   buildComposer();
 
@@ -1854,7 +1862,7 @@ async function loadClip(e, autoplay = true, pre = null) {
     for (let j = i * hop; j < Math.min(pcm.length, (i + 1) * hop); j++) q += pcm[j] * pcm[j];
     env[i] = Math.sqrt(q / hop);
   }
-  current = { e, pcm, fs, dur: pcm.length / fs, seconds: Math.min(e.seconds, MAX_SEC), env };
+  current = { e, pcm, fs, dur: pcm.length / fs, seconds: Math.min(e.seconds, MAX_SEC), env, tex };
   fillWave(pcm, fs);
   inscribe(e);
   seekT = performance.now();
@@ -1863,6 +1871,7 @@ async function loadClip(e, autoplay = true, pre = null) {
   platterMat.uniforms.uCut.value = current.seconds;
   platterMat.uniforms.uDur.value = current.dur;
   showPlayer(e);
+  renderEchoes();
   updatePins();
   renderCard();
   if (autoplay) {
@@ -1948,6 +1957,190 @@ function showPlayer(e) {
   if (e.source === 'example') { els.note.textContent = e.note; els.meta.textContent = '一段示例 · 页面现场做的'; return; }
   const src = e.source === 'local' ? '在你的柜子里，还没入馆。' : '';
   els.meta.textContent = `${[e.place, when(e), who(e)].filter(Boolean).join(' · ')}。${src}`;
+}
+
+// —— 盘面上的回声针：钉在某一秒的话，同时也立在盘面刻纹上那一秒的位置，跟着盘一起转 ——
+// 位置和针尖读到的是同一公式：半径用 stylusRadius(秒)，方位是「盘面固定角」−2π·(秒/一圈) 再随盘转（和 rim 同一个旋转）。
+// 针走到那一秒，针头亮起来；这样声音、波形、盘面三处指的是同一个瞬间。
+const echoMarks = { group: null, items: [] };
+const MARK_GEO = { needle: null, head: null };
+function buildEchoMarks() {
+  MARK_GEO.needle = new THREE.CylinderGeometry(1.1, 1.1, 1, 8);
+  MARK_GEO.head = new THREE.SphereGeometry(11, 16, 12);
+  echoMarks.group = new THREE.Group();
+  echoMarks.group.position.y = 0.6;
+  echoMarks.group.visible = false;
+  scene.add(echoMarks.group);
+}
+function syncEchoMarks() {
+  const g = echoMarks.group;
+  if (!g) return;
+  for (const m of echoMarks.items) g.remove(m.obj);
+  echoMarks.items = [];
+  if (!current || !echoState.list.length) return;
+  echoState.list.forEach((x, i) => {
+    const obj = new THREE.Group();
+    const col = x.mine ? COL.scope : '#F2F4F3';
+    const mat = new THREE.MeshBasicMaterial({ color: col, toneMapped: false, transparent: true, opacity: 0.92 });
+    const needle = new THREE.Mesh(MARK_GEO.needle, mat);
+    needle.scale.y = 46; needle.position.y = 23;
+    const head = new THREE.Mesh(MARK_GEO.head, mat);
+    head.position.y = 48;
+    obj.add(needle, head);
+    obj.userData = { t: x.t, i, head, mat };
+    g.add(obj);
+    echoMarks.items.push({ obj, t: x.t, i });
+  });
+}
+/** 每帧：盘转多少，针组跟着转多少；每根针按它那一秒落在刻纹上的半径和方位站好。 */
+function stepEchoMarks() {
+  const g = echoMarks.group;
+  if (!g) return;
+  const show = !!current && !rec && !listen && echoMarks.items.length > 0 && !(zoom && zoom.at === 'close');
+  g.visible = show;
+  if (!show) return;
+  g.rotation.y = -platterMat.uniforms.uAngle.value;
+  for (const m of echoMarks.items) {
+    const r = stylusRadius(Math.min(m.t, current.seconds));
+    const psi = -TAU * ((m.t / TURN) % 1);
+    m.obj.position.set(Math.sin(psi) * r, 0, -Math.cos(psi) * r);
+    const on = m.i === echoState.active;
+    const k = on ? 1.7 : 1;
+    m.obj.userData.head.scale.setScalar(k);
+    m.obj.userData.mat.opacity = on ? 1 : 0.8;
+  }
+}
+
+// —— 回声带：这张声片的包络线，加上钉在某一秒的话。针走到哪一秒，那一秒的话就浮上来 ——
+// 数据与规则在 ../community.js（示例回声标「示例」，你留的只存在这台设备上）。点一根钉或一行字，声音跳到那一秒前面一点接着放。
+const EL = { box: $('echoes'), wave: $('echo-wave'), waveOn: $('echo-wave-on'), head: $('echo-head'), pins: $('echo-pins'), now: $('echo-now'), list: $('echo-list'),
+  sum: $('echo-sum'), all: $('echo-all'), open: $('echo-open'), form: $('echo-form'), at: $('echo-at'), atV: $('echo-at-v'), text: $('echo-text'), count: $('echo-count'), err: $('echo-err'), cancel: $('echo-cancel') };
+const echoState = { id: null, list: [], sec: 1, active: -2 };
+
+/** 包络（每 20 毫秒一格）→ 对称的波形轮廓（160 列，纵向 56）。只画真实声音的长度，不画补齐的静音。 */
+function wavePath(env, seconds) {
+  const N = 160, frames = Math.max(1, Math.min(env.length, Math.floor(seconds * 50)));
+  let mx = 1e-6;
+  for (let i = 0; i < frames; i++) mx = Math.max(mx, env[i]);
+  const hs = [];
+  for (let c = 0; c < N; c++) {
+    const a = Math.floor((c * frames) / N), b = Math.max(a + 1, Math.floor(((c + 1) * frames) / N));
+    let v = 0;
+    for (let i = a; i < b && i < frames; i++) v = Math.max(v, env[i]);
+    hs.push(1.5 + Math.pow(v / mx, 0.62) * 25);
+  }
+  const top = hs.map((h, c) => `${c},${(28 - h).toFixed(1)}`), bot = hs.map((h, c) => `${c},${(28 + h).toFixed(1)}`).reverse();
+  return `M${top.join('L')}L${bot.join('L')}Z`;
+}
+
+function echoOff() { if (EL.box) EL.box.hidden = true; echoState.id = null; echoState.list = []; syncEchoMarks(); }
+
+function renderEchoes() {
+  if (!EL.box) return;
+  const e = current && current.e;
+  if (!e || e.source === 'example') { echoOff(); return; }
+  EL.box.hidden = false;
+  echoState.id = e.id; echoState.sec = current.seconds; echoState.active = -2;
+  const d = wavePath(current.env, current.seconds);
+  EL.wave.innerHTML = `<path d="${d}"/>`;
+  EL.waveOn.innerHTML = `<path d="${d}"/>`;
+  EL.at.max = String(current.seconds);
+  drawEchoes();
+  closeEchoForm();
+}
+
+function drawEchoes() {
+  const list = echo.echoesOf(echoState.id);
+  echoState.list = list; echoState.active = -2;
+  const s = echoState.sec;
+  EL.pins.innerHTML = list.map((x, i) => `<button type="button" class="echo-pin${x.mine ? ' is-mine' : ''}" data-i="${i}" style="left:${((x.t / s) * 100).toFixed(2)}%" aria-label="${x.t.toFixed(1)} 秒：${esc(x.text)}"></button>`).join('') + '<i class="echo-ghost" id="echo-ghost" hidden></i>';
+  EL.list.innerHTML = list.length
+    ? list.map((x, i) => `<li data-i="${i}"><button type="button" class="echo-line" data-i="${i}"><span class="s">${x.t.toFixed(1)} 秒</span><span class="w">${esc(x.text)}</span><span class="b">${esc(echo.byline(x))}</span></button><button type="button" class="echo-del" data-id="${esc(x.id)}" aria-label="${x.mine ? '删掉' : '举报'}这条：${esc(x.text)}">${x.mine ? '删掉' : '举报'}</button></li>`).join('')
+    : '<li class="echo-empty">这张声片上还没有话。点「钉一句话」，把想说的钉在某一秒。</li>';
+  EL.now.textContent = '';
+  EL.sum.textContent = list.length ? `这张声片上的话 · ${list.length} 条` : '这张声片上还没有话';
+  syncEchoMarks();
+}
+
+/** 每帧：针头跟着播放位置走，已经放过的一段亮起来；走到一句话的那一秒，它浮上来。 */
+function echoLive(play) {
+  if (!echoState.id || EL.box.hidden) return;
+  const p = Math.min(1, Math.max(0, play / echoState.sec));
+  EL.head.style.left = `${(p * 100).toFixed(2)}%`;
+  EL.waveOn.style.clipPath = `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`;
+  let k = -1;
+  const list = echoState.list;
+  for (let i = 0; i < list.length; i++) if (list[i].t <= play + 0.15 && play - list[i].t < 1.8) k = i;
+  if (k === echoState.active) return;
+  echoState.active = k;
+  EL.pins.querySelectorAll('.echo-pin').forEach((b) => b.classList.toggle('is-on', Number(b.dataset.i) === k));
+  EL.list.querySelectorAll('li[data-i]').forEach((li) => li.classList.toggle('is-on', Number(li.dataset.i) === k));
+  EL.now.textContent = k >= 0 ? `「${list[k].text}」${echo.byline(list[k]) ? ' ' + echo.byline(list[k]) : ''}` : '';
+}
+
+async function seekEcho(i) {
+  const x = echoState.list[i];
+  if (!x || !current) return;
+  await ensureAudio();
+  if (!report.t && report.pos === 0) player.port.postMessage({ buffer: current.pcm, sampleRate: current.fs });
+  const t = Math.max(0, x.t - 0.4);
+  player.port.postMessage({ seek: t / current.dur, rate: 1 });
+  report = { pos: t * current.fs, rate: 1, t: ctx.currentTime };
+  seekT = performance.now();
+  setMotor(true);
+  say(`从第 ${t.toFixed(1)} 秒放，第 ${x.t.toFixed(1)} 秒有一句话。`);
+}
+
+function openEchoForm() {
+  if (!current) return;
+  const p = ctx && motorOn ? Math.round(Math.min(current.seconds, playSeconds()) * 10) / 10 : 0;
+  EL.at.max = String(current.seconds);
+  EL.at.value = String(p);
+  EL.atV.textContent = p.toFixed(1);
+  EL.text.value = ''; EL.count.textContent = `0/${echo.ECHO_MAX}`; EL.err.textContent = '';
+  EL.form.hidden = false; EL.open.hidden = true; EL.open.setAttribute('aria-expanded', 'true');
+  ghostAt(p);
+  EL.text.focus();
+}
+function closeEchoForm() {
+  if (!EL.form) return;
+  EL.form.hidden = true; EL.open.hidden = false; EL.open.setAttribute('aria-expanded', 'false');
+  const g = document.getElementById('echo-ghost');
+  if (g) g.hidden = true;
+}
+function ghostAt(t) {
+  const g = document.getElementById('echo-ghost');
+  if (!g) return;
+  g.hidden = false;
+  g.style.left = `${((t / echoState.sec) * 100).toFixed(2)}%`;
+}
+
+if (EL.box) {
+  EL.pins.addEventListener('click', (ev) => { const b = ev.target.closest('.echo-pin'); if (b) seekEcho(Number(b.dataset.i)); });
+  EL.list.addEventListener('click', (ev) => {
+    const del = ev.target.closest('.echo-del');
+    if (del) { echo.hideEcho(del.dataset.id); drawEchoes(); say('这一条收起来了。'); return; }
+    const ln = ev.target.closest('.echo-line');
+    if (ln) seekEcho(Number(ln.dataset.i));
+  });
+  EL.open.addEventListener('click', openEchoForm);
+  EL.cancel.addEventListener('click', () => { closeEchoForm(); EL.open.focus(); });
+  EL.at.addEventListener('input', () => { EL.atV.textContent = Number(EL.at.value).toFixed(1); ghostAt(Number(EL.at.value)); });
+  EL.text.addEventListener('input', () => { EL.count.textContent = `${EL.text.value.length}/${echo.ECHO_MAX}`; EL.err.textContent = ''; });
+  EL.form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    try {
+      const id = lib.me();
+      const e = echo.addEcho({ discId: echoState.id, t: Number(EL.at.value), text: EL.text.value, dur: current.seconds,
+        author: id ? { grade: id.grade, dept: id.dept, name: id.name, key: myKey } : null });
+      drawEchoes();
+      closeEchoForm();
+      EL.open.focus();
+      say(`钉在第 ${e.t.toFixed(1)} 秒了。只在这台设备上，别人暂时看不到。`);
+    } catch (err) {
+      EL.err.textContent = err.message || '没有钉上，再试一次。';
+    }
+  });
 }
 
 els.play.addEventListener('click', async () => {
@@ -2048,6 +2241,7 @@ function prepCut() {
   setMotor(false);
   current = null;
   state.clip = null;
+  echoOff();
   grooveTex.image.data.fill(0);
   grooveTex.needsUpdate = true;
   platterMat.uniforms.uHas.value = 1;
@@ -2806,7 +3000,7 @@ function renderCampus() {
   const list = entries.filter(inView);
   const mineN = entries.filter((e) => e.mine).length;
   els.card.innerHTML = `
-    <h1>学院路馆藏</h1>
+    <h1>${EMBED ? HOME_LINE : '学院路馆藏'}</h1>
     ${placingHTML()}
     <p class="lede">${numerals(campusLine(allShown(), NOW_SEM, (id) => placeById.has(id)))}${state.slot ? `这会儿只看「${esc(state.slot)}」的。` : ''}点一个地点，看那里一个学期一个学期的声音；也可以在那里刻一张。</p>
     ${exampleHTML()}
@@ -2926,6 +3120,20 @@ function renderZone() {
   }));
 }
 
+/** 唱片套子的正面：这个地点的一张照片，右边露出半张盘。照片是辅：它只是套子，声音才是里面的唱片。
+ *  kind 'model' = 留声机上那座纸模型的照片（scripts/make-sleeve-photos.mjs 拍的）；'photo' = 团队实拍，要写拍摄人和日期。 */
+function coverHTML(p) {
+  const s = (sleeveData.places || {})[p.id];
+  if (!s || !s.photo) return '';
+  const real = s.kind === 'photo';
+  const cap = real ? `实拍${s.by ? ' · ' + esc(s.by) : ''}${s.date ? ' · ' + esc(s.date) : ''}` : '模型照 · 拍的是留声机上的纸模型，不是实景';
+  return `<figure class="cover${real ? ' is-photo' : ''}">
+    <div class="cover-disc" aria-hidden="true"></div>
+    <img src="${esc(s.photo)}" alt="${esc(p.name)}${real ? '的实拍照片' : '的纸模型照片'}" width="800" height="600" decoding="async">
+    <figcaption>${cap}</figcaption>
+  </figure>`;
+}
+
 function renderPlace() {
   const p = placeById.get(state.place);
   const z = zoneById.get(p.z);
@@ -2933,6 +3141,7 @@ function renderPlace() {
   const items = here.slice(0, 40).map((e) => voiceRow(e, when(e))).join('');
   els.card.innerHTML = `
     <button type="button" class="back">${esc(z.name)}</button>
+    ${coverHTML(p)}
     <h2>${esc(p.name)}</h2>
     <p class="lede">${esc(placeLine(allAt(p.id), p.id, NOW_SEM))}</p>
     ${landedHTML(p.id)}
@@ -3442,6 +3651,7 @@ function frame(now) {
     u.uTrail.value = 1;
     stepListen(lsec);
   }
+  if (current && !rec) echoLive(play);
   stepBands(dt);
   const r = stylusRadius(lsec != null || (rec && rec.mic) ? play : current ? Math.min(play, current.seconds) : 0);
   const seeking = !reduced && now - seekT < 450;
@@ -3457,6 +3667,7 @@ function frame(now) {
   // 刻纹的「正在放」那一点转到针尖下面（针不在正北）：上面几处算的是播放角，这里统一加上针尖的方位
   platterMat.uniforms.uAngle.value = spin + ARM.psi;
   rim.rotation.y = -platterMat.uniforms.uAngle.value;
+  stepEchoMarks();
   powerLed.material.emissiveIntensity += ((motorOn || (rec && rec.mic) ? 2.4 : 0.15) - powerLed.material.emissiveIntensity) * 0.2;
   const lvlNow = live && current ? Math.min(1, current.env[Math.floor(play * 50)] * 5 || 0) : 0;
   contact.material.opacity = armLift < 1.5 && (live || (rec && rec.mic) || lsec != null) ? 0.35 + 0.65 * (lsec != null ? 0.5 : lvlNow) : 0;
@@ -3537,6 +3748,8 @@ if (renderer) {
     view: (x, yNorth, dist, polar, azim) => setView({ target: new THREE.Vector3(x, TILE_TOP, -yNorth), dist, polar, azim }, true),
     risen: () => [...zoneObj.values()].every((o) => o.rise >= 1), get light() { return light.to ? light.to.name : light.cur.name; },
     settled: () => !light.to && !light.queue.length && light.cur.name === lightGoal(),
+    marksScreen: () => { const R = els.canvas.getBoundingClientRect(); return echoMarks.items.map((m) => { const h = m.obj.userData.head; const v = new THREE.Vector3(); h.getWorldPosition(v); v.project(camera); return { i: m.i, t: m.t, x: R.left + ((v.x + 1) / 2) * R.width, y: R.top + ((1 - v.y) / 2) * R.height, mine: echoState.list[m.i] && echoState.list[m.i].mine }; }); },
+    get echoMarks() { return { n: echoMarks.items.length, visible: !!(echoMarks.group && echoMarks.group.visible), active: echoState.active }; },
     get season() { return scene4.cur; }, get frames() { return frameCount; }, get quality() { return { mode: quality.mode, median: quality.median ?? null }; }, get flying() { return !!fly || !!(zoom && zoom.t0); }, zoomTo: (dir) => powersOfTen(dir, 1200), get zoomed() { return !!(zoom && zoom.at === 'close'); },
     dbg: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, name: light.cur.name, night: U.uNight.value, sun: sun.intensity, hemi: hemi.intensity, exp: renderer.toneMappingExposure, frames: frameCount }), get playing() { return current && current.e.no; }, get rate() { return report.rate; } };
 } else {

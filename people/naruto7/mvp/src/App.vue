@@ -1,14 +1,32 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { toast } from './lib/toast.js';
 
 const route = useRoute();
 const main = ref(null);
+const topEl = ref(null);
+const navEl = ref(null);
 
+// 整屏页面（留声机）要知道顶栏和手机底部导航占了多高，才能刚好撑满剩下的屏幕
+function measure() {
+  const root = document.documentElement.style;
+  root.setProperty('--top-h', `${Math.round(topEl.value ? topEl.value.getBoundingClientRect().height : 0)}px`);
+  const fixedNav = navEl.value && getComputedStyle(navEl.value).position === 'fixed';
+  root.setProperty('--nav-h', `${fixedNav ? Math.round(navEl.value.getBoundingClientRect().height) : 0}px`);
+}
+onMounted(() => {
+  measure();
+  window.addEventListener('resize', measure);
+  document.fonts && document.fonts.ready.then(measure);
+});
+onBeforeUnmount(() => window.removeEventListener('resize', measure));
+
+// 地图页还在（声音卡、话题里的链接都指向它），暂时不放进导航：舞台上的三维校园是地图。
+// 两份声音数据合并之后，地图页并进留声机，见 docs/decisions/0005。
 const NAV = [
-  { to: '/', label: '首页' },
-  { to: '/map', label: '地图' },
+  { to: '/', label: '留声机' },
+  { to: '/now', label: '此刻' },
   { to: '/record', label: '留声' },
   { to: '/topics', label: '回应' },
   { to: '/time', label: '时间' },
@@ -23,9 +41,9 @@ function isOn(to) {
 <template>
   <button class="skip" type="button" @click="main && main.focus()">跳到正文</button>
 
-  <header class="top wrap">
+  <header ref="topEl" class="top wrap">
     <RouterLink class="brand" to="/">听见校园</RouterLink>
-    <nav class="nav" aria-label="主导航">
+    <nav ref="navEl" class="nav" aria-label="主导航">
       <RouterLink
         v-for="n in NAV"
         :key="n.to"
@@ -38,7 +56,7 @@ function isOn(to) {
     </nav>
   </header>
 
-  <main id="main" ref="main" class="wrap" tabindex="-1">
+  <main id="main" ref="main" :class="route.meta.full ? 'full' : 'wrap'" tabindex="-1">
     <RouterView />
   </main>
 
@@ -91,6 +109,12 @@ main {
   outline: none;
 }
 
+/* 整屏页面：去掉内边距，高度 = 视口 − 顶栏 − 手机底部导航（App.vue 里 measure 量出来） */
+main.full {
+  --stage-h: calc(100dvh - var(--top-h, 4rem) - var(--nav-h, 0px));
+  padding: 0;
+}
+
 /* 手机：导航放在底部，单手够得到 */
 @media (max-width: 759px) {
   .nav {
@@ -135,6 +159,10 @@ main {
 
   main {
     padding-bottom: 4rem;
+  }
+
+  main.full {
+    padding: 0;
   }
 }
 </style>
