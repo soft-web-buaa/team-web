@@ -174,8 +174,13 @@ function renderFocusLayer() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (!w || !h) return;
   syncFocusRect();
-  const pr = renderer.getPixelRatio();
-  if (focusCanvas.width !== Math.round(w * pr) || focusCanvas.height !== Math.round(h * pr)) focusRenderer.setSize(w, h, false);
+  // 用叠加画布自己的 CSS 尺寸来定 drawingBuffer，避免沿用主画布时算错、被 CSS 拉伸成重影
+  const cw = focusCanvas.clientWidth || w, ch = focusCanvas.clientHeight || h;
+  const pr = Math.min(2, window.devicePixelRatio || 1);
+  if (focusCanvas.width !== Math.round(cw * pr) || focusCanvas.height !== Math.round(ch * pr)) {
+    focusRenderer.setPixelRatio(pr);
+    focusRenderer.setSize(cw, ch, false);
+  }
   const bg = scene.background;
   const vis = [];
   const groups = new Set();
@@ -2088,8 +2093,9 @@ function frame(now) {
     composer.render();
   } else {
     renderer.render(scene, camera);
-  renderFocusLayer();
   }
+  // 无论主画面走 bloom 合成器还是直接渲染，聚焦叠加层都要画
+  renderFocusLayer();
   const rendMs = performance.now() - r0;
   timing.lastRenderMs = +rendMs.toFixed(1);
   timing.rendered += 1;
