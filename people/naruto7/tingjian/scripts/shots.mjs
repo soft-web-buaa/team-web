@@ -17,7 +17,7 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new'
 const problems = [];
 
 async function shot(name, url, { w = 1440, h = 900, wait = 9000, act = null, screen = false } = {}) {
-  if (only && !name.startsWith(only)) return;
+  if (only && !only.split(',').some((o) => name === o || (o.endsWith('*') && name.startsWith(o.slice(0, -1))))) return;   // 名字用逗号隔开；结尾带 * 是前缀
   const page = await browser.newPage();
   await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`${name} [${m.type()}] ${m.text()}`); });
@@ -42,6 +42,11 @@ await shot('home-night', '?h=22.5#/', { wait: 9000 });
 await shot('place-lib', '?h=16#/place/XY01', { wait: 9000 });
 await shot('place-gym', '?h=19.2#/place/XY06', { wait: 9000 });
 await shot('community', '?h=20#/community', { wait: 9000 });
+await shot('comm-thread', '?h=21.5#/community?post=ps-demo-01', { wait: 8000 });
+await shot('comm-topics', '?h=15#/community?tab=topics', { wait: 7000 });
+await shot('comm-relay', '?h=11.5#/community?tab=relay', { wait: 7000 });
+await shot('comm-board', '?h=9#/community?tab=board', { wait: 8000 });
+await shot('comm-scene', '?h=19#/community?tab=scene', { wait: 7000 });
 await shot('time', '?h=10#/time', { wait: 9000 });
 await shot('mine', '?h=13#/mine', { wait: 8000 });
 await shot('m-home', '?h=17#/', { w: 390, h: 844, wait: 9000 });

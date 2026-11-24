@@ -5,12 +5,22 @@ import { computed, ref, onMounted } from 'vue';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
 import RingDial from '../components/RingDial.vue';
+import PostCard from '../components/PostCard.vue';
+import { useRouter } from 'vue-router';
+import { C, init as initCommunity } from '../lib/community.js';
 import { L, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
 
+const router = useRouter();
 const tab = ref('discs');
 const mine = computed(() => { void L.version; return L.entries.filter((e) => e.mine).slice().reverse(); });
 const favs = computed(() => L.me.favs.map(entryById).filter(Boolean));
-const inbox = computed(() => L.me.inbox.map((x) => ({ ...x, e: entryById(x.discId) })).filter((x) => x.e));
+const inbox = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null })).filter((x) => x.e || x.postId));
+const myPosts = computed(() => { void C.version; return C.posts.filter((p) => p.mine); });
+const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '抱了抱你', same: '说「我也是」' };
+function openMsg(x) {
+  if (x.postId) router.push({ path: '/community', query: { post: x.postId } });
+  else play(x.e, { seek: x.kind === 'echo' ? Math.max(0, x.t - 0.4) : null });
+}
 const places = computed(() => new Set(mine.value.map((e) => e.placeId)).size);
 const sems = computed(() => new Set(mine.value.map((e) => e.semester)).size);
 const sig = ref({ grade: L.identity?.grade || '', dept: L.identity?.dept || '', name: L.identity?.name || '' });
@@ -34,7 +44,7 @@ async function del(e) {
   confirmId.value = null;
   if (await deleteDisc(e)) say('删掉了。云上的声音、钉在上面的话一并删了。');
 }
-onMounted(() => refresh());
+onMounted(() => { refresh(); initCommunity(); });
 </script>
 
 <template>
@@ -44,7 +54,7 @@ onMounted(() => refresh());
     <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}</p>
 
     <div class="row" role="tablist" aria-label="我的">
-      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['inbox', `回应我的 ${inbox.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
+      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['inbox', `回应我的 ${inbox.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
     </div>
 
     <section v-if="tab === 'discs'">
@@ -66,13 +76,18 @@ onMounted(() => refresh());
       <p v-else class="fine" style="margin-top: 14px">还没有收藏。在地点里放一张，点「收藏」。</p>
     </section>
 
+    <section v-else-if="tab === 'posts'">
+      <PostCard v-for="p in myPosts" :key="p.id" :post="p" @open="(x) => router.push({ path: '/community', query: { post: x.id } })" @topic="(t) => router.push({ path: '/community', query: { topic: t } })" />
+      <p v-if="!myPosts.length" class="fine" style="margin-top: 14px">还没发过帖。去<RouterLink to="/community">社区</RouterLink>写一帖。</p>
+    </section>
+
     <section v-else-if="tab === 'inbox'">
       <ol v-if="inbox.length" class="inbox">
         <li v-for="(x, i) in inbox" :key="i">
-          <button type="button" class="msg" @click="play(x.e, { seek: x.kind === 'echo' ? Math.max(0, x.t - 0.4) : null })">
-            <span class="k">{{ x.kind === 'echo' ? '钉了一句话' : '也听过' }}</span>
-            <span v-if="x.kind === 'echo'" class="q">「{{ x.text }}」</span>
-            <span class="m">在你的「{{ title(x.e) }}」{{ x.kind === 'echo' ? `第 ${x.t.toFixed(1)} 秒` : '' }}{{ x.author && signature(x.author) !== '未落款' ? ` · ${signature(x.author)}` : '' }} · {{ x.at.slice(0, 10) }}</span>
+          <button type="button" class="msg" @click="openMsg(x)">
+            <span class="k">{{ KIND[x.kind] || x.kind }}</span>
+            <span v-if="x.text" class="q">「{{ x.text }}」</span>
+            <span class="m">{{ x.e ? `在你的「${title(x.e)}」${x.kind === 'echo' ? `第 ${x.t.toFixed(1)} 秒` : ''}` : '在社区，你的帖子或回复下面' }}{{ x.author && signature(x.author) !== '未落款' ? ` · ${signature(x.author)}` : '' }} · {{ x.at.slice(0, 10) }}</span>
           </button>
         </li>
       </ol>

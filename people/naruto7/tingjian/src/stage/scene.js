@@ -123,15 +123,17 @@ function buildBackdrop() {
 // —— 后期：环境光遮蔽（楼脚、树下、天井压暗，体量才立得住）→ 泛光（只让窗灯、路灯、示波黄发亮）
 //      → 移轴（只在拉近时明显，总览几乎不虚）→ 色调 → 纸纹与暗角。场景先画进 4× 多重采样的缓冲，边线不起锯齿。
 const GrainShader = {
-  uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.022 }, uVig: { value: 0.74 } },
+  uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.022 }, uVig: { value: 0.74 }, uTint: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uTintK: { value: 0 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uGrain, uVig; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uGrain, uVig, uTintK; uniform vec3 uTint; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main(){
       vec4 c = texture2D(tDiffuse, vUv);
       vec2 q = (vUv - vec2(0.48, 0.5)) * vec2(uRes.x / uRes.y, 1.0);
       c.rgb *= mix(uVig, 1.0, smoothstep(1.05, 0.32, length(q)));
+      // 进地点时，盘和校园褪进这个钟点的天色里，只剩轮廓（被提起的那栋楼另画一遍，不经过这里）
+      c.rgb = mix(c.rgb, uTint, uTintK);
       c.rgb += (h(floor(vUv * uRes)) - 0.5) * uGrain;
       gl_FragColor = c;
     }`,
@@ -1319,6 +1321,7 @@ function buildCampus() {
       pivot.add(pedestal);
       const mats = new Set();
       for (const o of objs) o.traverse((q) => { if (q.isMesh) (Array.isArray(q.material) ? q.material : [q.material]).forEach((mt) => mats.add(mt)); });
+      pivot.traverse((q) => q.layers.enable(1));   // 第 1 层：选择性聚焦时单独再画一遍，不虚
       heroObj.set(p.id, { pivot, pedestal, zone: z.id, base: pivot.position.clone(), size, R, lift: 0, spin: 0, mats, h: size.y });
     }
     group.add(bgroup);
@@ -1377,6 +1380,7 @@ function buildPins() {
     r.rotation.x = -Math.PI / 2;
     r.visible = false;
     r.renderOrder = 2;
+    r.layers.enable(1);
     scene.add(r);
     ripples.push(r);
   }
@@ -1520,6 +1524,7 @@ export function build(canvas, campusData, { lite = false } = {}) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 1.2;
   scene.add(sun, sun.target);
+  sun.layers.enable(1); hemi.layers.enable(1);   // 第 1 层（地点楼）也要被同一套光照着
   buildBackdrop();
   buildPlatter();
   buildCampus();

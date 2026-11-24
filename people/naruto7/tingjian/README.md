@@ -20,9 +20,9 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 
 | 命令 | 查什么 | 2026-11-24 的结果 |
 |---|---|---|
-| `npm run check:api` | 接口的规矩：校验、限频、心事盘与时间胶囊的过滤、照片先审后显与去 EXIF、举报收起、真删、云函数的请求转换 | 43 项通过 |
+| `npm run check:api` | 接口的规矩：校验、限频、心事盘与时间胶囊的过滤、照片先审后显与去 EXIF、举报收起、真删、云函数的请求转换 | 73 项通过（含社区 30 项） |
 | `npm run check:contrast` | 全天按 0.05 小时一步扫：正文 ≥ 7:1、次级 ≥ 4.5:1、细线 ≥ 3:1 | 最低 7.01 / 4.60 / 3.00 |
-| `npm run e2e` | 浏览器主路径：屏风、进楼、社区光柱、拖时针变色、假麦克风刻一张、钉一句、另一个浏览器环境看得到、真删、手机宽度 | 34 项通过，控制台与网络问题 0 |
+| `npm run e2e` | 浏览器主路径：屏风、进楼、社区光柱、拖时针变色、假麦克风刻一张、钉一句、另一个浏览器环境看得到、真删、手机宽度 | 44 项通过（含社区 10 项），控制台与网络问题 0 |
 | `node scripts/shots.mjs` | 11 张截图（5 个钟点、5 个板块、手机），在 `.e2e/shots/` | 控制台与网络问题 0 |
 
 都只在这台 Windows 的无头 Chrome（软件渲染，一秒两三帧）和 Node 26 上跑过。真机帧率、iPhone Safari、读屏器没测。
@@ -44,11 +44,11 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 ## 上云（CloudBase）
 
 1. 在 `.env` 填 `TCB_ENV_ID`、`TCB_SECRET_ID`、`TCB_SECRET_KEY`（照 `.env.example`；`.env` 不进仓库）。
-2. 控制台的数据库里建集合：`discs`、`echoes`、`photos`、`heard`、`favs`、`reports`。
+2. 控制台开通「文档型数据库」；集合由部署脚本建（discs、echoes、photos、heard、favs、reports、posts、replies、reacts、topics、relays）。子用户要有云开发、云函数、对象存储三项权限。
 3. `npm run build && npm run deploy:cloudbase`：页面进静态托管，接口进云函数 `api`，挂在同域 `/api`。
 4. 云函数的环境变量设 `KS_ADMIN_TOKEN`（审核口令），照片才有人放行。
 
-**状态：没有部署过。** 云函数入口和请求转换在本机测过（`check:api` 的最后 3 项），对真 CloudBase 一次都没调用过；`store-cloudbase.mjs` 是照 SDK 文档写的，第一次部署时要看日志。
+**状态（2026-11-24 晚）：** 云函数 `api` 已部署，`/api/health` 从外网返回 `store: cloudbase`。数据库未开通，所以读写还没在云上验证过；页面没传上去（子用户缺对象存储权限）。
 
 ## 已知缺口
 

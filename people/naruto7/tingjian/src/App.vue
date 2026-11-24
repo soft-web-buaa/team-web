@@ -96,7 +96,7 @@ onMounted(async () => {
 
   <RouterView v-if="L.ready" v-slot="{ Component }">
     <Transition name="paper">
-      <component :is="Component" v-show="!ui.screen" :key="route.name === 'place' ? 'place' : route.fullPath" />
+      <component :is="Component" v-show="!ui.screen" :key="route.name" />
     </Transition>
   </RouterView>
 

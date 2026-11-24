@@ -495,7 +495,7 @@ function stepLight(now) {
   G.U.uLit.value = L.lit;
   for (const n of G.nightMats) n.mat.emissiveIntensity = L.night * n.k;
   G.labelMat.emissiveIntensity = 0.55 * L.night;
-  const placeDim = S.mode === 'place' ? 0.42 : 1;
+  const placeDim = S.mode === 'place' ? 0.62 : 1;
   u.uBright.value = L.plat * placeDim;
   G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.5 * L.night; });
   G.bloom.strength = 0.08 + 0.42 * L.night;
@@ -506,7 +506,10 @@ function stepLight(now) {
     G.paintBackdrop(tmpC.setRGB(T.bg0[0] / 255, T.bg0[1] / 255, T.bg0[2] / 255, THREE.SRGBColorSpace).clone(), new THREE.Color().setRGB(T.bg1[0] / 255, T.bg1[1] / 255, T.bg1[2] / 255, THREE.SRGBColorSpace));
   }
   const grain = G.composer.passes.at(-1).uniforms;
-  grain.uVig.value += ((S.mode === 'place' ? 0.5 : T.dark ? 0.7 : 0.82) - grain.uVig.value) * 0.06;
+  grain.uVig.value += ((S.mode === 'place' ? 0.62 : T.dark ? 0.7 : 0.82) - grain.uVig.value) * 0.06;
+  // 选择性聚焦：地点模式下，除了被提起的楼，整幅画面褪向这个钟点的天色（上下两色的中间）
+  grain.uTint.value.set((T.bg0[0] * 0.55 + T.bg1[0] * 0.45) / 255, (T.bg0[1] * 0.55 + T.bg1[1] * 0.45) / 255, (T.bg0[2] * 0.55 + T.bg1[2] * 0.45) / 255);
+  grain.uTintK.value += ((S.mode === 'place' ? (T.dark ? 0.42 : 0.5) : 0) - grain.uTintK.value) * (reduced ? 1 : 0.07);
   grain.uGrain.value = T.dark ? 0.03 : 0.02;
 }
 // —— 四季：校园的景跟着正在放的那张录下的月份走；没有就照今天 ——
@@ -829,16 +832,37 @@ function frame(now) {
   // 移轴：焦平面落在镜头看的那一点；地点模式下虚得多，盘面退成模糊的轮廓
   v3.copy(controls.target).project(G.camera);
   const focus = (v3.y + 1) / 2, dist = camD;
-  const blurGoal = S.mode === 'place' ? 5.2 : dist < 2000 ? 2.4 : 0.5;
+  const inPlace = S.mode === 'place';
+  const blurGoal = inPlace ? 3.4 : dist < 2000 ? 2.4 : 0.5;
   tilt += (blurGoal - tilt) * (reduced ? 1 : 0.08);
+  // 地点模式下焦平面挪到画面外：整幅都虚（被提起的楼在下面另画一遍，是清楚的）
+  focusR += ((inPlace ? -1.3 : focus) - focusR) * (reduced ? 1 : 0.08);
   const W = Math.max(1, canvas.clientWidth);
   G.tiltH.uniforms.h.value = tilt / W;
   G.tiltV.uniforms.v.value = (tilt / W) * W / Math.max(1, canvas.clientHeight);
-  G.tiltH.uniforms.r.value = G.tiltV.uniforms.r.value = focus;
+  G.tiltH.uniforms.r.value = G.tiltV.uniforms.r.value = focusR;
   G.composer.render();
+  // 选择性聚焦（学 Confused-Tree 声景校园的双层画法，但在同一块画布里）：只画第 1 层（地点楼、台座、波纹），清掉深度、不画背景、不重画阴影
+  let anyLift = false;
+  G.heroObj.forEach((h) => { if (h.lift > 0.5) anyLift = true; });
+  if (anyLift) {
+    const r = G.renderer, bg = G.scene.background, ac = r.autoClear, su = r.shadowMap.autoUpdate;
+    r.autoClear = false; r.shadowMap.autoUpdate = false;
+    r.setRenderTarget(null);
+    r.clearDepth();
+    G.scene.background = null;
+    // 第 1 层上有全部 16 栋地点楼：这一遍只留被提起来的，别的在上一遍里已经画过（虚的）
+    const off = [];
+    G.heroObj.forEach((h) => { if (h.lift <= 0.5 && h.pivot.visible) { h.pivot.visible = false; off.push(h); } });
+    G.camera.layers.set(1);
+    r.render(G.scene, G.camera);
+    G.camera.layers.set(0);
+    for (const h of off) h.pivot.visible = true;
+    G.scene.background = bg; r.autoClear = ac; r.shadowMap.autoUpdate = su;
+  }
   watchFrames(now);
 }
-let tilt = 0.5;
+let tilt = 0.5, focusR = 0.5;
 
 // ====================================================================================
 // 启动

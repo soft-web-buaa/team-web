@@ -11,3 +11,4 @@ cloudfunctions/api/src/
 cloudfunctions/api/calendar.json
 cloudfunctions/api/package.json
 cloudfunctions/api/node_modules/
+.deploy/

@@ -10,4 +10,6 @@ export const ui = reactive({
   screen: false,       // 屏风开着
   narrow: false,       // 窄屏（手机）
   sheet: 'half',       // 窄屏的纸：half / full / min
+  attachPlaying: false, // 回帖时附上正在放的那张（用声音回应声音）
+  compose: null,       // 社区里写到一半的帖子：{ text, topics, placeId, mood, soundId, relayOf, relayRoot, relayUpIndex, relayStart }。去刻一段再回来时还在
 });

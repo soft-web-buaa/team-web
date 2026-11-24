@@ -10,7 +10,10 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tj-api-'));
 let T = Date.parse('2026-11-24T11:30:00Z');
 const api = createApi({ store: fileStore(dir), now: () => T, review: true, adminToken: 'adm' });
 const A = 'a'.repeat(16), B = 'b'.repeat(16), C = 'c'.repeat(16), D = 'd'.repeat(16);
-const call = (method, p, body = null, key = A, extra = {}) => api.handle({ method, path: p, body, headers: { 'x-ks-key': key, ...extra } });
+const call = (method, p, body = null, key = A, extra = {}) => {
+  const [path, qs = ''] = p.split('?');
+  return api.handle({ method, path, query: Object.fromEntries(new URLSearchParams(qs)), body, headers: { 'x-ks-key': key, ...extra } });
+};
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) pass++; else { fail++; console.log('不通过 ', name); } };
 
@@ -84,6 +87,56 @@ t('收藏', (await call('PUT', '/api/me/favs/concept-051', null, C)).status === 
 t('别人删不了我的盘', (await call('DELETE', '/api/discs/ds-test-0001', null, B)).status === 403);
 t('我能真删，回声一并删', (await call('DELETE', '/api/discs/ds-test-0001')).status === 200 && (await call('GET', '/api/discs/ds-test-0001/echoes', null, B)).json.echoes.length === 0);
 t('删了之后声音也取不到', (await call('GET', '/api/discs/ds-test-0001/audio', null, A)).status === 404);
+
+// —— 社区 ——
+const tps = (await call('GET', '/api/topics')).json.topics;
+t('话题：预置 10 个', tps.filter((x) => x.preset).length === 10);
+const nt = await call('POST', '/api/topics', { id: 'tp-test-0001', name: '#考试周', intro: '复习到几点' }, B);
+t('建话题：去掉 #，201', nt.status === 201 && nt.json.topic.name === '考试周');
+t('同名话题不重复建', (await call('POST', '/api/topics', { id: 'tp-test-0002', name: '考试周' }, C)).json.again === true);
+t('话题名里有链接：400', (await call('POST', '/api/topics', { id: 'tp-test-0003', name: 'www.x.com' }, C)).status === 400);
+const p1 = await call('POST', '/api/posts', { id: 'ps-test-0001', text: '闭馆音乐响起来的时候，整层楼都在收书包。', topics: ['tp-bimian'], placeId: 'XY01', mood: 'warm', soundId: 'concept-051' }, B);
+t('发帖：带话题、地点、心情、声音', p1.status === 201 && p1.json.post.topics[0] === 'tp-bimian');
+t('发帖：不存在的话题 400', (await call('POST', '/api/posts', { id: 'ps-test-0002', text: '一句话', topics: ['tp-nope'] }, B)).status === 400);
+t('发帖：心情只能从给的里选', (await call('POST', '/api/posts', { id: 'ps-test-0003', text: '一句话', mood: 'angry' }, B)).status === 400);
+t('发帖：附别人的心事盘 400', (await call('POST', '/api/posts', { id: 'ps-test-0004', text: '一句话', soundId: 'ds-test-0010' }, B)).status === 400);
+t('发帖：联系方式被拦', (await call('POST', '/api/posts', { id: 'ps-test-0005', text: '私信我' }, C)).status === 400);
+const q1 = await call('POST', '/api/posts/ps-test-0001/replies', { id: 'rp-test-0001', text: '我也在那一层' }, C);
+const q2 = await call('POST', '/api/posts/ps-test-0001/replies', { id: 'rp-test-0002', text: '哪一层？', parentId: 'rp-test-0001' }, D);
+const q3 = await call('POST', '/api/posts/ps-test-0001/replies', { id: 'rp-test-0003', text: '三楼', parentId: 'rp-test-0002' }, C);
+t('楼层与楼中楼：回楼中楼也挂在那一层下', q1.status === 201 && q2.json.reply.parentId === 'rp-test-0001' && q3.json.reply.parentId === 'rp-test-0001');
+t('示例帖也能回', (await call('POST', '/api/posts/ps-demo-01/replies', { id: 'rp-test-0004', text: '同感' }, C)).status === 201);
+t('抱抱', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 1);
+t('我也是', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'same' }, D)).json.same === 1);
+t('再点一次抱抱就取消', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 0);
+t('示例帖也能抱抱', (await call('POST', '/api/react', { target: 'ps-demo-01', type: 'hug' }, D)).json.hug === 1);
+const pd = (await call('GET', '/api/posts/ps-test-0001', null, A)).json;
+t('帖子详情：三条回复、我也是 1', pd.replies.length === 3 && pd.post.same === 1);
+const feedP = (await call('GET', '/api/posts?sort=hot&demo=ps-demo-01', null, A)).json;
+t('帖子流：热门排序、示例帖的回复与反应数也带回来', feedP.posts.length === 1 && feedP.demo['ps-demo-01'].replies === 1 && feedP.demo['ps-demo-01'].hug === 1);
+t('按话题筛', (await call('GET', '/api/posts?topic=tp-bimian')).json.posts.length === 1 && (await call('GET', '/api/posts?topic=tp-xiake')).json.posts.length === 0);
+const j1 = await call('POST', '/api/posts', { id: 'ps-test-0010', text: '第一棒：主楼的下课铃', soundId: 'concept-051', relayStart: true, topics: ['tp-jieli'] }, B);
+const j2 = await call('POST', '/api/posts', { id: 'ps-test-0011', text: '第二棒：楼梯', soundId: 'concept-051', relayOf: 'ps-test-0010' }, C);
+const j3 = await call('POST', '/api/posts', { id: 'ps-test-0012', text: '第三棒', soundId: 'concept-051', relayOf: 'ps-test-0011' }, D);
+t('接力：第几棒由服务端数', j1.json.post.relayIndex === 1 && j2.json.post.relayIndex === 2 && j3.json.post.relayIndex === 3 && j3.json.post.relayRoot === 'ps-test-0010');
+t('接力：不附声音 400', (await call('POST', '/api/posts', { id: 'ps-test-0013', text: '没声音', relayOf: 'ps-test-0012' }, A)).status === 400);
+t('接力：详情里有整条链', (await call('GET', '/api/posts/ps-test-0011', null, A)).json.relay.length === 3);
+const inboxB = (await call('GET', '/api/me', null, B)).json.inbox;
+t('回应我的：别人回了我的帖、对我说我也是', inboxB.some((x) => x.kind === 'reply') && inboxB.some((x) => x.kind === 'same'));
+const st = (await call('GET', '/api/stats')).json;
+t('看板：心情只数帖子上选的', st.mood.warm === 1 && st.moodPlace.warm.XY01 === 1);
+for (const k of [A, B, D]) await call('POST', '/api/posts/ps-test-0011/report', {}, k);   // 0011 是 C 发的：举报的是另外三个人
+t('帖子被三个人举报：先收起', (await call('GET', '/api/posts/ps-test-0011', null, A)).status === 404 && (await call('GET', '/api/posts/ps-test-0011', null, C)).status === 200);
+t('删楼层：楼中楼升成一层，不跟着消失', (await call('DELETE', '/api/replies/rp-test-0001', null, C)).status === 200 && (await call('GET', '/api/posts/ps-test-0001', null, A)).json.replies.every((r) => r.parentId === null));
+t('别人删不了我的帖', (await call('DELETE', '/api/posts/ps-test-0001', null, C)).status === 403);
+t('删帖：回复与反应一并删', (await call('DELETE', '/api/posts/ps-test-0001', null, B)).status === 200 && (await call('GET', '/api/posts/ps-test-0001', null, A)).status === 404);
+
+t('示例楼层也能回、也能抱抱', (await call('POST', '/api/posts/ps-demo-01/replies', { id: 'rp-test-0020', text: '我也等', parentId: 'rp-demo-01' }, C)).json.reply.parentId === 'rp-demo-01'
+  && (await call('POST', '/api/react', { target: 'rp-demo-01', type: 'same' }, C)).json.same === 1);
+const dj = await call('POST', '/api/posts', { id: 'ps-test-0030', text: '第四棒', soundId: 'concept-051', relayOf: 'ps-demo-r3', relayRoot: 'ps-demo-r1', relayUpIndex: 3 }, C);
+t('接示例接力：根是示例链的第一棒，第 4 棒', dj.json.post.relayRoot === 'ps-demo-r1' && dj.json.post.relayIndex === 4
+  && (await call('GET', '/api/posts/ps-demo-r2?root=ps-demo-r1', null, A)).json.relay.length === 1);
+t('给未来的自己：封存期间作者本人也听不到', (await call('GET', '/api/discs/ds-test-0011/audio', null, A)).status === 403 || T > Date.parse('2027-06-01'));
 
 // 云函数那一层：HTTP 访问服务的 event 进来，集成响应出去（和本机同一个 handle）
 const { toHttp } = await import('../cloudfunctions/api/handler.mjs');

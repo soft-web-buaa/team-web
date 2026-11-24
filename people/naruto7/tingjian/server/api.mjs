@@ -24,6 +24,7 @@
 import { ECHO_MAX, NAME_MAX, CONSENT_VERSION, PHOTO, LIMITS, validateLine, validateField, cleanField } from '../src/kesheng/web/contract.js';
 import { inspectJpeg, cleanJpeg } from '../src/kesheng/web/jpeg-clean.js';
 import { hourOf, slotOfHour, semesterOf } from '../src/lib/when.js';
+import { PRESET_TOPICS, MOOD_IDS, POST, DEMO_POST_RE, SOUND_ID_RE } from '../src/lib/topics.js';
 
 const KEY_RE = /^[0-9a-f]{16}$/;
 const ID = { disc: /^ds-[a-z0-9-]{6,40}$/, echo: /^ec-[a-z0-9-]{6,40}$/, photo: /^ph-[a-z0-9-]{6,40}$/ };
@@ -128,6 +129,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       if (method === 'GET' && (m = path.match(/^\/api\/discs\/(ds-[a-z0-9-]{6,40})\/audio$/))) {
         const d = await store.get('discs', m[1]);
         if (!d || !discVisible(d, key)) return err(404, '没有这张声片。');
+        if (locked(d)) return err(403, `还没到开封那天（${d.capsuleUntil.slice(0, 10)}），连你自己也要等。`);
         const buf = await store.getFile(d.audio);
         return { status: 200, buffer: buf, type: 'audio/wav', cache: d.visibility === 'private' ? 'private, no-store' : 'public, max-age=604800' };
       }
@@ -179,11 +181,20 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
           const inbox = [];
           for (const x of await store.list('echoes')) if (myIds.has(x.discId) && x.key !== key && x.status === 'ok') inbox.push({ kind: 'echo', discId: x.discId, at: x.at, text: x.text, t: x.t, author: author(x.author) });
           for (const x of heard) if (myIds.has(x.discId) && x.key !== key) inbox.push({ kind: 'heard', discId: x.discId, at: x.at });
+          // 社区里回应我的：回我帖子的、回我那一层的、给我抱抱或我也是的
+          const myPosts = new Set((await store.list('posts', { key })).map((p) => p.id));
+          const myReplyPost = new Map((await store.list('replies', { key })).map((r) => [r.id, r.postId]));
+          const myReplies = new Set(myReplyPost.keys());
+          for (const r of await store.list('replies')) {
+            if (r.key === key || r.status !== 'ok') continue;
+            if (myPosts.has(r.postId) || (r.parentId && myReplies.has(r.parentId))) inbox.push({ kind: 'reply', postId: r.postId, at: r.at, text: r.text, author: author(r.author) });
+          }
+          for (const x of await store.list('reacts')) if (x.key !== key && (myPosts.has(x.target) || myReplies.has(x.target))) inbox.push({ kind: x.type, target: x.target, postId: myPosts.has(x.target) ? x.target : myReplyPost.get(x.target), at: x.at });
           inbox.sort((a, b) => b.at.localeCompare(a.at));
           return ok({ discs: mine.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0 })), favs, inbox: inbox.slice(0, 60) });
         }
         if ((m = path.match(/^\/api\/me\/favs\/([^/]{1,64})$/))) {
-          const id = `${key}:${decodeURIComponent(m[1])}`;
+          const id = `${key}_${decodeURIComponent(m[1])}`;
           if (method === 'PUT') { await store.put('favs', { id, key, discId: decodeURIComponent(m[1]), at: iso() }); return ok({}); }
           if (method === 'DELETE') { await store.del('favs', id); return ok({}); }
         }
@@ -237,7 +248,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         return ok({});
       }
       if (method === 'POST' && (m = path.match(/^\/api\/discs\/(ds-[a-z0-9-]{6,40}|concept-\d{3}|arc-[a-z0-9-]{3,40})\/heard$/))) {
-        const id = `${m[1]}:${key}`;
+        const id = `${m[1]}_${key}`;
         const had = await store.get('heard', id);
         if (had) await store.del('heard', id);
         else {
@@ -286,11 +297,15 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         const e = await store.get('echoes', m[1]);
         if (!e) return err(404, '没有这条回声。');
         if (e.key === key) return err(400, '自己留的话直接删掉就行。');
-        await store.put('reports', { id: `${e.id}:${key}`, echoId: e.id, key, at: iso() });
+        await store.put('reports', { id: `${e.id}_${key}`, echoId: e.id, key, at: iso() });
         const n = (await store.list('reports', { echoId: e.id })).length;
         if (n >= LIMITS.reportsToHold && e.status !== 'held') await store.put('echoes', { ...e, status: 'held' });
         return ok({ held: n >= LIMITS.reportsToHold });
       }
+
+      // —— 社区：帖子、楼中楼、话题、抱抱与我也是、接力 ——
+      const cm = await community({ method, path, query, body, key, authed });
+      if (cm) return cm;
 
       if (method === 'POST' && path === '/api/photos') {
         const b = body || {};
@@ -315,6 +330,220 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       return err(500, `服务出错了：${e && e.message ? e.message : e}`);
     }
   }
+  // ====================================================================================
+  // 社区（学贴吧的楼层、豆瓣小组的「回应」、小红书的 #话题、网易云的抱抱、Instagram 的 Add Yours 接力）
+  //   帖子 post：一段文字，可以带一段声音（自己刻的、示意盘、史料）、一个地点、一种心情、至多 3 个话题
+  //   回复 reply：楼层；回复某一层就是楼中楼，只有两层（Reddit 的十层对一周的课程项目是负担）
+  //   反应 react：抱抱（不评价，只说「我在」）、我也是（同一种经历）。再点一次取消
+  //   接力 relay：帖子带 relayOf 就是接在某一棒后面；链按根帖归，第几棒由服务端数
+  //   示例帖（ps-demo-xx）在页面里，不在云上：可以回复、可以抱抱，但删不掉、不算人数
+  // ====================================================================================
+  const postVisible = (p, key) => p && p.status !== 'removed' && (p.status !== 'held' || p.key === key);
+  const isDemo = (id) => DEMO_POST_RE.test(String(id));
+  const isDemoReply = (id) => /^rp-demo-[a-z0-9]{2,8}$/.test(String(id));
+  async function soundOk(id, key) {
+    if (!id) return null;
+    if (!SOUND_ID_RE.test(String(id))) return '附的声音编号不对。';
+    if (String(id).startsWith('ds-')) { const d = await store.get('discs', id); if (!d || !discVisible(d, key) || d.visibility === 'private' || locked(d)) return '附的那张盘不存在，或者不是公开的。'; }
+    return null;
+  }
+  async function reactCounts(ids, key) {
+    const want = new Set(ids), out = new Map();
+    for (const r of await store.list('reacts')) {
+      if (!want.has(r.target)) continue;
+      const o = out.get(r.target) || { hug: 0, same: 0, my: [] };
+      o[r.type] = (o[r.type] || 0) + 1;
+      if (r.key === key) o.my.push(r.type);
+      out.set(r.target, o);
+    }
+    return out;
+  }
+  const replyView = (r, key, rc) => ({ id: r.id, postId: r.postId, parentId: r.parentId || null, text: r.text, soundId: r.soundId || null, at: r.at, author: author(r.author), mine: r.key === key,
+    held: r.status === 'held' || undefined, ...(rc.get(r.id) || { hug: 0, same: 0, my: [] }) });
+  function postView(p, key, extra = {}) {
+    return { id: p.id, text: p.text, topics: p.topics || [], placeId: p.placeId || null, mood: p.mood || null, soundId: p.soundId || null, relayOf: p.relayOf || null, relayRoot: p.relayRoot || null, relayIndex: p.relayIndex || null,
+      at: p.at, author: author(p.author), mine: p.key === key, held: p.status === 'held' || undefined, ...extra };
+  }
+  async function topicList() {
+    const own = (await store.list('topics')).filter((t) => t.status !== 'removed');
+    return [...PRESET_TOPICS.map((t) => ({ ...t, preset: true })), ...own.map((t) => ({ id: t.id, name: t.name, intro: t.intro || '', at: t.at, preset: false }))];
+  }
+  async function community({ method, path, query, body, key, authed }) {
+    let m;
+    if (method === 'GET' && path === '/api/topics') {
+      const ts = await topicList(), posts = (await store.list('posts')).filter((p) => postVisible(p, key));
+      const n = new Map(), last = new Map();
+      for (const p of posts) for (const t of p.topics || []) { n.set(t, (n.get(t) || 0) + 1); if (!last.has(t) || p.at > last.get(t)) last.set(t, p.at); }
+      return ok({ topics: ts.map((t) => ({ ...t, posts: n.get(t.id) || 0, lastAt: last.get(t.id) || null })) });
+    }
+    if (method === 'GET' && path === '/api/posts') {
+      let posts = (await store.list('posts')).filter((p) => postVisible(p, key));
+      if (query.topic) posts = posts.filter((p) => (p.topics || []).includes(query.topic));
+      if (query.place) posts = posts.filter((p) => p.placeId === query.place);
+      if (query.relay) posts = posts.filter((p) => p.relayRoot === query.relay || p.id === query.relay);
+      if (query.mine === '1') posts = posts.filter((p) => p.key === key);
+      const replies = (await store.list('replies')).filter((r) => r.status === 'ok');
+      const rn = new Map();
+      for (const r of replies) rn.set(r.postId, (rn.get(r.postId) || 0) + 1);
+      const rc = await reactCounts(posts.map((p) => p.id), key);
+      const out = posts.map((p) => postView(p, key, { replies: rn.get(p.id) || 0, ...(rc.get(p.id) || { hug: 0, same: 0, my: [] }) }));
+      // 热门：回复 4、我也是 2、抱抱 1，按时间衰减（一天折半）。最新：按时间
+      const score = (p) => (p.replies * 4 + p.same * 2 + p.hug) / Math.pow(1 + (now() - Date.parse(p.at)) / 86400000, 1);
+      out.sort(query.sort === 'hot' ? (a, b) => score(b) - score(a) : (a, b) => b.at.localeCompare(a.at));
+      // 示例帖上的回复数和反应数也带回去（示例帖本身在页面里）
+      const demoIds = [...new Set(replies.filter((r) => isDemo(r.postId)).map((r) => r.postId))];
+      const drc = await reactCounts([...demoIds, ...String(query.demo || '').split(',').filter(isDemo)], key);
+      const demo = {};
+      for (const id of new Set([...demoIds, ...drc.keys()])) demo[id] = { replies: rn.get(id) || 0, ...(drc.get(id) || { hug: 0, same: 0, my: [] }) };
+      return ok({ posts: out.slice(0, 200), demo });
+    }
+    if (method === 'GET' && (m = path.match(/^\/api\/posts\/(ps-[a-z0-9-]{4,40})$/))) {
+      const p = isDemo(m[1]) ? null : await store.get('posts', m[1]);
+      if (!isDemo(m[1]) && !postVisible(p, key)) return err(404, '没有这个帖子，或者它被收起了。');
+      const replies = (await store.list('replies', { postId: m[1] })).filter((r) => r.status === 'ok' || r.key === key).sort((a, b) => a.at.localeCompare(b.at));
+      const demoIds = String(query.demo || '').split(',').filter(isDemoReply);
+      const rc = await reactCounts([m[1], ...replies.map((r) => r.id), ...demoIds], key);
+      const root = p ? p.relayRoot : isDemo(query.root) ? query.root : null;
+      const relay = root ? (await store.list('posts', { relayRoot: root })).filter((x) => postVisible(x, key)).sort((a, b) => a.relayIndex - b.relayIndex).map((x) => postView(x, key)) : [];
+      const counts = Object.fromEntries(demoIds.map((id) => [id, rc.get(id) || { hug: 0, same: 0, my: [] }]));
+      return ok({ post: p ? postView(p, key, rc.get(p.id) || { hug: 0, same: 0, my: [] }) : null, self: rc.get(m[1]) || { hug: 0, same: 0, my: [] }, replies: replies.map((r) => replyView(r, key, rc)), relay, counts });
+    }
+    if (method === 'GET' && path === '/api/stats') {
+      // 看板：心情（只数帖子上用户自己选的）；回声与帖子按地点、按钟点。都只数真实的，页面写 n
+      const posts = (await store.list('posts')).filter((p) => p.status === 'ok');
+      const mood = {};
+      for (const p of posts) if (p.mood) mood[p.mood] = (mood[p.mood] || 0) + 1;
+      const moodPlace = {};
+      for (const p of posts) if (p.mood && p.placeId) { moodPlace[p.mood] = moodPlace[p.mood] || {}; moodPlace[p.mood][p.placeId] = (moodPlace[p.mood][p.placeId] || 0) + 1; }
+      return ok({ mood, moodPlace, posts: posts.length, replies: (await store.list('replies')).filter((r) => r.status === 'ok').length, reacts: (await store.list('reacts')).length });
+    }
+
+    if (!/^\/api\/(posts|replies|topics|react)/.test(path)) return null;
+    if (!authed) return err(401, '缺少作者键。');
+
+    if (method === 'POST' && path === '/api/topics') {
+      const b = body || {};
+      if (!/^tp-[a-z0-9-]{6,40}$/.test(String(b.id))) return err(400, '话题编号格式不对。');
+      const name = String(b.name || '').trim().replace(/^#/, '');
+      if (name.length < POST.topicName[0] || name.length > POST.topicName[1]) return err(400, `话题名 ${POST.topicName[0]} 到 ${POST.topicName[1]} 个字。`);
+      const bad = validateLine(name, POST.topicName[1]) || (b.intro ? validateLine(b.intro, POST.topicIntro) : '');
+      if (bad) return err(400, bad);
+      const all = await topicList();
+      const same = all.find((t) => t.name === name);
+      if (same) return ok({ topic: same, again: true });
+      if (!allow('topic-day', key, 3, 86_400_000)) return err(429, '今天建的话题够多了，明天再来。');
+      const t = { id: b.id, name, intro: String(b.intro || '').trim(), key, at: iso(), status: 'ok' };
+      await store.put('topics', t);
+      return ok({ topic: { id: t.id, name: t.name, intro: t.intro, at: t.at, preset: false, posts: 0 } }, 201);
+    }
+
+    if (method === 'POST' && path === '/api/posts') {
+      const b = body || {};
+      if (!/^ps-[a-z0-9-]{6,40}$/.test(String(b.id)) || isDemo(b.id)) return err(400, '帖子编号格式不对。');
+      const prev = await store.get('posts', b.id);
+      if (prev) return prev.key === key ? ok({ post: postView(prev, key), again: true }) : err(409, '这个编号已被用过。');
+      const text = String(b.text || '').trim();
+      const bad = validateLine(text, POST.textMax);
+      if (bad) return err(400, bad);
+      const a = cleanAuthor(b.author, key);
+      if (a.error) return err(400, a.error);
+      const ids = new Set((await topicList()).map((t) => t.id));
+      const topics = [...new Set(Array.isArray(b.topics) ? b.topics : [])];
+      if (topics.length > POST.topicsMax) return err(400, `最多带 ${POST.topicsMax} 个话题。`);
+      if (topics.some((t) => !ids.has(t))) return err(400, '有一个话题不存在。');
+      if (b.placeId && !PLACES.has(b.placeId)) return err(400, '地点编号不对。');
+      if (b.mood && !MOOD_IDS.has(b.mood)) return err(400, '心情只能从给的几种里选。');
+      const sbad = await soundOk(b.soundId, key);
+      if (sbad) return err(400, sbad);
+      let relayOf = null, relayRoot = null, relayIndex = null;
+      if (b.relayOf) {
+        const up = isDemo(b.relayOf) ? { id: b.relayOf, relayRoot: isDemo(b.relayRoot) ? b.relayRoot : b.relayOf, relayIndex: Math.max(1, Math.min(99, Number(b.relayUpIndex) || 1)), status: 'ok' } : await store.get('posts', b.relayOf);
+        if (!up || !postVisible(up, key)) return err(400, '要接的那一棒不在了。');
+        if (!b.soundId) return err(400, '接力要附一段声音。');
+        relayOf = up.id; relayRoot = up.relayRoot || up.id;
+        const chain = await store.list('posts', { relayRoot });
+        relayIndex = Math.max(up.relayIndex || 1, ...chain.map((x) => x.relayIndex || 1)) + 1;
+        if (!up.relayRoot && !isDemo(up.id)) await store.put('posts', { ...up, relayRoot: up.id, relayIndex: 1 });
+      } else if (b.relayStart) { relayRoot = b.id; relayIndex = 1; if (!b.soundId) return err(400, '发起接力要附一段声音，作为第一棒。'); }
+      if (!allow('post-min', key, 3, 60_000)) return err(429, '一分钟里发得太多了，过一会儿再来。');
+      if (!allow('post-day', key, 30, 86_400_000)) return err(429, '今天发得够多了，明天再来。');
+      const p = { id: b.id, key, text, author: a.author, topics, placeId: b.placeId || null, mood: b.mood || null, soundId: b.soundId || null, relayOf, relayRoot, relayIndex, at: iso(), status: 'ok' };
+      await store.put('posts', p);
+      return ok({ post: postView(p, key, { replies: 0, hug: 0, same: 0, my: [] }) }, 201);
+    }
+    if (method === 'DELETE' && (m = path.match(/^\/api\/posts\/(ps-[a-z0-9-]{6,40})$/))) {
+      const p = await store.get('posts', m[1]);
+      if (!p) return err(404, '没有这个帖子。');
+      if (p.key !== key) return err(403, '只有发帖的人能删。');
+      for (const r of await store.list('replies', { postId: p.id })) { await store.del('replies', r.id); for (const x of await store.list('reacts', { target: r.id })) await store.del('reacts', x.id); }
+      for (const x of await store.list('reacts', { target: p.id })) await store.del('reacts', x.id);
+      await store.del('posts', p.id);
+      return ok({});
+    }
+    if (method === 'POST' && (m = path.match(/^\/api\/posts\/(ps-[a-z0-9-]{4,40})\/replies$/))) {
+      const b = body || {};
+      const p = isDemo(m[1]) ? { id: m[1], status: 'ok' } : await store.get('posts', m[1]);
+      if (!postVisible(p, key)) return err(404, '没有这个帖子，或者它被收起了。');
+      if (!/^rp-[a-z0-9-]{6,40}$/.test(String(b.id))) return err(400, '回复编号格式不对。');
+      const prev = await store.get('replies', b.id);
+      if (prev) return prev.key === key ? ok({ reply: replyView(prev, key, new Map()), again: true }) : err(409, '这个编号已被用过。');
+      const text = String(b.text || '').trim();
+      const bad = validateLine(text, POST.replyMax);
+      if (bad) return err(400, bad);
+      let parentId = null;
+      if (b.parentId && isDemoReply(b.parentId) && isDemo(m[1])) parentId = b.parentId;
+      else if (b.parentId) {
+        const up = await store.get('replies', b.parentId);
+        if (!up || up.postId !== m[1]) return err(400, '要回的那一层不在了。');
+        parentId = up.parentId || up.id;          // 只有两层：回楼中楼也挂在那一层下面
+      }
+      const sbad = await soundOk(b.soundId, key);
+      if (sbad) return err(400, sbad);
+      const a = cleanAuthor(b.author, key);
+      if (a.error) return err(400, a.error);
+      if (!allow('reply-min', key, 6, 60_000)) return err(429, '一分钟里回得太多了，过一会儿再来。');
+      if (!allow('reply-day', key, 100, 86_400_000)) return err(429, '今天回得够多了，明天再来。');
+      const r = { id: b.id, postId: m[1], parentId, key, text, soundId: b.soundId || null, author: a.author, at: iso(), status: 'ok', postKey: p.key || null };
+      await store.put('replies', r);
+      return ok({ reply: replyView(r, key, new Map()) }, 201);
+    }
+    if (method === 'DELETE' && (m = path.match(/^\/api\/replies\/(rp-[a-z0-9-]{6,40})$/))) {
+      const r = await store.get('replies', m[1]);
+      if (!r) return err(404, '没有这条回复。');
+      if (r.key !== key) return err(403, '只有回复的人能删。');
+      for (const x of await store.list('replies', { parentId: r.id })) await store.put('replies', { ...x, parentId: null });   // 楼中楼不跟着消失，升成一层
+      for (const x of await store.list('reacts', { target: r.id })) await store.del('reacts', x.id);
+      await store.del('replies', r.id);
+      return ok({});
+    }
+    if (method === 'POST' && path === '/api/react') {
+      const b = body || {};
+      if (!['hug', 'same'].includes(b.type)) return err(400, '只有「抱抱」和「我也是」。');
+      const target = String(b.target || '');
+      const tp = /^ps-/.test(target) ? (isDemo(target) ? { status: 'ok' } : await store.get('posts', target)) : /^rp-/.test(target) ? (isDemoReply(target) ? { status: 'ok' } : await store.get('replies', target)) : null;
+      if (!tp || tp.status === 'removed') return err(404, '没有这一条。');
+      const id = `${target}_${b.type}_${key}`;
+      const had = await store.get('reacts', id);
+      if (had) await store.del('reacts', id);
+      else {
+        if (!allow('react-min', key, 40, 60_000)) return err(429, '点得太快了。');
+        await store.put('reacts', { id, target, type: b.type, key, at: iso(), targetKey: tp.key || null });
+      }
+      const all = await store.list('reacts', { target });
+      return ok({ hug: all.filter((x) => x.type === 'hug').length, same: all.filter((x) => x.type === 'same').length, on: !had });
+    }
+    if (method === 'POST' && (m = path.match(/^\/api\/(posts|replies)\/((?:ps|rp)-[a-z0-9-]{6,40})\/report$/))) {
+      const col = m[1], x = await store.get(col, m[2]);
+      if (!x) return err(404, '没有这一条。');
+      if (x.key === key) return err(400, '自己发的直接删掉就行。');
+      await store.put('reports', { id: `${x.id}_${key}`, echoId: x.id, kind: col, key, at: iso() });
+      const n = (await store.list('reports', { echoId: x.id })).length;
+      if (n >= LIMITS.reportsToHold && x.status !== 'held') await store.put(col, { ...x, status: 'held' });
+      return ok({ held: n >= LIMITS.reportsToHold });
+    }
+    return null;
+  }
+
   async function dropPhoto(id) {
     const p = await store.get('photos', id);
     if (!p) return;
