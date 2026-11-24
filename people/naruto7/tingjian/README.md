@@ -44,11 +44,11 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 ## 上云（CloudBase）
 
 1. 在 `.env` 填 `TCB_ENV_ID`、`TCB_SECRET_ID`、`TCB_SECRET_KEY`（照 `.env.example`；`.env` 不进仓库）。
-2. 控制台开通「文档型数据库」；集合由部署脚本建（discs、echoes、photos、heard、favs、reports、posts、replies、reacts、topics、relays）。子用户要有云开发、云函数、对象存储三项权限。
+2. 数据库：2026-10-30 以后新建的环境是 PostgreSQL，文档型接口要靠「文档插件」。部署脚本的 `db` 步骤会开插件、建 12 个集合（discs、echoes、photos、heard、favs、reports、posts、replies、reacts、topics、relays、files）。声音和照片也存进数据库的 `files` 集合，不走云存储：新环境的云存储要另建存储桶、另配服务端密钥。子用户要有云开发、云函数、对象存储三项权限（对象存储给静态托管用）。
 3. `npm run build && npm run deploy:cloudbase`：页面进静态托管，接口进云函数 `api`，挂在同域 `/api`。
 4. 云函数的环境变量设 `KS_ADMIN_TOKEN`（审核口令），照片才有人放行。
 
-**状态（2026-11-24 晚）：** 云函数 `api` 已部署，`/api/health` 从外网返回 `store: cloudbase`。数据库未开通，所以读写还没在云上验证过；页面没传上去（子用户缺对象存储权限）。
+**状态（2026-11-24 晚）：** 已上线。页面 https://sure-fish-d0gpj5x9pb635dbb5-1539820249.tcloudbaseapp.com/ ，接口 https://sure-fish-d0gpj5x9pb635dbb5.service.tcloudbase.com/api 。从外网走过一遍：发帖、刻一张（取回的声音逐字节一致）、钉一句、「我的」、真删（删后取声音 404）；无头 Chrome 打开线上社区页，15 条示例帖都在，控制台与网络问题 0 条。
 
 ## 已知缺口
 

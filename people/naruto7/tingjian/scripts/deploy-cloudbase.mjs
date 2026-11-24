@@ -16,7 +16,7 @@ if (!fs.existsSync(path.join(root, 'dist/index.html'))) { console.error('先 npm
 const hide = (s) => String(s).split(env.TCB_SECRET_ID).join('［隐］').split(env.TCB_SECRET_KEY).join('［隐］');
 const only = process.argv.slice(2);              // 可以只部署一部分：fn / db / route / web
 const want = (k) => !only.length || only.includes(k);
-export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays'];
+export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays', 'files'];
 
 const app = new CloudBase({ secretId: env.TCB_SECRET_ID, secretKey: env.TCB_SECRET_KEY, envId: env.TCB_ENV_ID });
 const step = async (name, fn) => {
@@ -58,7 +58,19 @@ if (want('fn')) {
 }
 
 // —— 2. 数据库集合 ——
-if (want('db')) for (const c of COLLECTIONS) await step(`集合 ${c}`, async () => { const r = await app.database.createCollectionIfNotExists(c); return r.IsCreated ? '新建' : '已有'; });
+// 新环境是 PostgreSQL + 文档插件：管理接口建不了集合，用数据库 SDK 建；插件没开时先开（等同控制台「文档编辑器」里点开通）
+if (want('db')) {
+  const svc = app.commonService('tcb', '2018-06-08');
+  await step('文档插件', async () => { const r = await svc.call({ Action: 'EnablePGDocumentExt', Param: { EnvId: env.TCB_ENV_ID } }); return r.Enabled ? '已开' : JSON.stringify(r); });
+  const { default: tcb } = await import('@cloudbase/node-sdk');
+  const db = tcb.init({ env: env.TCB_ENV_ID, secretId: env.TCB_SECRET_ID, secretKey: env.TCB_SECRET_KEY }).database();
+  for (const c of COLLECTIONS) {
+    await step(`集合 ${c}`, async () => {
+      try { await db.createCollection(c); return '新建'; }
+      catch (e) { if (e.code === 'DATABASE_COLLECTION_ALREADY_EXIST') return '已有'; throw e; }
+    });
+  }
+}
 
 // —— 3. HTTP 访问服务：/api → 云函数 api；页面域名加进安全域名 ——
 const hosting = (await app.hosting.getInfo())[0];

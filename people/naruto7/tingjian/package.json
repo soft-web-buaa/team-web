@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@cloudbase/manager-node": "^5.10.5",
+    "@cloudbase/node-sdk": "^4.2.1",
     "@vitejs/plugin-vue": "^6.0.11",
     "puppeteer-core": "^25.18.1",
     "vite": "^8.3.8"
