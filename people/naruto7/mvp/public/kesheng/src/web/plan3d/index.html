@@ -43,14 +43,21 @@
         <i class="echo-head" id="echo-head" aria-hidden="true"></i>
         <div class="echo-pins" id="echo-pins"></div>
       </div>
-      <div class="echo-row"><p class="echo-now" id="echo-now" aria-live="polite"></p><button type="button" class="echo-open" id="echo-open" aria-expanded="false">钉一句话</button></div>
+      <div class="echo-row"><div class="echo-now" id="echo-now" aria-live="polite"></div><button type="button" class="echo-open" id="echo-open" aria-expanded="false">钉一句话</button></div>
       <details class="echo-all" id="echo-all"><summary id="echo-sum">这张声片上的话</summary><ol class="echo-list" id="echo-list"></ol></details>
       <form class="echo-form" id="echo-form" hidden novalidate>
         <label class="echo-at"><span>钉在第 <b id="echo-at-v">0.0</b> 秒</span><input type="range" id="echo-at" min="0" max="10" step="0.1"></label>
         <label class="echo-text"><span class="sr-only">想说的话</span><input type="text" id="echo-text" maxlength="40" autocomplete="off" placeholder="这一秒让你想起什么？"><i id="echo-count" aria-hidden="true">0/40</i></label>
+        <div class="echo-photo" id="echo-photo">
+          <label class="echo-photo-pick" id="echo-photo-pick"><span>配一张照片</span><input type="file" id="echo-file" accept="image/*" class="sr-only"></label>
+          <div class="echo-photo-got" id="echo-photo-got" hidden><img id="echo-photo-prev" alt="要配的照片的预览" width="96" height="72"><button type="button" id="echo-photo-drop">不配了</button></div>
+          <label class="echo-consent" id="echo-consent" hidden><input type="checkbox" id="echo-consent-box"><span>照片里没有能认出身份的人，或我已经问过。</span></label>
+          <p class="fine echo-photo-note" id="echo-photo-note">照片先审后显，通过之前只有你自己看得到。拍摄地点这类信息会在你的设备上去掉。</p>
+        </div>
         <p class="echo-err" id="echo-err" role="alert"></p>
         <div class="echo-actions"><button type="submit" class="echo-send">钉上去</button><button type="button" class="echo-cancel" id="echo-cancel">取消</button></div>
       </form>
+      <p class="echo-sync" id="echo-sync" role="status" hidden></p>
     </section>
     <div class="controls">
       <button type="button" id="btn-play">放</button>
@@ -65,6 +72,12 @@
     <p id="credit-data">楼和分区是示意。</p>
     <p>地图 © OpenStreetMap contributors</p>  </footer>
 </aside>
+
+<dialog class="lightbox" id="lightbox" aria-label="照片">
+  <img id="lightbox-img" alt="">
+  <p id="lightbox-cap"></p>
+  <button type="button" class="close" id="lightbox-close">关上</button>
+</dialog>
 
 <dialog class="receipt" id="receipt" aria-labelledby="receipt-h">
   <h2 id="receipt-h">投稿回执</h2>

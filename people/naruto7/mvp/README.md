@@ -12,11 +12,13 @@ npm run build        # 构建到 dist/
 npm run check:sounds     # 声音和话题数据自检
 npm run check:contrast   # 全天颜色对比度自检
 npm run check:echoes     # 示例回声自检：数据合规、两份文字规则一致、钉的秒数落在声片长度内
+npm run check:cloud      # 云契约自检 44 项：A 留 B 看得到、服务端重做校验、限频、照片去定位、先审后显、举报收起
+npm run dev:cloud        # 单独起开发用云模拟器（默认 8787 端口）
 npm run e2e              # 构建、起预览服务、跑 58 项浏览器走查，退出码 0 才算过
-npm run e2e:kesheng      # 留声机（刻声分区图）冒烟 20 项：回声带、盘面回声针、唱片套子、嵌入模式、手机宽度
+npm run e2e:kesheng      # 留声机（刻声分区图）冒烟 28 项：回声带、盘面回声针、唱片套子、A 留话 B 看得到、照片去定位、嵌入模式、手机宽度
 ```
 
-`e2e` 用本机的 Chrome 或 Edge（`puppeteer-core` 不自带浏览器）。找不到时用环境变量 `CHROME_PATH` 指定可执行文件。截图在 `.e2e-shots/`，已被 `.gitignore` 忽略。2026-11-24 的结果：`e2e` 58 项、`e2e:kesheng` 20 项，全部通过，控制台与网络问题 0。
+`e2e` 用本机的 Chrome 或 Edge（`puppeteer-core` 不自带浏览器）。找不到时用环境变量 `CHROME_PATH` 指定可执行文件。截图在 `.e2e-shots/`，已被 `.gitignore` 忽略。2026-11-24 的结果：`e2e` 58 项、`e2e:kesheng` 28 项、`check:cloud` 44 项，全部通过，控制台与网络问题 0。
 
 本机 Node 26 上验证过。仓库规定的是 Node 24 LTS，没有在 24 上跑过。
 
@@ -34,9 +36,21 @@ npm run e2e:kesheng      # 留声机（刻声分区图）冒烟 20 项：回声�
 | 盘面回声针 | 同一句话也立在盘面刻纹上那一秒的位置，跟着盘转；针走到那里它亮起来。声音、波形、盘面三处指同一个瞬间 | `plan3d.js` 的 `buildEchoMarks`、`stepEchoMarks` |
 | 唱片套子 | 地点卡的正面是一张照片，右边露出半张盘。照片是辅：只在套子上，声音才是里面的唱片。现在 16 个地点都是"模型照"（拍的是留声机上的纸模型），角标如实写出来；团队拍到实拍后换同名文件、把 `sleeves.json` 里的 `kind` 改成 `photo` | `plan3d/sleeves/`、`plan3d/sleeves.json`、`scripts/make-sleeve-photos.mjs` |
 
-示例回声里的话是写出来的示例，不是哪位同学说的：只写年级，不写学院和名字，页面上每一条都标"示例"。你自己留的回声只存在这台设备上（`localStorage` 的 `ks-echoes-v1`），别人看不到。后端接上以后，只改 `community.js`，函数注释里写了对应的接口。
+示例回声里的话是写出来的示例，不是哪位同学说的：只写年级，不写学院和名字，页面上每一条都标"示例"，不会发到云上。你自己留的话走云（见下一节）。
 
 页面新增的字（回声带、套子的文案）由 `scripts/subset-plan-font.py` 补进仿宋子集，只增不减。字体是朱雀仿宋 v0.212，SIL OFL 1.1。需要原字体文件时从 [TrionesType/zhuque 的发布页](https://github.com/TrionesType/zhuque/releases)取。
+
+## 数据放哪：云优先（v0.4，决策 0006）
+
+页面按云优先写：云上放声片、回声、照片、落款、举报与审核；本机只放发件箱和"对我隐藏"。云不通时话先显示"待发出"，连上自动发；被服务端拒绝的显示"被退回"并写明原因。接口契约在 `public/kesheng/src/web/contract.js`，客户端是 `cloud.js`、`community.js`，发件箱是 `outbox.js`。
+
+**现在没有真后端。** `scripts/dev-cloud.mjs` 是开发用云模拟器，实现同一份契约，数据在内存里，`npm run dev` 与 `npm run preview`（也包括 `npm run e2e`）自带 `/api`；`KS_REVIEW=1 npm run dev` 让照片先审后显。它能验证"A 留的话，B 看得到"（冒烟里用两个独立的浏览器环境），不能验证 CloudBase。构建出来的静态文件里没有它：部署到哪里，`/api` 就要指到哪里的云；指不到时页面不报错，话留在发件箱里。
+
+| 做了什么 | 在哪里 |
+|---|---|
+| 回声可以配一张照片：设备上缩小并重新编码（去掉定位信息），勾选同意才能发，先审后显 | `photo.js`、`plan3d.js` 的回声表单 |
+| 针走到那一秒，照片像相纸一样显影；地点页一条"这里的照片"印样；有审核通过的社区照片时，套子换成最新一张 | `plan3d.js` 的 `paintNow`、`stripInner`、`coverHTML` |
+| 服务端重做文字校验、限频、JPEG 检查与去 EXIF；举报满三个不同的人先收起 | `scripts/dev-cloud.mjs`、`jpeg-clean.js`，`npm run check:cloud` 44 项 |
 
 ## 原来的六个板块
 

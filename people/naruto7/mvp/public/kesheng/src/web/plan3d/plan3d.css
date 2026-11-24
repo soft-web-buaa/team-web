@@ -915,3 +915,59 @@ body.is-shelf .quick, body.is-shelf .quick-note { opacity: 0; pointer-events: no
 /* 嵌在听见校园首页里：外面已经有导航，这里不再放"回到刻声盘"；柜子链接让到它原来的位置 */
 .is-embed .back-home { display: none; }
 .is-embed .cab-link { top: calc(var(--u) * 2.5); }
+
+/* —— 照片进社区：回声可以配一张照片。针走到那一秒，照片像相纸一样显影；地点页有一条印样 —— */
+.echo-photo { display: grid; gap: 6px; }
+.echo-photo-pick { display: inline-flex; align-items: center; min-height: 40px; width: fit-content; padding: 0 14px; border: 1px dashed var(--alu); border-radius: 2px; color: var(--paper); font: 400 1rem/1 var(--fang); cursor: pointer; }
+.echo-photo-pick:hover, .echo-photo-pick:focus-within { border-color: var(--scope); color: var(--scope); }
+.echo-photo-pick:focus-within { outline: 2px solid var(--scope); outline-offset: 2px; }
+.echo-photo-got { display: flex; align-items: flex-end; gap: 10px; }
+.echo-photo-got img { display: block; width: 96px; height: 72px; object-fit: cover; box-shadow: 0 0 0 1px var(--alu); }
+.echo-photo-got button { min-height: 32px; padding: 0 10px; border: 0; background: none; color: var(--alu); font: 400 0.8125rem/1 var(--hei); text-decoration: underline; cursor: pointer; }
+.echo-photo-got button:focus-visible { outline: 2px solid var(--scope); outline-offset: 2px; }
+.echo-consent { display: flex; align-items: flex-start; gap: 8px; color: var(--paper); font: 400 0.875rem/1.5 var(--hei); }
+.echo-consent input { flex: none; width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--scope); }
+.echo-consent[hidden], .echo-photo-got[hidden] { display: none; }
+.echo-photo-note { color: var(--alu); }
+.echo-sync { margin: 6px 0 0; color: var(--scope); font: 400 0.8125rem/1.5 var(--hei); }
+.echo-sync[hidden] { display: none; }
+
+/* 浮出的那句话：有照片就在左边显影。每次换一句，动画重放一次，所以它跟着针走，不是页面自己在动 */
+.echo-now { display: flex; align-items: flex-start; gap: 10px; }
+.echo-say { min-width: 0; flex: 1; color: var(--paper); font: 400 1.0625rem/1.55 var(--fang); overflow-wrap: anywhere; }
+.echo-say i { display: block; margin-top: 2px; color: var(--alu); font: 400 0.75rem/1.3 var(--hei); font-style: normal; }
+.echo-dev { flex: none; width: 64px; height: 48px; padding: 0; border: 0; background: #E9E5DA; cursor: zoom-in; box-shadow: 0 0 0 3px #F2F4F3, 0 6px 14px rgba(0, 0, 0, 0.35); }
+.echo-dev img { display: block; width: 100%; height: 100%; object-fit: cover; animation: ks-develop 1.6s ease-out both; }
+.echo-dev:focus-visible { outline: 2px solid var(--scope); outline-offset: 3px; }
+@keyframes ks-develop {
+  0% { filter: grayscale(1) brightness(1.9) contrast(0.35) blur(3px); opacity: 0.15; }
+  55% { filter: grayscale(0.6) brightness(1.25) contrast(0.7) blur(1px); opacity: 0.9; }
+  100% { filter: none; opacity: 1; }
+}
+.echo-pin.has-photo::after { border-radius: 2px; }
+.echo-thumb { flex: none; width: 52px; padding: 4px 4px 4px 0; border: 0; background: none; cursor: zoom-in; }
+.echo-thumb img { display: block; width: 44px; height: 33px; object-fit: cover; box-shadow: 0 0 0 1px rgba(211, 215, 218, 0.4); }
+.echo-thumb:focus-visible { outline: 2px solid var(--scope); outline-offset: -2px; }
+
+/* 地点页的印样：一格一张，最新的在前，横着滚 */
+.photos { margin: 0 0 calc(var(--u) * 2); }
+.photos .sub { margin-top: 0; }
+.strip { display: flex; gap: 8px; margin: 0; padding: 0 0 6px; list-style: none; overflow-x: auto; scroll-snap-type: x proximity; }
+.strip li { flex: none; scroll-snap-align: start; }
+.strip-ph { display: grid; gap: 4px; padding: 0; border: 0; background: none; color: var(--lathe); font: 400 0.75rem/1.2 var(--hei); text-align: left; cursor: zoom-in; }
+.strip-ph img { display: block; width: 96px; height: 72px; object-fit: cover; background: var(--alu); box-shadow: 0 0 0 1px var(--alu); }
+.strip-ph.is-pending img { opacity: 0.6; }
+.strip-ph:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cover-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.cover-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cover .cover-open img { position: relative; z-index: 1; display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; background: var(--alu); box-shadow: 3px 0 8px rgba(21, 28, 44, 0.28), 0 0 0 1px rgba(21, 28, 44, 0.08); }
+
+/* 灯箱：原生 dialog，Esc 能关，点背景能关 */
+.lightbox { max-width: min(92vw, 1100px); max-height: 92vh; padding: 0; border: 0; background: #0C0D10; color: var(--paper); overflow: hidden; }
+.lightbox::backdrop { background: rgba(7, 8, 10, 0.86); }
+.lightbox img { display: block; max-width: 100%; max-height: calc(92vh - 76px); margin: 0 auto; }
+.lightbox p { margin: 0; padding: 10px 16px 0; font: 400 1rem/1.5 var(--fang); }
+.lightbox .close { display: block; margin: 8px 16px 12px auto; min-height: 36px; padding: 0 16px; border: 1px solid var(--alu); border-radius: 2px; background: transparent; color: var(--paper); font: 400 0.9375rem/1 var(--fang); cursor: pointer; }
+.lightbox .close:focus-visible { outline: 2px solid var(--scope); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) { .echo-dev img { animation: none; } }

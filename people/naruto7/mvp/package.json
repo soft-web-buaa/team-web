@@ -10,6 +10,8 @@
     "check:sounds": "node scripts/check-sounds.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:echoes": "node scripts/check-echoes.mjs",
+    "check:cloud": "node scripts/check-cloud.mjs",
+    "dev:cloud": "node scripts/dev-cloud.mjs",
     "e2e": "node scripts/e2e/run.mjs",
     "e2e:kesheng": "node scripts/e2e/run.mjs kesheng"
   },
