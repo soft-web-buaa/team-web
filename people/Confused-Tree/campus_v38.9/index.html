@@ -1,0 +1,130 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>声景校园 · 北航 | 听见学院路</title>
+<meta name="description" content="声景校园 · 北航：一座可以转着看的 3D 卡纸校园，16 处地点 + 4 个园子各有声景档案——手绘声纹、声音构成、故事，以及按声音类别着色的粒子波纹。暂不加载音频，用程序化声景预览。">
+<meta name="theme-color" content="#151C2C">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23D3D7DA'/%3E%3Ccircle cx='8' cy='8' r='5' fill='none' stroke='%2324304A' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='1.4' fill='%2324304A'/%3E%3C/svg%3E">
+<link rel="preload" href="src/assets/ks-fangsong-plan.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="src/main.js"></script>
+</head>
+<body>
+<main class="stage">
+  <!-- 预渲染的总览图：页面一到就在，三维第一帧出来之前挡在画布后面，保证「打开就能看到整座校园」 -->
+  <picture class="poster" id="poster" aria-hidden="true">
+    <source media="(max-width: 880px)" srcset="src/assets/poster-portrait.jpg">
+    <img src="src/assets/poster-wide.jpg" alt="" decoding="async" fetchpriority="high">
+  </picture>
+  <canvas id="gl" tabindex="0" aria-label="北航学院路校区的三维卡纸模型。拖动画布转动视角，滚轮缩放，点一个区块把它抬起来，点地点圆点查看声景；方向键转视角，加减号缩放，Esc 看全貌。"></canvas>
+  <div class="labels" id="labels" aria-hidden="true"></div>
+  <header class="stage-title">
+    <h1>声景校园 · 北航</h1>
+    <p>听见学院路 · 一张卡纸模型</p>
+  </header>
+  <p class="hour" id="hour" aria-hidden="true"></p>
+  <p class="hint" id="hint">拖动转动视角 · 滚轮缩放 · 点地点圆点看声景 · 右侧可开声音（程序化合成）</p>
+  <div class="atlas-map" id="atlas-map">
+    <button type="button" class="map-toggle" id="map-toggle" aria-pressed="true" aria-controls="map-body">声景地图</button>
+    <div class="map-body" id="map-body">
+      <canvas id="map-canvas" aria-label="声景小地图：每个圆点是一处声景，点一下跳到那里"></canvas>
+      <p class="map-tip" id="map-tip">点小图上的点，直接跳到那处声景</p>
+    </div>
+  </div>
+  <p class="nogl" id="nogl" hidden>这个浏览器画不出三维模型（需要 WebGL）。声景档案照样能看。</p>
+</main>
+
+<aside class="card" aria-label="展签">
+  <div class="card-head">
+    <p class="eyebrow">声景档案 · Soundscape Atlas</p>
+    <h2>听见校园</h2>
+    <p class="lede">十个区块、<b id="stat-b">157</b> 栋楼、16 处地点、4 个园子。点开每一处，读它的<strong>声景档案</strong>：手绘声纹、声音构成、一段故事，还有一圈按声音类别着色的粒子波纹。</p>
+    <p class="lede">天光落在你选的时段，树冠跟着季节换，声景也跟着变：清晨的鸟、中午的食堂、夜里剩下的虫鸣。这段模型来自「刻声 · 十秒声片柜」。</p>
+  </div>
+
+  <div class="picks">
+    <div class="pick-row"><span class="pick-label">天光</span><div class="btns" id="slots" role="group" aria-label="天光"></div></div>
+    <div class="pick-row"><span class="pick-label">季节</span><div class="btns" id="seasons" role="group" aria-label="季节"></div></div>
+    <div class="pick-row sound-row">
+      <span class="pick-label">声音</span>
+      <button type="button" class="sound-toggle" id="sound-toggle" aria-pressed="false" aria-label="程序化声景：开 / 关">关</button>
+      <input type="range" id="sound-vol" min="0" max="100" value="60" aria-label="声景音量" disabled>
+      <i class="sound-meter" id="sound-meter" aria-hidden="true"><b></b></i>
+    </div>
+
+  </div>
+
+  <section class="pano is-sticky" aria-labelledby="pano-h">
+    <header class="pano-head">
+      <h3 id="pano-h">地点全景 · <span id="pano-name">—</span></h3>
+      <a class="pano-open" id="pano-open" href="#" target="_blank" rel="noopener">全屏看</a>
+    </header>
+    <div class="pano-box" id="pano-box">
+      <img id="pano-img" alt="地点全景照片（示意），自动左右平移" draggable="false">
+      <span class="pano-badge">360°</span>
+    </div>
+    <p class="pano-tip">自动从右到左、再从左到右，8 秒一轮。当前是示意占位图，实景照片后续替换。</p>
+  </section>
+
+  <section class="atlas" aria-labelledby="atlas-h">
+    <header class="atlas-head">
+      <h3 id="atlas-h">声景档案 <span id="atlas-count">20</span></h3>
+      <div class="atlas-tools">
+        <button type="button" id="atlas-blind" class="ghost">盲猜声纹</button>
+      </div>
+    </header>
+    <div class="atlas-cats" id="atlas-cats" role="group" aria-label="按声音类别筛选"></div>
+    <ul class="atlas-list" id="atlas-list" aria-label="声景点列表"></ul>
+    <section class="atlas-detail" id="atlas-detail" hidden aria-live="polite"></section>
+
+    <section class="route" aria-labelledby="route-h">
+      <header class="route-head">
+        <h3 id="route-h">声景路线 <span id="route-count">0</span></h3>
+        <div class="route-tools">
+          <button type="button" id="route-play" class="ghost">播放</button>
+          <button type="button" id="route-copy" class="ghost">复制链接</button>
+          <button type="button" id="route-clear" class="ghost">清空</button>
+        </div>
+      </header>
+      <ol class="route-list" id="route-list"></ol>
+      <p class="route-tip" id="route-tip">在声景档案里点「加入路线」，排一条自己的声音散步；播放时会自动飞过去、换声音。</p>
+    </section>
+  </section>
+
+  <section class="detail" id="detail" hidden aria-live="polite"></section>
+
+  <section class="zones-wrap" aria-labelledby="zones-h">
+    <h3 id="zones-h">区块 <span id="stat-z">10</span></h3>
+    <ul class="zones" id="zones"></ul>
+  </section>
+
+  <footer class="credit">
+    <p>模型取自 <b>「刻声 · 十秒声片柜」</b>（MIT）。楼与分区是示意，不按测绘比例，不用于导航。</p>
+    <p>地图数据 © OpenStreetMap contributors（ODbL 1.0）；校园体量参考 <b>MrRoam/buaa-xueyuan-campus-3d</b>。</p>
+    <p class="src">三维：Three.js（MIT）。字体：朱雀仿宋（SIL OFL 1.1，子集化）。<br>机器慢的话，在地址后加 <b>?q=low</b>（或 <b>?dpr=0.7</b>）。</p>
+  </footer>
+</aside>
+
+<div class="blind" id="blind" hidden></div>
+<noscript><p style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);margin:0;padding:10px 16px;background:#F2F4F3;color:#24304A;font:400 .875rem/1.4 sans-serif;border-radius:2px;z-index:9;box-shadow:0 6px 24px rgba(0,0,0,.45)">这个模型要 JavaScript 才转得起来。</p></noscript>
+<script>
+// file:// 下浏览器默认会拦掉 ES 模块，页面只剩那张预渲染总览：说清楚该怎么打开。
+// 极少数情况下（例如启动参数允许本地跨域）模块会跑起来，那就别挡画面。
+if (location.protocol === 'file:') {
+  window.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      if (window.__campus) return;
+      var n = document.getElementById('nogl');
+      if (n) {
+        n.hidden = false;
+        n.textContent = '这个页面要用本地服务器打开：在项目目录里运行 node serve.mjs，再访问 http://127.0.0.1:8890/ 。直接双击 index.html 时浏览器会拦掉脚本，只能看到这张图。';
+      }
+    }, 700);
+  });
+}
+</script>
+</body>
+</html>
+
