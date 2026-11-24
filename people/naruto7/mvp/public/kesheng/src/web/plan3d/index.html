@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学院路馆藏分区图 · 刻声</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23D3D7DA'/%3E%3Ccircle cx='8' cy='8' r='5' fill='none' stroke='%2324304A' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='1.4' fill='%2324304A'/%3E%3C/svg%3E">
+<link rel="preload" href="../fonts/ks-fangsong-plan.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="plan3d.css">
+<script type="module" src="quick.js"></script>
+<script type="module" src="plan3d.js"></script>
+</head>
+<body>
+<main class="stage" id="stage">
+  <canvas id="gl" tabindex="0" aria-label="学院路校园三维分区图。用右侧的分区列表选区块和声片；方向键转动视角，加减号缩放。"></canvas>
+  <div class="labels" id="labels" aria-hidden="true"></div>
+  <a class="back-home" href="../index.html">回到刻声盘</a>
+  <button type="button" class="cab-link" id="cab-link">我的柜子<span class="n"></span></button>
+  <p class="hour" id="hour" aria-hidden="true"></p>
+  <p class="hint" id="hint">点一根针看那里的年轮 · 按住外圈刻纹搓 · 拖空白处转视角</p>  <button type="button" class="quick" id="quick" disabled aria-describedby="quick-note"><i aria-hidden="true"></i><span>按住 刻十秒</span></button>
+  <p class="quick-note" id="quick-note">地点、落款都可以刻完再补</p>
+  <p class="scale" id="scale" aria-live="off" hidden></p>
+  <p class="first" id="first" role="status" hidden><b></b><span></span></p>
+  <div class="boot" id="boot" aria-hidden="true"><i></i><span>在摆盘…</span></div>
+  <p class="nogl" id="nogl" hidden>这个浏览器画不出三维校园（需要 WebGL）。右侧的分区和声片照常能用。</p>
+</main>
+
+<section class="shelf" id="shelf" aria-labelledby="shelf-h" hidden>
+  <header><h2 id="shelf-h">我的柜子</h2><p class="count"></p><button type="button" class="close">关上柜子</button></header>
+  <div class="boards"></div>
+</section>
+
+<aside class="card" id="card" aria-label="馆藏卡">
+  <div id="card-body"><h1>学院路馆藏</h1><p class="lede">在摆盘：校园、钉点和外圈的刻纹。</p></div>
+  <section class="player" id="player" aria-label="正在放的声片" hidden>
+    <p class="clip-no" id="clip-no"></p>
+    <p class="clip-note" id="clip-note"></p>
+    <p class="clip-meta" id="clip-meta"></p>
+    <div class="controls">
+      <button type="button" id="btn-play">放</button>
+      <button type="button" id="btn-rewind">从头放</button>
+      <button type="button" id="btn-shuffle" title="从眼下看得到的盘里随手抽一张">换一张</button>
+      <button type="button" id="btn-zoom" aria-pressed="false">凑近看刻槽</button>
+    </div>
+    <button type="button" class="who-link" id="btn-who" hidden></button>
+  </section>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+  <footer class="credit">
+    <p id="credit-data">楼和分区是示意。</p>
+    <p>地图 © OpenStreetMap contributors</p>  </footer>
+</aside>
+
+<dialog class="receipt" id="receipt" aria-labelledby="receipt-h">
+  <h2 id="receipt-h">投稿回执</h2>
+  <div class="paper"></div>
+  <p class="receipt-note"></p>
+  <button type="button" class="close">收好了</button>
+</dialog>
+</body>
+</html>
