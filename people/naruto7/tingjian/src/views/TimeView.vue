@@ -4,7 +4,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
-import RingWood from '../components/RingWood.vue';
+import GalaxyCanvas from '../components/GalaxyCanvas.vue';
 import { L, isPublic, play, entryById, ERA, semesterLabel } from '../lib/library.js';
 import { clock, goHour, backToNow, fmtHour, cnHour, slotOfHour } from '../lib/clock.js';
 import { hourColor } from '../lib/wave.js';
@@ -49,10 +49,34 @@ function tour() {
 }
 function stopTour() { touring.value = false; cancelAnimationFrame(dayTimer); }
 
-// —— 一学年 ——
+// —— 一学年：星系（2026-11-26，组员与组长：年轮做成星空、恒星系，左边整块放大；星有渐变，轨道若有若无）——
+// 放法：左边整块星空（默认，组员提的）/ 唱片变星系（校园沉进盘里，星系贴在盘心上，和留声机是同一个东西）
+// 转法：按钟点（保留早晚：角度是录下的钟点，时针扫过）/ 自转（取消钟点：内圈转得快、外圈转得慢）
 const sems = computed(() => { void L.version; return stage.bands().slice().reverse(); });
 const sem = ref(null);
 watch(sem, (s) => stage.focusSemester(s));
+const PLACES = [['left', '左边星空'], ['disc', '唱片变星系']], SPINS = [['clock', '按钟点'], ['free', '自转']];
+const remembered = (k, d, ok) => { try { const v = localStorage.getItem(k); return ok.some((x) => x[0] === v) ? v : d; } catch { return d; } };
+const place = ref(remembered('tj-gx-place', 'left', PLACES)), spin = ref(remembered('tj-gx-spin', 'clock', SPINS));
+watch(place, (v) => { try { localStorage.setItem('tj-gx-place', v); } catch { /* 隐私模式 */ } });
+watch(spin, (v) => { try { localStorage.setItem('tj-gx-spin', v); } catch { /* 隐私模式 */ } });
+const gxList = computed(() => pub.value.filter((e) => e.tier !== 'archival'));
+const focusYear = computed(() => { if (!sem.value) return null; const m = /^(\d{4})/.exec(sem.value); return m ? Number(m[1]) : null; });
+const showGx = computed(() => scale.value === 'year');
+watch([showGx, place], ([on, pl]) => stage.setSink(on && pl === 'disc'), { immediate: true });
+// 唱片变星系：星系的画布每帧贴到盘心在屏幕上的那个圆上
+const discBox = ref(null);
+let discRaf = 0;
+function followDisc() {
+  discRaf = requestAnimationFrame(followDisc);
+  const el = discBox.value && discBox.value.$el;
+  const d = stage.discScreen();
+  if (!el || !d) return;
+  el.style.width = el.style.height = `${d.r * 2}px`;
+  el.style.transform = `translate(${d.x - d.r}px, ${d.y - d.r}px)`;
+  el.style.opacity = String(Math.max(0, (d.k - 0.5) * 2));
+}
+watch([showGx, place], ([on, pl]) => { cancelAnimationFrame(discRaf); if (on && pl === 'disc') discRaf = requestAnimationFrame(followDisc); }, { immediate: true });
 const semList = computed(() => (sem.value ? pub.value.filter((e) => e.semester === sem.value).slice().reverse() : []));
 const today = new Date();
 const otd = computed(() => {   // 往年今日：前后三天
@@ -64,7 +88,7 @@ const otd = computed(() => {   // 往年今日：前后三天
 const era = computed(() => ERA.map((x) => ({ ...x, e: x.audio ? entryById(x.audio) : null })));
 const span = computed(() => today.getFullYear() - 1952);
 
-onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); });
+onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); stage.setSink(false); cancelAnimationFrame(discRaf); });
 </script>
 
 <template>
@@ -96,8 +120,22 @@ onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); });
     </section>
 
     <section v-else-if="scale === 'year'" class="sec">
-      <p class="lede" style="margin-top: 16px">纸上的年轮像树：最里一圈最早，往外一圈一个学年。舞台上的唱片反过来，从外往里放：最外一带是最早的学期。点一个学期，唱片上那一带亮起来，其余的暗下去。</p>
-      <RingWood :list="pub.filter((e) => e.tier !== 'archival')" :size="320" :playing-id="L.playing && L.playing.id" @pick="play" />
+      <p class="lede" style="margin-top: 16px">一条轨道是一个学年，最里一圈最早，像树的年轮；一颗星是一张盘，角度是它录下的钟点，颜色是那个钟点的天色。被听得多、被回应得多的星更大更亮；我的星是金色的。</p>
+      <p class="fine">声音多了，挤在一起的星会化成星尘，轨道就成了一条星云带；滚轮拉近，星一颗颗分出来。悬停看是哪一张，点一下放。</p>
+      <p class="h3">放在哪</p>
+      <div class="row" role="radiogroup" aria-label="星系放在哪">
+        <button v-for="x in PLACES" :key="x[0]" type="button" role="radio" class="chip" :class="{ on: place === x[0] }" :aria-checked="place === x[0]" @click="place = x[0]">{{ x[1] }}</button>
+      </div>
+      <p class="h3">怎么转</p>
+      <div class="row" role="radiogroup" aria-label="星系怎么转">
+        <button v-for="x in SPINS" :key="x[0]" type="button" role="radio" class="chip" :class="{ on: spin === x[0] }" :aria-checked="spin === x[0]" @click="spin = x[0]">{{ x[1] }}</button>
+      </div>
+      <p class="fine">{{ spin === 'clock' ? '按钟点：星停在它录下的那个钟点上，金色的时针是此刻，扫过的那一带亮一点。' : '自转：不看钟点了，内圈转得快、外圈转得慢，像一个真的星系。' }}</p>
+      <Teleport to="body">
+        <GalaxyCanvas v-if="showGx && place === 'left'" fixed :list="gxList" :mode="spin" :hour="clock.shown" :playing-id="L.playing && L.playing.id" :focus-year="focusYear" @pick="play" />
+        <GalaxyCanvas v-if="showGx && place === 'disc'" ref="discBox" disc :list="gxList" :mode="spin" :hour="clock.shown" :playing-id="L.playing && L.playing.id" :focus-year="focusYear" @pick="play" />
+      </Teleport>
+      <p class="h3">学期 · 点一个，它那一圈亮起来</p>
       <div class="sems">
         <button v-for="b in sems" :key="b.semester" type="button" class="sem" :class="{ on: sem === b.semester, now: b.semester === L.nowSem }" @click="sem = sem === b.semester ? null : b.semester">
           <span class="show">{{ b.label }}</span><i>{{ b.n }}</i>

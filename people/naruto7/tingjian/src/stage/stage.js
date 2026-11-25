@@ -261,6 +261,18 @@ export function setBands(list) {
 export const bands = () => S.bands.map((b) => ({ semester: b.semester, label: b.label, n: b.n }));
 /** 年轮里点一个学期：那一带展开（不换正在放的盘）。null = 跟着正在放的那张。 */
 export function focusSemester(sem) { S.focusSem = sem; }
+/** 年轮的放法 A（唱片变星系）：校园沉进盘里，盘心让给星系（页面上一块圆的画布叠在盘心上，见 discScreen）。 */
+export function setSink(on) { S.sink = !!on; }
+let sinkK = 0;
+/** 盘心（刻纹带以内）此刻在屏幕上的圆：{ x, y, r }（CSS 像素）；镜头还在飞时 settled = false。 */
+export function discScreen() {
+  if (!built) return null;
+  const c = v3.set(0, 0.5, 0).project(G.camera), W = canvas.clientWidth, H = canvas.clientHeight;
+  const x = ((c.x + 1) / 2) * W, y = ((1 - c.y) / 2) * H;
+  const e = v3.set(RIN - 14, 0.5, 0).project(G.camera), ex = ((e.x + 1) / 2) * W, ey = ((1 - e.y) / 2) * H;
+  const r0 = canvas.getBoundingClientRect();
+  return { x: x + r0.left, y: y + r0.top, r: Math.hypot(ex - x, ey - y), settled: !shot, k: sinkK };
+}
 /** 这张盘上的回声：[{ t, mine }]；active 是正在浮起的那一条的下标。 */
 export function setEchoes(list) { S.echoes = list || []; syncEchoMarks(); }
 export function setEchoActive(i) { S.echoActive = i; }
@@ -841,7 +853,11 @@ function frame(now) {
       o.rise = Math.min(1, Math.max(0, (now - riseT0 - 900 - d * 520) / 900));
       o.bgroup.scale.y = Math.max(0.001, easeOut(o.rise));
     }
+    if (sinkK > 0.001 || o.sunk) { o.bgroup.scale.y = Math.max(0.001, easeOut(o.rise) * (1 - 0.985 * sinkK)); o.sunk = sinkK > 0.001; }
   });
+  const sinkGoal = S.sink && S.mode === 'time' ? 1 : 0;
+  sinkK += (sinkGoal - sinkK) * (reduced ? 1 : 1 - Math.exp(-dt / 0.35));
+  if (Math.abs(sinkGoal - sinkK) < 0.002) sinkK = sinkGoal;
   // 区块：地点模式下，这个地点所在的区块照常，其余压暗；悬停的区块抬一点
   G.zoneObj.forEach((o, id) => {
     const inPlace = S.mode === 'place';
@@ -874,7 +890,7 @@ function frame(now) {
     const z = G.zoneObj.get(o.zone);
     o.group.position.y = TILE_TOP + z.lift;
     o.group.scale.y = Math.max(0.001, easeOut(z.rise));
-    o.group.visible = z.rise > 0.02 && S.mode !== 'place';
+    o.group.visible = z.rise > 0.02 && S.mode !== 'place' && sinkK < 0.4;
     // 光柱（2026-11-26 重做：原来又细又淡，白天看不见，也看不出是什么）。高度和张数成正比，柱上一道刻线一张（多了五张、十张一道），
     // 柱顶一张小盘、签上写「n 张」；白天是墨色的实柱（像印在纸上），夜里是会发光的光柱；底下一圈光环慢慢往外走
     const crowd = S.mode === 'community';
