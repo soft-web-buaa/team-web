@@ -5,7 +5,7 @@ import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { NAV } from './router.js';
 import * as stage from './stage/stage.js';
-import { L, init as initLib, say, play, isPublic } from './lib/library.js';
+import { L, init as initLib, say, play, isPublic, unread } from './lib/library.js';
 import { ui } from './lib/ui.js';
 import ClockFace from './components/ClockFace.vue';
 import Deck from './components/Deck.vue';
@@ -88,7 +88,7 @@ onMounted(async () => {
     </a>
     <nav class="nav" aria-label="四个板块">
       <RouterLink v-for="n in NAV" :key="n.name" :to="n.to" :class="{ on: route.name === n.name || (n.name === 'home' && route.name === 'place') }" :aria-current="route.name === n.name ? 'page' : undefined">
-        {{ n.label }}<i>{{ n.hint }}</i>
+        {{ n.label }}<i>{{ n.hint }}</i><b v-if="n.name === 'mine' && unread()" class="dot" :aria-label="`${unread()} 条新的回应`"></b>
       </RouterLink>
     </nav>
     <ClockFace />

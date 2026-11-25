@@ -8,13 +8,17 @@ import RingWood from '../components/RingWood.vue';
 import PostCard from '../components/PostCard.vue';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
-import { L, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
+import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
 
 const router = useRouter();
 const tab = ref('discs');
 const mine = computed(() => { void L.version; return L.entries.filter((e) => e.mine).slice().reverse(); });
 const favs = computed(() => L.me.favs.map(entryById).filter(Boolean));
-const inbox = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null })).filter((x) => x.e || x.postId));
+const inboxAll = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null, fresh: x.at > (L.readAt || '') })).filter((x) => x.e || x.postId));
+// 类型：声音上的（钉的话、也听过）、帖子上的（回复、抱抱、我也是）
+const KINDS = [['all', '全部'], ['sound', '声音上的', ['echo', 'heard']], ['post', '帖子上的', ['reply', 'hug', 'same']]];
+const kind = ref('all');
+const inbox = computed(() => { const k = KINDS.find((x) => x[0] === kind.value); return k[2] ? inboxAll.value.filter((x) => k[2].includes(x.kind)) : inboxAll.value; });
 const myPosts = computed(() => { void C.version; return C.posts.filter((p) => p.mine); });
 const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '抱了抱你', same: '说「我也是」' };
 function openMsg(x) {
@@ -54,7 +58,7 @@ onMounted(() => { refresh(); initCommunity(); });
     <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}</p>
 
     <div class="row" role="tablist" aria-label="我的">
-      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['inbox', `回应我的 ${inbox.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
+      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
     </div>
 
     <section v-if="tab === 'discs'">
@@ -82,8 +86,14 @@ onMounted(() => { refresh(); initCommunity(); });
     </section>
 
     <section v-else-if="tab === 'inbox'">
+      <div class="bar">
+        <div class="row" role="radiogroup" aria-label="回应的类型">
+          <button v-for="k in KINDS" :key="k[0]" type="button" role="radio" class="chip" :class="{ on: kind === k[0] }" :aria-checked="kind === k[0]" @click="kind = k[0]">{{ k[1] }}</button>
+        </div>
+        <button v-if="unread()" type="button" class="link fine" @click="markRead()">全部标为已读</button>
+      </div>
       <ol v-if="inbox.length" class="inbox">
-        <li v-for="(x, i) in inbox" :key="i">
+        <li v-for="(x, i) in inbox" :key="i" :class="{ fresh: x.fresh }">
           <button type="button" class="msg" @click="openMsg(x)">
             <span class="k">{{ KIND[x.kind] || x.kind }}</span>
             <span v-if="x.text" class="q">「{{ x.text }}」</span>
@@ -125,6 +135,10 @@ onMounted(() => { refresh(); initCommunity(); });
 .mine-row :deep(li) { list-style: none; }
 .acts { display: flex; justify-content: flex-end; gap: 10px; margin: -6px 0 6px; }
 .inbox { list-style: none; padding: 0; margin: 12px 0 0; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0 0; }
+.inbox li { position: relative; }
+.inbox li.fresh::before { content: ''; position: absolute; left: -14px; top: 18px; width: 7px; height: 7px; border-radius: 50%; background: #C8261A; }
+.inbox li:not(.fresh) .msg { opacity: .72; }
 .msg { display: grid; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--hair); background: none; padding: 10px 0; gap: 2px; }
 .msg .k { font-size: 12px; color: var(--ink-2); }
 .msg .q { font: 17px/1.5 var(--f-show); }

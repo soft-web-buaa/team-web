@@ -65,6 +65,7 @@ a { color: inherit; }
 .nav a { position: relative; display: flex; align-items: baseline; gap: 6px; padding: 7px 16px 8px; border-radius: 999px; text-decoration: none; font: 15px/1 var(--f-show); letter-spacing: .1em; color: var(--ink-2); transition: color .2s, background-color .2s; }
 .nav a i { font: 10px/1 var(--f-ui); font-style: normal; letter-spacing: .04em; opacity: .75; }
 .nav a:hover { color: var(--ink); }
+.nav a .dot { position: absolute; top: 4px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: #C8261A; box-shadow: 0 0 0 2px var(--paper-a); }
 .nav a.on { color: var(--paper); background: var(--ink); }
 .nav a.on::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 5px; height: 5px; border-radius: 50%; background: var(--scope); transform: translateX(-50%); }
 .clock { justify-self: end; display: flex; align-items: center; gap: 10px; }

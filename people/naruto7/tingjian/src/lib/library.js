@@ -29,6 +29,7 @@ export const L = reactive({
   hidden: [],                 // 对我隐藏的回声
   playing: null,              // 正在放的那张
   identity: loadIdentity(),
+  readAt: (() => { try { return localStorage.getItem('tj-read-at') || ''; } catch { return ''; } })(),   // 收件箱读到哪一刻（这台设备上）
   toast: '',
   version: 0,                 // 条目变了就加一（视图用它重算）
 });
@@ -397,3 +398,13 @@ export const ERA = [
   { y: 2012, when: '2012 年 5 月 15 日', text: '晨兴音乐厅落成首演。', src: 'https://baike.baidu.com/item/%E6%99%A8%E5%85%B4%E9%9F%B3%E4%B9%90%E5%8E%85', srcName: '百度百科' },
   { y: 2016, when: '2015–2018 年间', text: '北航之声的电台节目，片头的十秒留了六段。', audio: 'arc-radio-r01', srcName: '北航之声' },
 ];
+
+// ====================================================================================
+// 收件箱的已读（学黄泰霖原型的收件箱）：只记「读到哪一刻」，存在这台设备上；比它新的算未读
+// ====================================================================================
+export const unread = () => L.me.inbox.filter((x) => x.at > (L.readAt || '')).length;
+export function markRead() {
+  const t = L.me.inbox.reduce((m, x) => (x.at > m ? x.at : m), L.readAt || '');
+  L.readAt = t;
+  try { localStorage.setItem('tj-read-at', t); } catch { /* 隐私模式 */ }
+}
