@@ -7,6 +7,7 @@ import TimeView from './views/TimeView.vue';
 import MineView from './views/MineView.vue';
 import AboutView from './views/AboutView.vue';
 import LabView from './views/LabView.vue';
+import ShelfView from './views/ShelfView.vue';
 
 export const NAV = [
   { name: 'home', to: '/', label: '留声机', hint: '何处' },
@@ -23,6 +24,8 @@ const router = createRouter({
     { path: '/community', name: 'community', component: CommunityView, meta: { title: '社区', mode: 'community' } },
     { path: '/time', name: 'time', component: TimeView, meta: { title: '年轮', mode: 'time' } },
     { path: '/mine', name: 'mine', component: MineView, meta: { title: '我的', mode: 'mine' } },
+    // 唱片架盖满屏幕：舞台退进刻槽里、不画（mode: screen）
+    { path: '/shelf', name: 'shelf', component: ShelfView, meta: { title: '唱片架', mode: 'screen' } },
     { path: '/lab', name: 'lab', component: LabView, meta: { title: '样张', mode: 'home' } },
     { path: '/about', name: 'about', component: AboutView, meta: { title: '关于', mode: 'home' } },
     { path: '/:rest(.*)*', redirect: '/' },

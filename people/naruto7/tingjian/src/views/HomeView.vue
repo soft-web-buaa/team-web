@@ -12,6 +12,7 @@ import * as stage from '../stage/stage.js';
 import { ref } from 'vue';
 
 const close = ref(false);
+const base = import.meta.env.BASE_URL;
 const sameHour = computed(() => {
   void L.version;
   const h = clock.now, d = (e) => { const x = Math.abs(e.hour - h); return Math.min(x, 24 - x); };
@@ -38,7 +39,20 @@ function zoom() { close.value = !close.value; stage.zoomGroove(close.value); }
       <button type="button" class="btn small ghost" @click="shuffle()">随手放一张</button>
       <button type="button" class="btn small ghost" :aria-pressed="close" @click="zoom">{{ close ? '退回来' : '凑近看刻槽' }}</button>
     </div>
+    <RouterLink to="/shelf" class="crate-link">
+      <span class="mini" aria-hidden="true"><i v-for="k in 5" :key="k" :style="{ transform: `translateY(${-k * 2}px) rotate(${(k - 3) * 2}deg)`, background: `url(${base}sleeves/XY0${k}.jpg) center/cover` }"></i></span>
+      <span><b class="show">唱片架</b><em>十六个地方，每处一张唱片，翻一翻</em></span>
+    </RouterLink>
     <hr class="rule">
     <p class="fine">{{ tallyText(c) }}：{{ c.real }} 张真实录音，{{ c.archival }} 段史料，{{ c.concept }} 张示意（页面合成的声音，不算人数）。<RouterLink to="/about">数据从哪来</RouterLink></p>
   </Paper>
 </template>
+
+<style scoped>
+.crate-link { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding: 12px 14px 12px 12px; border-radius: 4px; border: 1px solid var(--hair); text-decoration: none; color: var(--ink); transition: border-color .2s, transform .2s var(--ease); }
+.crate-link:hover { border-color: var(--ink); transform: translateY(-1px); }
+.crate-link b { display: block; font-size: 17px; }
+.crate-link em { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.mini { position: relative; width: 46px; height: 46px; flex: none; }
+.mini i { position: absolute; inset: 6px 4px 0; border-radius: 2px; box-shadow: 0 2px 6px -2px rgb(0 0 0 / .4); transform-origin: 50% 100%; }
+</style>

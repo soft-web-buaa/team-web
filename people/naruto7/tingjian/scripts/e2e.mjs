@@ -129,6 +129,23 @@ t('数据地图：旧画法也还能切', (await p.$$('[aria-label="怎么画"] 
 await p.evaluate(() => { location.hash = '#/community'; });
 await sleep(1200);
 
+// —— 3c. 唱片架：翻、抽出来、放 ——
+console.log('— 3c. 唱片架');
+await p.evaluate(() => { location.hash = '#/shelf'; });
+await until(p, () => document.querySelectorAll('.shelf .sleeve').length === 16, null, 20000);
+t('唱片架：16 个地方各一只套子', (await p.$$('.shelf .sleeve')).length === 16);
+await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight');
+await sleep(500);
+t('唱片架：方向键往前翻', (await p.evaluate(() => [...document.querySelectorAll('.shelf .sleeve')].findIndex((x) => x.classList.contains('cur')))) === 2);
+await p.evaluate(() => document.querySelector('.shelf .sleeve.cur').click());
+await until(p, () => !!document.querySelector('.shelf .inner .tracks button'), null, 8000);
+const shelfPlace = await p.evaluate(() => document.querySelector('.shelf .inner h2').textContent.trim());
+await p.evaluate(() => document.querySelector('.shelf .inner .tracks button').click());
+await until(p, () => !!document.querySelector('.shelf .tracks button.on'), null, 15000);
+t('唱片架：抽出来点一首就放这里的', !!(await p.$('.shelf .tracks button.on')), shelfPlace);
+await p.evaluate(() => { location.hash = '#/'; });
+await sleep(1200);
+
 // —— 4. 年轮：拖时针，整站变色 ——
 console.log('— 4. 年轮：拖时针，整站变色');
 await p.evaluate(() => { location.hash = '#/time'; });
