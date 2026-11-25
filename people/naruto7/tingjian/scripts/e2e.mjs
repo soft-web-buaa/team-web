@@ -112,7 +112,7 @@ await until(p, () => window.__stage.mode === 'time');
 await sleep(1000);
 const before = await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper').trim());
 await p.$eval('.dayline input', (el) => { el.value = '22.5'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-await sleep(1600);
+await p.waitForFunction(() => document.documentElement.dataset.dark === '1', { timeout: 5000 }).catch(() => {});   // 渐变 0.9 秒；慢机器上留余量
 const after = await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper').trim());
 t('年轮：拖到 22:30，整站的纸变成夜里的颜色', before !== after && (await p.evaluate(() => document.documentElement.dataset.dark)) === '1');
 t('右上角写明在看别的钟点，给「回到此刻」', !!(await p.$('.clock .back')));

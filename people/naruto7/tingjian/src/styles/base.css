@@ -83,7 +83,7 @@ a { color: inherit; }
   transition: transform .5s var(--ease), opacity .4s;
 }
 .paper-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 28px 28px 120px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.paper.is-slim { width: 340px; bottom: auto; }
+.paper.is-slim { width: 340px; bottom: auto; max-height: calc(100vh - var(--top) - 24px); }
 .paper.is-slim .paper-scroll { padding-bottom: 28px; }
 .grip { display: none; }
 .kicker { font-size: 12px; letter-spacing: .14em; color: var(--ink-2); margin: 0 0 10px; }

@@ -3,7 +3,7 @@
 // 场景怎么「搭」在 scene.js（移植自刻声 plan3d.js）。页面（Vue）只通过下面导出的函数说话，不碰 three.js。
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { build, RIN, ROUT, RP, TILE_TOP, LABEL_R, TAU, COL, WAVE_FS, WAVE_W, WAVE_H } from './scene.js';
+import { build, setTier, tier as tierNow, TIERS, RIN, ROUT, RP, TILE_TOP, LABEL_R, TAU, COL, WAVE_FS, WAVE_W, WAVE_H } from './scene.js';
 import { cutWhole, GrooveCutter, TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { semesterBands, bandLayout, bandAt } from '../kesheng/web/plan3d/bands.js';
 import { rigFor } from '../kesheng/web/plan3d/light-rig.js';
@@ -14,7 +14,7 @@ import * as audio from '../lib/audio.js';
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let G = null;                 // scene.js 返回的句柄
 let controls = null, canvas = null, labelsEl = null;
-let built = false, revealed = false, lite = false;
+let built = false, revealed = false, lite = false, warmed = false;
 const cb = { place: () => {}, zone: () => {}, empty: () => {}, clip: () => {}, state: () => {} };
 export const on = (k, f) => { cb[k] = f; };
 
@@ -680,16 +680,28 @@ function updateTags() {
 // ====================================================================================
 // 每帧
 // ====================================================================================
-const quality = { samples: [], last: 0, after: Infinity, median: null };
+// —— 画质：按实测的帧时降档（scene.js TIERS）。过场里不量；量的是这一档稳定下来之后的 45 帧 ——
+//   起点：独显 high、其余 mid、软渲染与触屏 low。太慢（中位数 > 40 ms）降一档，再量。只降不升：屏幕刷新率把帧时封在 16.7 ms，量不出余量。
+//   落定的档记在本机（同一块显卡），下次从它开始，照样会降
+const quality = { samples: [], last: 0, after: Infinity, median: null, pinned: false };
+const LADDER = ['low', 'mid', 'high'];
+let gpuName = '';
+const strongGpu = () => /NVIDIA|GeForce|RTX|Quadro|Radeon RX|Radeon Pro|Arc A|Apple M\d (Pro|Max|Ultra)/i.test(gpuName);
+function remember(t) { try { localStorage.setItem('tj-tier', JSON.stringify({ t, gpu: gpuName })); } catch { /* 隐私模式 */ } }
+function goTier(t) {
+  setTier(t); lite = t === 'low'; resizeNow = true;
+  quality.samples = []; quality.last = 0; quality.after = performance.now() + 1500;
+}
 function watchFrames(now) {
-  if (lite || now < quality.after || quality.samples.length >= 45 || shot) { quality.last = now; return; }
+  if (quality.pinned || now < quality.after || shot || quality.samples.length >= 45) { quality.last = now; return; }
   if (quality.last) quality.samples.push(now - quality.last);
   quality.last = now;
-  if (quality.samples.length === 45) {
-    const med = [...quality.samples].sort((a, b) => a - b)[22];
-    quality.median = Math.round(med);
-    if (med > 40) { lite = true; G.gtao.enabled = false; G.renderer.setPixelRatio(1); G.composer.setPixelRatio(1); resizeNow = true; }
-  }
+  if (quality.samples.length < 45) return;
+  const med = [...quality.samples].sort((a, b) => a - b)[22];
+  quality.median = Math.round(med);
+  const i = LADDER.indexOf(tierNow());
+  if (med > 40 && i > 0) { goTier(LADDER[i - 1]); return; }
+  remember(tierNow());
 }
 let resizeNow = true, lastW = 0, lastH = 0;
 function resize() {
@@ -841,6 +853,7 @@ function frame(now) {
   G.tiltH.uniforms.h.value = tilt / W;
   G.tiltV.uniforms.v.value = (tilt / W) * W / Math.max(1, canvas.clientHeight);
   G.tiltH.uniforms.r.value = G.tiltV.uniforms.r.value = focusR;
+  if (S.mode === 'screen' && warmed && !shot) return;   // 屏风盖着画布：不画（进站时 App 先换模式再拉镜头）
   G.composer.render();
   // 选择性聚焦（学 Confused-Tree 声景校园的双层画法，但在同一块画布里）：只画第 1 层（地点楼、台座、波纹），清掉深度、不画背景、不重画阴影
   let anyLift = false;
@@ -871,18 +884,24 @@ let tilt = 0.5, focusR = 0.5;
 export async function init(canvasNode, labelsNode, campus) {
   canvas = canvasNode; labelsEl = labelsNode;
   const q = new URLSearchParams(location.search).get('q');
-  lite = q === 'lite';
   try {
     const probe = document.createElement('canvas').getContext('webgl2');
     if (!probe) throw new Error('no webgl2');
     const dbg = probe.getExtension('WEBGL_debug_renderer_info');
-    const name = dbg ? String(probe.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
-    if (q !== 'full' && /SwiftShader|llvmpipe|Software/i.test(name)) lite = true;   // 软渲染：直接用省电档
+    gpuName = dbg ? String(probe.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+    probe.getExtension('WEBGL_lose_context')?.loseContext();
   } catch { return false; }
-  // 建场景要占住主线程一两秒：先让浏览器把屏风画出来
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  // 画质档：网址指定（不再自动降）> 本机记住的（同一块显卡）> 猜
+  let t = { full: 'high', mid: 'mid', lite: 'low' }[q] || null;
+  if (t) quality.pinned = true;
+  if (!t) { try { const m = JSON.parse(localStorage.getItem('tj-tier') || 'null'); if (m && m.gpu === gpuName && TIERS[m.t]) t = m.t; } catch { /* 没记过 */ } }
+  if (!t) t = /SwiftShader|llvmpipe|Software/i.test(gpuName) || matchMedia('(pointer: coarse)').matches ? 'low' : strongGpu() ? 'high' : 'mid';
+  lite = t === 'low';
+  // 建场景、编译着色器都在屏风后面做，分几步，每步之间把主线程让给屏风（盘在转、按钮要响应）
+  const pause = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  await pause();
   await document.fonts.load('30px "Zhuque"').catch(() => {});
-  G = build(canvas, campus, { lite });
+  G = await build(canvas, campus, { tier: t, pause });
   controls = new OrbitControls(G.camera, canvas);
   G.camera.far = 20000; G.camera.updateProjectionMatrix();
   Object.assign(controls, { enablePan: false, enableDamping: true, dampingFactor: 0.08, minPolarAngle: 0.32, maxPolarAngle: 1.18, minDistance: 18, maxDistance: 14000, rotateSpeed: 0.6, zoomSpeed: 0.7 });
@@ -900,10 +919,11 @@ export async function init(canvasNode, labelsNode, campus) {
   resize();
   applyPose(S.mode === 'screen' ? grooveClose() : (POSES[S.mode] || POSES.home)());
   controls.update();
+  await warm(pause);
   document.addEventListener('visibilitychange', () => { visible = !document.hidden; lastNow = 0; });
   requestAnimationFrame(frame);
   if (pendingReveal) { const p = pendingReveal; pendingReveal = null; reveal(p); }
-  window.__stage = { get mode() { return S.mode; }, get place() { return S.place; }, get frames() { return frames; }, get flying() { return !!shot; }, get lite() { return lite; }, get quality() { return quality.median; },
+  window.__stage = { get mode() { return S.mode; }, get place() { return S.place; }, get frames() { return frames; }, get flying() { return !!shot; }, get lite() { return lite; }, get tier() { return tierNow(); }, get quality() { return quality.median; }, get warmed() { return warmed; },
     shows, get season() { return seasonCur; }, get pos() { return position(); }, get playing() { return playing(); }, get clip() { return current && current.e.id; },
     heroLift: (pid) => G.heroObj.get(pid)?.lift ?? null, column: (pid) => G.pinObj.get(pid)?.h ?? null, get revealed() { return revealed; },
     pinScreen: (pid) => { const o = G.pinObj.get(pid); const v = o.group.position.clone().setY(o.group.position.y + o.head.position.y - 2).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
@@ -911,7 +931,39 @@ export async function init(canvasNode, labelsNode, campus) {
     dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }) };
   return true;
 }
+/** 预编译：第一帧要编译约 50 个着色器（实测核显上 3 秒 + 1.5 秒卡死）。
+ *  先按真实的渲染目标异步编译场景材质（不卡主线程），再画一帧很小的，把阴影深度和后期的着色器编完；然后才开始画。 */
+async function warm(pause) {
+  const r = G.renderer;
+  try {
+    r.setRenderTarget(G.composer.renderTarget1);
+    await r.compileAsync(G.scene, G.camera);
+  } catch { /* 不支持并行编译：退回第一帧里同步编 */ }
+  r.setRenderTarget(null);
+  await pause();
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  // 后期各道的材质也异步编（它们画进半浮点的渲染目标，和真画时一样）
+  try {
+    const tmp = new G.THREE.Scene(), quad = new G.THREE.PlaneGeometry(2, 2), seen = new Set();
+    for (const pass of G.composer.passes) for (const v of Object.values(pass)) {
+      const list = Array.isArray(v) ? v : [v];
+      for (const m of list) if (m && m.isMaterial && !seen.has(m)) { seen.add(m); tmp.add(new G.THREE.Mesh(quad, m)); }
+    }
+    r.setRenderTarget(G.composer.renderTarget1);
+    await r.compileAsync(tmp, G.camera);
+    r.setRenderTarget(null);
+    quad.dispose();
+  } catch { r.setRenderTarget(null); }
+  await pause();
+  // 再画一帧很小的：剩下的（阴影深度、画到屏幕上的最后一道）在这一帧里编完
+  r.setSize(48, 30, false); G.composer.setSize(48, 30);
+  G.composer.render();
+  resizeNow = true; lastW = 0; void w; void h;
+  resize();
+  warmed = true;
+}
 export const isBuilt = () => built;
+export const tier = () => tierNow();
 export const isLite = () => lite;
 /** 凑近看刻槽 / 退回来。 */
 export function zoomGroove(inOut) {

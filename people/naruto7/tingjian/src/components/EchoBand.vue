@@ -53,7 +53,7 @@ const src = (x) => (x.photo && x.photo.id ? photoUrl(x.photo.id, 'thumb') : null
       <i class="head" :style="{ left: `${(p * 100).toFixed(2)}%` }" aria-hidden="true"></i>
       <button v-for="(x, i) in list" :key="x.id" type="button" class="pin" :class="{ mine: x.mine, on: i === active, ph: x.photo }" :style="{ left: `${((x.t / sec) * 100).toFixed(2)}%` }"
         :aria-label="`${x.t.toFixed(1)} 秒：${x.text}`" @click="seekTo(x)"></button>
-      <i v-if="open" class="ghost" :style="{ left: `${((at / sec) * 100).toFixed(2)}%` }" aria-hidden="true"></i>
+      <i v-if="open" class="aim" :style="{ left: `${((at / sec) * 100).toFixed(2)}%` }" aria-hidden="true"></i>
     </div>
     <div class="say" aria-live="polite">
       <template v-if="now">
@@ -103,7 +103,7 @@ const src = (x) => (x.photo && x.photo.id ? photoUrl(x.photo.id, 'thumb') : null
 .pin.ph::after { border-radius: 2px; }
 .pin.mine::after { background: var(--scope); border-color: var(--scope); }
 .pin.on::after { transform: scale(1.35); background: var(--ink); }
-.ghost { position: absolute; top: -8px; bottom: -4px; width: 2px; margin-left: -1px; background: repeating-linear-gradient(var(--ink) 0 3px, transparent 3px 6px); }
+.aim { position: absolute; top: -8px; bottom: -4px; width: 2px; margin-left: -1px; background: repeating-linear-gradient(var(--ink) 0 3px, transparent 3px 6px); }
 .say { display: flex; gap: 10px; align-items: center; min-height: 54px; }
 .say p { margin: 0; }
 .q { font: 17px/1.5 var(--f-show); display: block; }

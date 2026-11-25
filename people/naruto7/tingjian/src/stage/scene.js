@@ -138,15 +138,25 @@ const GrainShader = {
       gl_FragColor = c;
     }`,
 };
-function buildComposer(lite) {
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: lite ? 0 : 4 });
+// —— 画质档：同一台唱机，三档只差像素比、抗锯齿、环境光遮蔽、阴影贴图（2026-11-25 在 AMD 610M 核显上实测）——
+//   high：像素比 ≤1.5、4× MSAA、环境光遮蔽、4096 阴影（独显）
+//   mid ：像素比 ≤1.25、无 MSAA、无环境光遮蔽、2048 阴影（核显：1440×900 下 50–60 帧；high 在同一台上只有 8–20 帧）
+//   low ：像素比 0.75、1024 阴影（软渲染、很弱的手机）
+export const TIERS = {
+  high: { dpr: 1.5, msaa: 4, ao: true, shadow: 4096 },
+  mid: { dpr: 1.25, msaa: 0, ao: false, shadow: 2048 },
+  low: { dpr: 0.75, msaa: 0, ao: false, shadow: 1024 },
+};
+let tierNow = 'mid';
+function buildComposer(t) {
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: t.msaa });
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   gtao = new GTAOPass(scene, camera, 1, 1, undefined,
     { radius: 14, distanceExponent: 1.4, thickness: 12, scale: 1.25, samples: 16, screenSpaceRadius: false },
     { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
   gtao.blendIntensity = 0.9;
-  gtao.enabled = !lite;
+  gtao.enabled = t.ao;
   composer.addPass(gtao);
   bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.3, 0.35, 1.6);
   composer.addPass(bloom);
@@ -157,13 +167,20 @@ function buildComposer(lite) {
   composer.addPass(new OutputPass());
   composer.addPass(new ShaderPass(GrainShader));
 }
-/** 省电档：关掉环境光遮蔽、像素比降到 1。 */
-export function goLite() {
-  gtao.enabled = false;
-  renderer.setPixelRatio(1);
-  composer.setPixelRatio(1);
-  composer.passes.at(-1).uniforms.uRes.value.set(canvasEl.clientWidth, canvasEl.clientHeight);
+const dprOf = (t) => Math.min(t.dpr, Math.max(0.75, devicePixelRatio || 1));
+/** 换画质档（不重建场景）：像素比、MSAA、环境光遮蔽、阴影贴图。调用方负责之后重设尺寸。 */
+export function setTier(name) {
+  const t = TIERS[name];
+  if (!t || name === tierNow) return tierNow;
+  tierNow = name;
+  gtao.enabled = t.ao;
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) if (rt.samples !== t.msaa) { rt.samples = t.msaa; rt.dispose(); }
+  if (sun.shadow.mapSize.x !== t.shadow) { sun.shadow.mapSize.set(t.shadow, t.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+  renderer.setPixelRatio(dprOf(t));
+  composer.setPixelRatio(dprOf(t));
+  return tierNow;
 }
+export const tier = () => tierNow;
 // —— 立面：窗是印在卡纸上的（不开洞）。每个顶点带 aFac = [层高, 开间, 样式, 种子]（cardBuilding 写），按 OSM 的层数排窗。
 //      白天是灰蓝的油墨窗；入夜按比例亮起暖光。整张纸带一层很淡的纤维纹（轻微不均）。
 //      样式：0 普通窗格 / 1 五十年代（窄高窗 + 壁柱 + 勒脚）/ 2 新主楼（横向带窗）/ 3 住宅（小窗 + 阳台线）/ 4 不印窗
@@ -1503,23 +1520,28 @@ function armTo(r) {
   return T;
 }
 
-/** 搭起整台唱机。返回舞台要用的全部句柄。lite = 省电档（软渲染、手机）。 */
-export function build(canvas, campusData, { lite = false } = {}) {
+/** 搭起整台唱机。返回舞台要用的全部句柄。tier = 画质档（见 TIERS）。
+ *  分几步搭，每步之间让出主线程（pause），屏风上的盘和按钮在搭的时候照常动。 */
+export async function build(canvas, campusData, { tier: tn = 'mid', pause = async () => {} } = {}) {
   canvasEl = canvas;
   campus = campusData;
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite, alpha: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(lite ? 1 : Math.min(2, devicePixelRatio || 1));
+  tierNow = TIERS[tn] ? tn : 'mid';
+  const t = TIERS[tierNow];
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(dprOf(t));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.05;
+  await pause();
   pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = studioEnv(pmrem);
+  await pause();
   hemi = new THREE.HemisphereLight(0xf2f4f3, 0x24304a, 0.55);
   scene.add(hemi);
   sun = new THREE.DirectionalLight(0xfffcf4, 2.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(lite ? 2048 : 4096, lite ? 2048 : 4096);
+  sun.shadow.mapSize.set(t.shadow, t.shadow);
   Object.assign(sun.shadow.camera, { left: -1450, right: 1450, top: 1450, bottom: -1450, near: 100, far: 4200 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 1.2;
@@ -1527,10 +1549,12 @@ export function build(canvas, campusData, { lite = false } = {}) {
   sun.layers.enable(1); hemi.layers.enable(1);   // 第 1 层（地点楼）也要被同一套光照着
   buildBackdrop();
   buildPlatter();
+  await pause();
   buildCampus();
+  await pause();
   buildPins();
   buildCarriage();
-  buildComposer(lite);
+  buildComposer(t);
   return {
     THREE, scene, camera, renderer, composer, gtao, bloom, tiltH, tiltV, sun, hemi, pmrem, labelMat, platterMat, grooveTex, waveTex, inscTex, inscCanvas,
     zoneObj, pinObj, heroObj, pickables, ripples, nightMats, forest, seasonal, snowU, U, rim, arm, contact, needleTip, ARM, STUDIO, PLINTH,
