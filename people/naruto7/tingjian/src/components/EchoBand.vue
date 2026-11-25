@@ -63,7 +63,7 @@ const src = (x) => (x.photo && x.photo.id ? photoUrl(x.photo.id, 'thumb') : null
       <p v-else class="fine">{{ list.length ? `这张上钉着 ${list.length} 句话，放到那一秒会浮上来。` : `「${title(e)}」上还没有话。` }}</p>
     </div>
     <div class="row">
-      <button v-if="!open" type="button" class="btn small" @click="begin">钉一句话</button>
+      <button v-if="!open && e && e.tier !== 'mix'" type="button" class="btn small" @click="begin">钉一句话</button>
       <button v-if="list.length" type="button" class="btn small ghost" :aria-expanded="all" @click="all = !all">{{ all ? '收起' : `全部 ${list.length} 句` }}</button>
     </div>
     <form v-if="open" class="form" @submit.prevent="send">

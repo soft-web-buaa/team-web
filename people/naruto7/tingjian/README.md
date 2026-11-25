@@ -20,11 +20,11 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 
 ## 检查
 
-| 命令 | 查什么 | 2026-11-24 的结果 |
+| 命令 | 查什么 | 2026-11-25 的结果 |
 |---|---|---|
-| `npm run check:api` | 接口的规矩：校验、限频、心事盘与时间胶囊的过滤、照片先审后显与去 EXIF、举报收起、真删、云函数的请求转换 | 73 项通过（含社区 30 项） |
+| `npm run check:api` | 接口的规矩：校验、限频、心事盘与时间胶囊的过滤、照片先审后显与去 EXIF、举报收起、真删、云函数的请求转换 | 90 项通过（含社区 30 项、合辑 17 项） |
 | `npm run check:contrast` | 全天按 0.05 小时一步扫：正文 ≥ 7:1、次级 ≥ 4.5:1、细线 ≥ 3:1 | 最低 7.01 / 4.60 / 3.00 |
-| `npm run e2e` | 浏览器主路径：屏风、进楼、社区光柱、拖时针变色、假麦克风刻一张、钉一句、另一个浏览器环境看得到、真删、手机宽度 | 44 项通过（含社区 10 项），控制台与网络问题 0 |
+| `npm run e2e` | 浏览器主路径：屏风、进楼、社区光柱、拖时针变色、假麦克风刻一张、钉一句、另一个浏览器环境看得到、真删、手机宽度 | 56 项通过（含社区 10 项、合辑 10 项），控制台与网络问题 0 |
 | `node scripts/shots.mjs` | 11 张截图（5 个钟点、5 个板块、手机），在 `.e2e/shots/` | 控制台与网络问题 0 |
 
 都只在这台 Windows 的无头 Chrome（软件渲染，一秒两三帧）和 Node 26 上跑过。真机帧率、iPhone Safari、读屏器没测。
@@ -36,6 +36,7 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 | `src/stage/scene.js` | 三维唱机的「搭」：唱片、刻纹、唱臂、卡纸校园（移植自刻声 plan3d.js），加上可提起的地点楼和社区光柱 |
 | `src/stage/stage.js` | 三维唱机的「演」：钟点光照、机位与过场预算、楼的提起落回、光柱、搓盘、刻 |
 | `src/lib/clock.js` | 钟点：全站唯一的颜色来源 |
+| `src/lib/albums.js` | 合辑：官方征集与大家建的合辑、往里放一段、一段接一段、叠成一张（学黄泰霖原型的主题合辑与共建唱片） |
 | `src/lib/library.js` | 馆藏：三层素材、云上的盘与回声、发件箱、校史时间线（每条带出处） |
 | `src/components/Screen.vue` | 屏风 |
 | `src/views/` | 四个板块 + 地点 + 关于 |
@@ -46,7 +47,7 @@ npm run serve            # 构建好的页面 + /api，http://127.0.0.1:8790 ；
 ## 上云（CloudBase）
 
 1. 在 `.env` 填 `TCB_ENV_ID`、`TCB_SECRET_ID`、`TCB_SECRET_KEY`（照 `.env.example`；`.env` 不进仓库）。
-2. 数据库：2026-10-30 以后新建的环境是 PostgreSQL，文档型接口要靠「文档插件」。部署脚本的 `db` 步骤会开插件、建 12 个集合（discs、echoes、photos、heard、favs、reports、posts、replies、reacts、topics、relays、files）。声音和照片也存进数据库的 `files` 集合，不走云存储：新环境的云存储要另建存储桶、另配服务端密钥。子用户要有云开发、云函数、对象存储三项权限（对象存储给静态托管用）。
+2. 数据库：2026-10-30 以后新建的环境是 PostgreSQL，文档型接口要靠「文档插件」。部署脚本的 `db` 步骤会开插件、建 14 个集合（discs、echoes、photos、heard、favs、reports、posts、replies、reacts、topics、relays、albums、tracks、files）。声音和照片也存进数据库的 `files` 集合，不走云存储：新环境的云存储要另建存储桶、另配服务端密钥。子用户要有云开发、云函数、对象存储三项权限（对象存储给静态托管用）。
 3. `npm run build && npm run deploy:cloudbase`：页面进静态托管，接口进云函数 `api`，挂在同域 `/api`。
 4. 云函数的环境变量设 `KS_ADMIN_TOKEN`（审核口令），照片才有人放行。
 

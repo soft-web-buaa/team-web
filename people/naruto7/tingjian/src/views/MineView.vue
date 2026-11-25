@@ -6,6 +6,8 @@ import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
 import RingWood from '../components/RingWood.vue';
 import PostCard from '../components/PostCard.vue';
+import AlbumShelf from '../components/AlbumShelf.vue';
+import { A, refreshAlbums } from '../lib/albums.js';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
 import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
@@ -14,14 +16,16 @@ const router = useRouter();
 const tab = ref('discs');
 const mine = computed(() => { void L.version; return L.entries.filter((e) => e.mine).slice().reverse(); });
 const favs = computed(() => L.me.favs.map(entryById).filter(Boolean));
-const inboxAll = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null, fresh: x.at > (L.readAt || '') })).filter((x) => x.e || x.postId));
+const inboxAll = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null, fresh: x.at > (L.readAt || '') })).filter((x) => x.e || x.postId || x.albumId));
 // 类型：声音上的（钉的话、也听过）、帖子上的（回复、抱抱、我也是）
-const KINDS = [['all', '全部'], ['sound', '声音上的', ['echo', 'heard']], ['post', '帖子上的', ['reply', 'hug', 'same']]];
+const KINDS = [['all', '全部'], ['sound', '声音上的', ['echo', 'heard']], ['post', '帖子上的', ['reply', 'hug', 'same']], ['album', '合辑里的', ['track']]];
 const kind = ref('all');
 const inbox = computed(() => { const k = KINDS.find((x) => x[0] === kind.value); return k[2] ? inboxAll.value.filter((x) => k[2].includes(x.kind)) : inboxAll.value; });
 const myPosts = computed(() => { void C.version; return C.posts.filter((p) => p.mine); });
-const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '抱了抱你', same: '说「我也是」' };
+const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '抱了抱你', same: '说「我也是」', track: '往你的合辑里放了一段' };
+const together = computed(() => { void A.version; return A.list.filter((a) => a.mine || a.joined).length; });
 function openMsg(x) {
+  if (x.kind === 'track') { tab.value = 'albums'; router.push({ path: '/mine', query: { album: x.albumId } }); return; }
   if (x.postId) router.push({ path: '/community', query: { post: x.postId } });
   else play(x.e, { seek: x.kind === 'echo' ? Math.max(0, x.t - 0.4) : null });
 }
@@ -48,7 +52,8 @@ async function del(e) {
   confirmId.value = null;
   if (await deleteDisc(e)) say('删掉了。云上的声音、钉在上面的话一并删了。');
 }
-onMounted(() => { refresh(); initCommunity(); });
+onMounted(() => { refresh(); initCommunity(); refreshAlbums(); });
+if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.value = 'albums';
 </script>
 
 <template>
@@ -58,7 +63,7 @@ onMounted(() => { refresh(); initCommunity(); });
     <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}</p>
 
     <div class="row" role="tablist" aria-label="我的">
-      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
+      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['albums', `共建 ${together || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
     </div>
 
     <section v-if="tab === 'discs'">
@@ -85,6 +90,10 @@ onMounted(() => { refresh(); initCommunity(); });
       <p v-if="!myPosts.length" class="fine" style="margin-top: 14px">还没发过帖。去<RouterLink to="/community">社区</RouterLink>写一帖。</p>
     </section>
 
+    <section v-else-if="tab === 'albums'">
+      <AlbumShelf only="mine" />
+    </section>
+
     <section v-else-if="tab === 'inbox'">
       <div class="bar">
         <div class="row" role="radiogroup" aria-label="回应的类型">
@@ -97,7 +106,7 @@ onMounted(() => { refresh(); initCommunity(); });
           <button type="button" class="msg" @click="openMsg(x)">
             <span class="k">{{ KIND[x.kind] || x.kind }}</span>
             <span v-if="x.text" class="q">「{{ x.text }}」</span>
-            <span class="m">{{ x.e ? `在你的「${title(x.e)}」${x.kind === 'echo' ? `第 ${x.t.toFixed(1)} 秒` : ''}` : '在社区，你的帖子或回复下面' }}{{ x.author && signature(x.author) !== '未落款' ? ` · ${signature(x.author)}` : '' }} · {{ x.at.slice(0, 10) }}</span>
+            <span class="m">{{ x.kind === 'track' ? `「${x.albumName}」${x.e ? ` · ${title(x.e)}` : ''}` : x.e ? `在你的「${title(x.e)}」${x.kind === 'echo' ? `第 ${x.t.toFixed(1)} 秒` : ''}` : '在社区，你的帖子或回复下面' }}{{ x.author && signature(x.author) !== '未落款' ? ` · ${signature(x.author)}` : '' }} · {{ x.at.slice(0, 10) }}</span>
           </button>
         </li>
       </ol>

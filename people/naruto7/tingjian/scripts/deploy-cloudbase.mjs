@@ -16,7 +16,7 @@ if (!fs.existsSync(path.join(root, 'dist/index.html'))) { console.error('先 npm
 const hide = (s) => String(s).split(env.TCB_SECRET_ID).join('［隐］').split(env.TCB_SECRET_KEY).join('［隐］');
 const only = process.argv.slice(2);              // 可以只部署一部分：fn / db / route / web
 const want = (k) => !only.length || only.includes(k);
-export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays', 'files'];
+export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays', 'albums', 'tracks', 'files'];
 
 const app = new CloudBase({ secretId: env.TCB_SECRET_ID, secretKey: env.TCB_SECRET_KEY, envId: env.TCB_ENV_ID });
 const step = async (name, fn) => {

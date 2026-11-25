@@ -7,6 +7,7 @@ import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
 import RingWood from '../components/RingWood.vue';
 import EchoBand from '../components/EchoBand.vue';
+import AddToAlbum from '../components/AddToAlbum.vue';
 import { L, atPlace, placeLine, play, isPublic, toggleHeard, toggleFav, isFav, title } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
 
@@ -58,6 +59,7 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
       <div v-if="playingHere.tier !== 'archival'" class="row" style="margin-top: 12px">
         <button type="button" class="btn small" :class="{ on: playingHere.heardByMe }" @click="toggleHeard(playingHere)">我也听过{{ playingHere.heard ? ` · ${playingHere.heard}` : '' }}</button>
         <button type="button" class="btn small ghost" :aria-pressed="isFav(playingHere)" @click="toggleFav(playingHere)">{{ isFav(playingHere) ? '已收藏' : '收藏' }}</button>
+        <AddToAlbum :e="playingHere" />
       </div>
     </template>
 

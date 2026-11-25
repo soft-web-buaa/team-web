@@ -5,7 +5,8 @@
 //   接力：一人一棒，链从第一棒排到最后一棒
 //   多机位：同一个地方、前后半小时里的几段录音，自动归成「一场」，切机位从同一秒接着放
 //   看板：心情的共鸣、地点 × 钟点、舞台上光柱的口径
-//   声音：随手遇见、合辑、钉在某一秒的话
+//   合辑：官方征集的和大家建的合辑，一段接一段听或叠成一张（学黄泰霖原型的主题合辑与共建唱片）
+//   声音：随手遇见、钉在某一秒的话
 // 页面状态放在网址里（?tab=&topic=&post=），分享出去、按 F5 都还在原处。
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -16,6 +17,8 @@ import PostCard from '../components/PostCard.vue';
 import PostThread from '../components/PostThread.vue';
 import Compose from '../components/Compose.vue';
 import DataPanel from '../components/DataPanel.vue';
+import AlbumShelf from '../components/AlbumShelf.vue';
+import { playQueue, A, albumById, itemsOf } from '../lib/albums.js';
 import { L, columns, isPublic, play, entryById, title, echoByline, refresh as refreshLib, whenText, byline } from '../lib/library.js';
 import { C, init, refresh, feed, topicById, topicCount, chains, scenes, sameSlot, moodTally, moodPlaces, heat, loadStats, ago } from '../lib/community.js';
 import { ui } from '../lib/ui.js';
@@ -24,7 +27,7 @@ import { hourColor } from '../lib/wave.js';
 import * as stage from '../stage/stage.js';
 
 const route = useRoute(), router = useRouter();
-const TABS = [['square', '广场'], ['topics', '话题'], ['relay', '接力'], ['scene', '多机位'], ['board', '看板'], ['sound', '声音']];
+const TABS = [['square', '广场'], ['topics', '话题'], ['relay', '接力'], ['scene', '多机位'], ['albums', '合辑'], ['board', '看板'], ['sound', '声音']];
 const tab = computed(() => route.query.tab || 'square');
 const view = computed(() => (route.query.map === 'data' ? 'data' : 'plain'));   // 原始地图 / 数据地图（学黄泰霖原型）
 const topic = computed(() => route.query.topic || null);
@@ -68,8 +71,14 @@ const LAYERS = [
   { id: 'real', name: '只数真实', test: (e) => e.tier === 'real', say: '只数同学亲手刻的。' },
 ];
 const layer = ref('all');
-function paint() { if (view.value === 'data') return; const L0 = LAYERS.find((x) => x.id === layer.value); stage.setColumns(columns((e) => isPublic(e) && e.tier !== 'archival' && L0.test(e))); }
-watch([layer, view, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true });
+// 打开一张合辑时，光柱只数这张合辑里的：一眼看出这张盘是从哪些地方凑起来的
+const albumOpen = computed(() => { void A.version; return tab.value === 'albums' && route.query.album ? albumById(route.query.album) : null; });
+function paint() {
+  if (view.value === 'data') return;
+  if (albumOpen.value) { const ids = new Set(itemsOf(albumOpen.value).map((x) => x.e.id)); stage.setColumns(columns((e) => ids.has(e.id))); return; }
+  const L0 = LAYERS.find((x) => x.id === layer.value); stage.setColumns(columns((e) => isPublic(e) && e.tier !== 'archival' && L0.test(e)));
+}
+watch([layer, view, albumOpen, () => A.version, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true });
 const moods = computed(() => { void C.version; void C.stats; return moodTally(); });
 const moodMax = computed(() => Math.max(1, ...moods.value.map((m) => m.real + m.demo)));
 const moodPick = ref(null);
@@ -81,16 +90,6 @@ const gridMax = computed(() => Math.max(1, ...[...grid.value.values()].flat()));
 const pub = computed(() => { void L.version; return L.entries.filter((e) => isPublic(e) && e.tier !== 'archival'); });
 const seed = ref(0);
 const meet = computed(() => { void seed.value; const a = pub.value.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, 4); });
-const SETS = [
-  { id: 'bell', name: '铃与叫号', say: '下课铃、闭馆广播、取餐叫号：学校用声音报时。', test: (e) => e.kind === 'signal' },
-  { id: 'night', name: '夜里的', say: '二十二点以后、五点以前。', test: (e) => e.hour != null && (e.hour >= 22 || e.hour < 5) },
-  { id: 'steps', name: '脚步与人流', say: '楼梯、连廊、拖着行李箱。', test: (e) => e.kind === 'move' },
-  { id: 'rooms', name: '房间的回响', say: '同一下拍手，在不同的屋子里拖出不同长度的尾巴。', test: (e) => e.kind === 'space' },
-  { id: 'sky', name: '风、雨、虫和鸟', say: '没有人声的十秒。', test: (e) => e.kind === 'nature' },
-  { id: 'real', name: '真人录的', say: '同学亲手刻的，每一张都有人、有地方、有时刻。', test: (e) => e.tier === 'real' },
-];
-const set = ref(null);
-const setList = computed(() => (set.value ? pub.value.filter(set.value.test).slice().reverse() : []));
 const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) })).filter((y) => y.e).slice(0, 12));
 </script>
 
@@ -156,7 +155,7 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
             </li>
             <li><button type="button" class="baton next" @click="go({ post: ch.at(-1).id })"><span class="n">+</span><span class="pl">接一棒</span></button></li>
           </ol>
-          <button type="button" class="link fine" @click="ch.forEach((x, i) => setTimeout(() => x.soundId && entryById(x.soundId) && play(entryById(x.soundId)), i * 10500))">从第一棒连着听</button>
+          <button type="button" class="link fine" @click="playQueue(ch.map((x) => x.soundId && entryById(x.soundId)), ch[0].relayRoot)">从第一棒连着听</button>
         </article>
       </section>
 
@@ -179,6 +178,11 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
             <button v-for="(e, i) in g" :key="e.id" type="button" class="cam" :class="{ on: cam === i }" @click="switchCam(g, i)"><DiscMini :e="e" :size="36" /><span>机位 {{ i + 1 }}</span><i>{{ title(e) }}</i></button>
           </div>
         </article>
+      </section>
+
+      <!-- 合辑 -->
+      <section v-else-if="tab === 'albums'">
+        <AlbumShelf />
       </section>
 
       <!-- 看板 -->
@@ -223,14 +227,7 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
         <p class="h3">随手遇见 <button type="button" class="link fine" @click="seed++">换一批</button></p>
         <p class="fine" style="margin-top: -4px">纯随机，没有推荐算法。</p>
         <ol class="discs"><DiscRow v-for="e in meet" :key="e.id" :e="e" /></ol>
-        <p class="h3">合辑</p>
-        <div class="sets">
-          <button v-for="s in SETS" :key="s.id" type="button" class="set" :class="{ on: set && set.id === s.id }" @click="set = set && set.id === s.id ? null : s"><b class="show">{{ s.name }}</b><span>{{ pub.filter(s.test).length }} 张</span></button>
-        </div>
-        <template v-if="set">
-          <p class="fine" style="margin-top: 12px">{{ set.say }} 合辑是按声音的种类和钟点自动归的。</p>
-          <ol class="discs"><DiscRow v-for="e in setList.slice(0, 30)" :key="e.id" :e="e" /></ol>
-        </template>
+        <p class="fine" style="margin-top: 18px">想把几段放在一起听，去<button type="button" class="link" @click="go({ tab: 'albums' })">合辑</button>。</p>
       </section>
       </template>
     </template>
@@ -242,9 +239,9 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
 .seg button { border: 0; background: none; padding: 6px 14px; border-radius: 999px; font: 14px var(--f-show); letter-spacing: .06em; color: var(--ink-2); }
 .seg button.on { background: var(--ink); color: var(--paper); }
 .tabs { display: flex; gap: 2px; margin: 4px -4px 0; overflow-x: auto; border-bottom: 1px solid var(--hair); scrollbar-width: none; }
-.tab { flex: none; padding: 9px 10px 10px; border: 0; background: none; font: 15px var(--f-show); letter-spacing: .06em; color: var(--ink-2); position: relative; }
+.tab { flex: none; padding: 9px 7px 10px; border: 0; background: none; font: 15px var(--f-show); letter-spacing: .02em; color: var(--ink-2); position: relative; }
 .tab.on { color: var(--ink); }
-.tab.on::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--ink); }
+.tab.on::after { content: ''; position: absolute; left: 7px; right: 7px; bottom: -1px; height: 2px; background: var(--ink); }
 .tab.on::before { content: ''; position: absolute; left: 50%; bottom: -4px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--scope); }
 .bar { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 6px; }
 .topic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

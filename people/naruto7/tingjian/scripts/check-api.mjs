@@ -138,6 +138,29 @@ t('接示例接力：根是示例链的第一棒，第 4 棒', dj.json.post.rela
   && (await call('GET', '/api/posts/ps-demo-r2?root=ps-demo-r1', null, A)).json.relay.length === 1);
 t('给未来的自己：封存期间作者本人也听不到', (await call('GET', '/api/discs/ds-test-0011/audio', null, A)).status === 403 || T > Date.parse('2027-06-01'));
 
+// —— 合辑与共建 ——
+const al0 = (await call('GET', '/api/albums', null, A)).json.albums;
+t('合辑：预置的几张都在，带种子', al0.length >= 5 && al0.every((a) => a.preset ? a.seeds.length > 0 : true));
+const ownA = await call('POST', '/api/albums', { id: 'al-test-0001', name: '三楼的雨', intro: '下雨那天三楼的走廊', author: { grade: '2024级' } }, A);
+t('建一张合辑：201', ownA.status === 201 && ownA.json.album.mine === true);
+t('同名的合辑：409', (await call('POST', '/api/albums', { id: 'al-test-0002', name: '三楼的雨' }, B)).status === 409);
+t('合辑名太短：400', (await call('POST', '/api/albums', { id: 'al-test-0003', name: '雨' }, B)).status === 400);
+t('合辑名里有链接：400', (await call('POST', '/api/albums', { id: 'al-test-0004', name: '看 www.x.com' }, B)).status === 400);
+t('预置合辑的编号不能抢：400', (await call('POST', '/api/albums', { id: 'al-baoshi', name: '抢一个' }, B)).status === 400);
+const tk1 = await call('POST', '/api/albums/al-test-0001/tracks', { id: 'tk-test-0001', soundId: 'concept-147', author: { name: '小雨' } }, B);
+t('别人往我的合辑里放一段：201', tk1.status === 201 && tk1.json.track.mine === true);
+t('同一段不能放两次：409', (await call('POST', '/api/albums/al-test-0001/tracks', { id: 'tk-test-0002', soundId: 'concept-147' }, C)).status === 409);
+t('预置合辑里的种子也不能重复放：409', (await call('POST', '/api/albums/al-baoshi/tracks', { id: 'tk-test-0003', soundId: 'concept-036' }, C)).status === 409);
+t('放一段没有的声音：400', (await call('POST', '/api/albums/al-baoshi/tracks', { id: 'tk-test-0004', soundId: 'xx' }, C)).status === 400);
+t('往预置合辑里放：201', (await call('POST', '/api/albums/al-baoshi/tracks', { id: 'tk-test-0005', soundId: 'concept-020' }, C)).status === 201);
+const one = (await call('GET', '/api/albums/al-test-0001', null, A)).json;
+t('合辑详情：一段、一个人，建的人能拿出别人的', one.tracks.length === 1 && one.album.people === 1 && one.tracks[0].canTake === true && one.tracks[0].mine === false);
+t('收件箱：有人往我的合辑里放了一段', (await call('GET', '/api/me', null, A)).json.inbox.some((x) => x.kind === 'track' && x.albumName === '三楼的雨'));
+t('不相干的人拿不出：403', (await call('DELETE', '/api/tracks/tk-test-0001', null, D)).status === 403);
+t('别人删不了我的合辑：403', (await call('DELETE', '/api/albums/al-test-0001', null, B)).status === 403);
+t('建的人拿出一段：200', (await call('DELETE', '/api/tracks/tk-test-0001', null, A)).status === 200);
+t('删合辑：里面的一并删', (await call('DELETE', '/api/albums/al-test-0001', null, A)).status === 200 && (await call('GET', '/api/albums/al-test-0001', null, A)).status === 404);
+
 // 云函数那一层：HTTP 访问服务的 event 进来，集成响应出去（和本机同一个 handle）
 const { toHttp } = await import('../cloudfunctions/api/handler.mjs');
 const fnMain = toHttp(api);

@@ -46,6 +46,8 @@ await shot('comm-thread', '?h=21.5#/community?post=ps-demo-01', { wait: 8000 });
 await shot('comm-topics', '?h=15#/community?tab=topics', { wait: 7000 });
 await shot('comm-relay', '?h=11.5#/community?tab=relay', { wait: 7000 });
 await shot('comm-board', '?h=9#/community?tab=board', { wait: 8000 });
+await shot('comm-albums', '?h=16#/community?tab=albums', { wait: 7000 });
+await shot('comm-album', '?h=7.5#/community?tab=albums&album=al-zaoba', { wait: 8000 });
 await shot('comm-scene', '?h=19#/community?tab=scene', { wait: 7000 });
 await shot('time', '?h=10#/time', { wait: 9000 });
 await shot('mine', '?h=13#/mine', { wait: 8000 });

@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue';
 import RingDial from '../components/RingDial.vue';
 import RingWood from '../components/RingWood.vue';
+import RingAlt from '../components/RingAlt.vue';
 import { L, isPublic, play } from '../lib/library.js';
 
 const base = computed(() => { void L.version; return L.entries.filter((e) => isPublic(e) && e.tier !== 'archival' && e.hour != null); });
@@ -22,7 +23,7 @@ const list = computed(() => SETS.find((s) => s.id === set.value).make(base.value
     <header>
       <div>
         <p class="kicker">样张 · 年轮的排法 · 给组长挑</p>
-        <h1 class="h1">同一份数据，三种画法</h1>
+        <h1 class="h1">同一份数据，六种画法</h1>
       </div>
       <div class="row" role="radiogroup" aria-label="数据">
         <button v-for="s in SETS" :key="s.id" type="button" role="radio" class="chip" :class="{ on: set === s.id }" :aria-checked="set === s.id" @click="set = s.id">{{ s.name }}</button>
@@ -30,6 +31,16 @@ const list = computed(() => SETS.find((s) => s.id === set.value).make(base.value
       </div>
     </header>
     <p class="fine">{{ list.length }} 张。加压的几组是把现有的示意盘复制、挪了钟点，只用来看排法撑不撑得住，不是数据。</p>
+    <div class="facts">
+      <p class="h3" style="margin-top: 14px">现在三处实际用的是哪种（C 自动，2026-11-25 用馆藏的 231 张示意盘量的）</p>
+      <ul class="fine">
+        <li>年轮板块（全站 231 张，8 个学年）：点放不下，长成纹。随机抽样，80 张以内全是点，100 张时 6/20 次变纹，130 张时 16/20 次。</li>
+        <li>地点页（每处 9 到 19 张）、我的（现在 0 张真实录音）：都是点，点的半径用到上限 4.2 像素。</li>
+        <li>纹原来点不了，只能看；现在点圈里某个位置，放这一圈里钟点最近的一张。D、E、F 三种都能点。</li>
+        <li>没定的：年轮板块那一张，用 B 纹（像树）、D 格子（最好读）还是 E 刻纹（和唱机同一个意象）。地点页和我的数据少，A 点都够用。</li>
+      </ul>
+      <p class="fine">数据地图的 15 种组合（3 样量 × 5 种画法）在 <RouterLink to="/community?map=data">社区 · 数据地图</RouterLink> 里切。</p>
+    </div>
     <div class="grid">
       <article>
         <h2 class="h3">现在的（旧）</h2>
@@ -51,6 +62,21 @@ const list = computed(() => SETS.find((s) => s.id === set.value).make(base.value
         <RingWood :list="list" :size="360" mode="auto" :playing-id="L.playing && L.playing.id" @pick="play" />
         <p class="fine">点放得下（不小于 2.4 像素）就用 A，放不下就长成 B。我推荐这个。</p>
       </article>
+      <article>
+        <h2 class="h3">D · 格子</h2>
+        <RingAlt :list="list" :size="360" mode="cells" :playing-id="L.playing && L.playing.id" @pick="play" />
+        <p class="fine">一圈一个学年、一格一小时，越深声音越多。多少张都不会叠，每一格都能点（放这一格里最新的一张）。像气象站的风玫瑰，最好读，也最不像树。</p>
+      </article>
+      <article>
+        <h2 class="h3">E · 刻纹</h2>
+        <RingAlt :list="list" :size="360" mode="groove" :playing-id="L.playing && L.playing.id" @pick="play" />
+        <p class="fine">一圈一个学年，每圈是一道沟，哪个钟点声音多沟就往外鼓。各圈用同一把尺，看得出哪一年多。每张是沟上一根短刺，可以点。和唱机的刻纹是一个意象。</p>
+      </article>
+      <article>
+        <h2 class="h3">F · 不分圈</h2>
+        <RingAlt :list="list" :size="360" mode="spiral" :playing-id="L.playing && L.playing.id" @pick="play" />
+        <p class="fine">半径就是日期，最里最早，一张一颗点；学年只是虚线。不会因为分圈而挤，但声音多了点还是会叠。</p>
+      </article>
     </div>
   </section>
 </template>
@@ -61,4 +87,6 @@ header { display: flex; justify-content: space-between; align-items: flex-end; g
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 28px; margin-top: 18px; }
 article { border-top: 1px solid var(--hair); padding-top: 4px; }
 .chip { text-decoration: none; }
+.facts ul { margin: 0 0 6px; padding-left: 18px; max-width: 880px; }
+.facts li { margin: 2px 0; }
 </style>

@@ -47,12 +47,20 @@ function ringAt(ev) {
   const x = (ev.clientX - s.left) * k - 10 - C, y = (ev.clientY - s.top) * k - 10 - C;
   const a = (Math.atan2(x, -y) + TAU) % TAU, r = Math.hypot(x, y);
   hover.value = grain.value.rings.find((g) => r >= at(g.inner, a) && r <= at(g.outer, a)) || null;
+  hoverA = a;
+}
+// 纹：点一圈里的某个位置，放这一圈里钟点离那儿最近的一张
+let hoverA = 0;
+function pickGrain() {
+  if (!hover.value || !hover.value.items.length) return;
+  const d = (e) => { const x = Math.abs((e.hour / 24) * TAU - hoverA); return Math.min(x, TAU - x); };
+  emit('pick', hover.value.items.reduce((a, b) => (d(b) < d(a) ? b : a)));
 }
 </script>
 
 <template>
   <figure class="wood" :class="chosen">
-    <svg :width="size" :height="size" viewBox="-10 -10 320 320" role="img" :aria-label="caption || `年轮：${total} 张，${yearsN} 个学年`" @pointermove="ringAt" @pointerleave="hover = null">
+    <svg :width="size" :height="size" viewBox="-10 -10 320 320" role="img" :aria-label="caption || `年轮：${total} 张，${yearsN} 个学年`" @pointermove="ringAt" @pointerleave="hover = null" @click="pickGrain">
       <!-- 钟面：四个钟点，二十四道很短的刻度 -->
       <g class="face" aria-hidden="true">
         <line v-for="h in 24" :key="h" :x1="C + Math.sin(((h - 1) / 24) * TAU) * (rOut + 6)" :y1="C - Math.cos(((h - 1) / 24) * TAU) * (rOut + 6)" :x2="C + Math.sin(((h - 1) / 24) * TAU) * (rOut + ((h - 1) % 6 ? 9 : 13))" :y2="C - Math.cos(((h - 1) / 24) * TAU) * (rOut + ((h - 1) % 6 ? 9 : 13))" />
@@ -82,7 +90,7 @@ function ringAt(ev) {
       <circle :cx="C" :cy="C" r="3" fill="#E6BE3A" />
     </svg>
     <figcaption class="fine">
-      <template v-if="hover">{{ ringLine(hover) }}</template>
+      <template v-if="hover">{{ ringLine(hover) }}<template v-if="chosen === 'grain'"> · 点一下放离这个钟点最近的一张</template></template>
       <template v-else-if="firstLast">{{ caption }}{{ caption ? ' ' : '' }}{{ total }} 张，最里一圈是 {{ yearLabel(firstLast[0]) }}，最外一圈是 {{ yearLabel(firstLast[1]) }}。角度是一天里的钟点，{{ chosen === 'grain' ? '哪个钟点声音多，那一段就厚；每一道细纹是一张。每一圈里浅的是秋季学期、深的是春季学期。' : '一颗点是一张，同一个钟点的往外堆。' }}</template>
       <template v-else>还没有一圈。</template>
     </figcaption>
@@ -97,6 +105,7 @@ function ringAt(ev) {
 .early { fill: var(--wash); stroke: var(--hair); stroke-width: .6; }
 .late { fill: var(--hair); }
 .hot .early, .hot .late { stroke: var(--ink); stroke-width: .8; }
+.grain svg { cursor: pointer; }
 .scar { fill: none; stroke: var(--line); stroke-width: .8; stroke-dasharray: 1 2.5; }
 .fibre { stroke: var(--ink); stroke-width: .8; opacity: .38; stroke-linecap: round; }
 .fibre.mine { stroke: #E6BE3A; opacity: 1; stroke-width: 1.4; }

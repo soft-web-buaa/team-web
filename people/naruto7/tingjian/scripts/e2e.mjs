@@ -240,7 +240,7 @@ await go(p, '?h=19#/mine');
 await sleep(2500);
 t('A 的「我的」：刻过一张', (await text(p, '.paper .h1')).startsWith('1 张'));
 const tabsM = await p.$$('.paper [role=tab]');
-await tabsM[3].click();   // 我刻的 / 收藏 / 我的帖子 / 回应我的 / 刻声卡
+await tabsM[4].click();   // 我刻的 / 收藏 / 我的帖子 / 共建 / 回应我的 / 刻声卡
 await sleep(500);
 t('A 的「回应我的」：有人也听过', (await text(p, '.paper')).includes('也听过'));
 await tabsM[0].click();
@@ -251,6 +251,47 @@ await delBtn.click(); await sleep(200); await delBtn.click();
 await sleep(2000);
 const left = await p.evaluate(async (id) => (await fetch(`/api/discs/${id}/audio`)).status, discId);
 t('A 真删：云上的声音取不到了', left === 404);
+
+// —— 7b. 合辑与共建 ——
+console.log('— 7b. 合辑与共建');
+await go(p, '?h=19#/community?tab=albums');
+await until(p, () => document.querySelectorAll('.shelf .al').length >= 5, null, 20000);
+t('合辑：架上有征集的五张', (await p.$$('.shelf .al')).length >= 5);
+await p.evaluate(() => document.querySelector('.shelf .al').click());
+await until(p, () => document.querySelectorAll('.shelf .tracks li').length >= 8, null, 20000);
+t('打开一张：学校用声音报时，8 段示意', (await p.$$('.shelf .tracks li')).length === 8 && (await text(p, '.shelf .h2')).includes('报时'));
+await p.evaluate(() => [...document.querySelectorAll('.shelf .acts .btn')].find((b) => b.textContent.includes('一段接一段')).click());
+await sleep(1500);
+t('一段接一段：按钮写着第几段', (await text(p, '.shelf .acts')).includes('第 1 / 8 段'));
+await p.evaluate(() => [...document.querySelectorAll('.shelf .acts .btn')].find((b) => b.textContent.includes('叠成一张')).click());
+await until(p, () => (document.querySelector('.deck') || {}).textContent?.includes('叠成一张'), null, 30000);
+t('叠成一张：正在放的是 8 个人的十秒', (await text(p, '.deck')).includes('8 个人的十秒'));
+await p.evaluate(() => [...document.querySelectorAll('.shelf .link')].find((b) => b.textContent.includes('所有合辑')).click());
+await sleep(500);
+await p.evaluate(() => [...document.querySelectorAll('.shelf .btn')].find((b) => b.textContent.includes('建一张合辑')).click());
+await p.type('.shelf .make input', '走查用的合辑');
+await p.click('.shelf .make button[type=submit]');
+await until(p, () => (document.querySelector('.shelf .h2') || {}).textContent === '走查用的合辑', null, 15000);
+const albumUrl = await p.evaluate(() => location.hash);
+t('建一张：进到这张合辑，网址里带着它', /album=al-/.test(albumUrl));
+const B2 = await browser.createBrowserContext();
+const r = await open(B2, `?h=20${albumUrl}`);
+await until(r, () => (document.querySelector('.shelf .h2') || {}).textContent === '走查用的合辑', null, 30000);
+t('别人点开邀请的网址：直接是这张合辑', (await text(r, '.shelf .h2')) === '走查用的合辑');
+await r.evaluate(() => [...document.querySelectorAll('.shelf .acts .btn')].find((b) => b.textContent.includes('放一段进去')).click());
+await until(r, () => document.querySelectorAll('.shelf .pick').length > 0, null, 15000);
+await r.click('.shelf .pick');
+await until(r, () => document.querySelectorAll('.shelf .tracks li').length === 1, null, 15000);
+t('B 放了一段进去：写着「我放的」', (await text(r, '.shelf .tracks')).includes('我放的'));
+await r.close();
+await go(p, '?h=19#/mine');
+await sleep(2500);
+await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('回应我的')).click());
+await sleep(500);
+t('A 的收件箱：有人往你的合辑里放了一段', (await text(p, '.paper .inbox')).includes('往你的合辑里放了一段'));
+await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('共建')).click());
+await sleep(500);
+t('A 的「共建」：列着我建的那张', (await text(p, '.paper .shelf')).includes('走查用的合辑'));
 
 // —— 8. 手机宽度 ——
 console.log('— 8. 手机宽度');

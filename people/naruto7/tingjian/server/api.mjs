@@ -19,12 +19,18 @@
 //   GET    /api/places/:placeId/photos        这个地点的照片印样
 //   GET    /api/me                            我的：我刻的（含心事盘和没到期的胶囊）、我收藏的、回应我的
 //   PUT    /api/me/favs/:discId  DELETE 同    收藏 / 取消
+//   GET    /api/albums                        合辑：官方征集的和用户建的，带段数、人数、我建的、我放过
+//   GET    /api/albums/:id                    一张合辑里云上的几段（示意的种子在页面里）
+//   POST   /api/albums                        建一张合辑：{ id, name, intro, author }
+//   POST   /api/albums/:id/tracks             放一段进去：{ id, soundId, author }
+//   DELETE /api/albums/:id  /api/tracks/:id   建的人删合辑；放的人或建的人拿出一段
 //   GET    /api/admin/pending                 审核：待审照片（请求头 x-ks-admin = 环境变量 KS_ADMIN_TOKEN）
 //   POST   /api/admin/photos/:id              { status: 'ok' | 'pending' | 'removed' }
 import { ECHO_MAX, NAME_MAX, CONSENT_VERSION, PHOTO, LIMITS, validateLine, validateField, cleanField } from '../src/kesheng/web/contract.js';
 import { inspectJpeg, cleanJpeg } from '../src/kesheng/web/jpeg-clean.js';
 import { hourOf, slotOfHour, semesterOf } from '../src/lib/when.js';
 import { PRESET_TOPICS, MOOD_IDS, POST, DEMO_POST_RE, SOUND_ID_RE } from '../src/lib/topics.js';
+import { PRESET_ALBUMS, ALBUM, ALBUM_ID_RE, TRACK_ID_RE } from '../src/lib/albums-preset.js';
 
 const KEY_RE = /^[0-9a-f]{16}$/;
 const ID = { disc: /^ds-[a-z0-9-]{6,40}$/, echo: /^ec-[a-z0-9-]{6,40}$/, photo: /^ph-[a-z0-9-]{6,40}$/ };
@@ -195,6 +201,9 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
             if (myPosts.has(r.postId) || (r.parentId && myReplies.has(r.parentId))) inbox.push({ kind: 'reply', postId: r.postId, at: r.at, text: r.text, author: author(r.author) });
           }
           for (const x of await store.list('reacts')) if (x.key !== key && (myPosts.has(x.target) || myReplies.has(x.target))) inbox.push({ kind: x.type, target: x.target, postId: myPosts.has(x.target) ? x.target : myReplyPost.get(x.target), at: x.at });
+          // 合辑：别人往我建的合辑里放了一段
+          const myAlbums = new Map((await store.list('albums', { key })).filter((a) => a.status !== 'removed').map((a) => [a.id, a.name]));
+          if (myAlbums.size) for (const x of await store.list('tracks')) if (x.key !== key && x.status === 'ok' && myAlbums.has(x.albumId)) inbox.push({ kind: 'track', albumId: x.albumId, albumName: myAlbums.get(x.albumId), discId: x.soundId, at: x.at, author: author(x.author) });
           inbox.sort((a, b) => b.at.localeCompare(a.at));
           return ok({ discs: mine.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0 })), favs, inbox: inbox.slice(0, 60) });
         }
@@ -248,6 +257,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         if (d.key !== key) return err(403, '只有刻它的人能删。');
         for (const x of await store.list('echoes', { discId: d.id })) { if (x.photoId) await dropPhoto(x.photoId); await store.del('echoes', x.id); }
         for (const x of await store.list('heard', { discId: d.id })) await store.del('heard', x.id);
+        for (const x of await store.list('tracks', { soundId: d.id })) await store.del('tracks', x.id);
         await store.delFile(d.audio).catch(() => {});
         await store.del('discs', d.id);
         return ok({});
@@ -311,6 +321,8 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       // —— 社区：帖子、楼中楼、话题、抱抱与我也是、接力 ——
       const cm = await community({ method, path, query, body, key, authed });
       if (cm) return cm;
+      const am = await albums({ method, path, body, key, authed });
+      if (am) return am;
 
       if (method === 'POST' && path === '/api/photos') {
         const b = body || {};
@@ -547,6 +559,101 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       return ok({ held: n >= LIMITS.reportsToHold });
     }
     return null;
+  }
+
+  // ====================================================================================
+  // 合辑（学黄泰霖原型的主题合辑与共建唱片）
+  //   合辑 album：一个名字、一句介绍；预置的几张在 src/lib/albums-preset.js（种子是示意盘），用户也可以建（一天 3 张）
+  //   一段 track：把一张公开的盘放进合辑。同一张盘在一张合辑里只放一次；一张合辑最多 24 段云上的
+  //   共建：几个人往同一张合辑里放，页面能把它们叠成一张十秒的盘。谁放的都写着
+  // ====================================================================================
+  const albumVisible = (a) => a && a.status !== 'removed';
+  async function albumOf(id) {
+    const pre = PRESET_ALBUMS.find((a) => a.id === id);
+    if (pre) return { ...pre, preset: true };
+    const a = await store.get('albums', id);
+    return albumVisible(a) ? a : null;
+  }
+  function albumView(a, ts, key) {
+    const mine = ts.filter((t) => t.key === key);
+    return { id: a.id, name: a.name, intro: a.intro || '', preset: !!a.preset, seeds: a.preset ? a.seeds : [], at: a.at || null, author: a.preset ? null : author(a.author),
+      mine: !a.preset && a.key === key, joined: mine.length > 0, tracks: ts.length, people: new Set(ts.map((t) => t.key)).size, lastAt: ts.reduce((m, t) => (t.at > m ? t.at : m), '') || null };
+  }
+  const trackView = (t, key, albumKey) => ({ id: t.id, albumId: t.albumId, soundId: t.soundId, at: t.at, author: author(t.author), mine: t.key === key, canTake: t.key === key || albumKey === key });
+  async function albums({ method, path, body, key, authed }) {
+    let m;
+    if (!/^\/api\/(albums|tracks)(\/|$)/.test(path)) return null;
+    if (method === 'GET' && path === '/api/albums') {
+      const own = (await store.list('albums')).filter(albumVisible).sort((a, b) => b.at.localeCompare(a.at));
+      const ts = (await store.list('tracks')).filter((t) => t.status === 'ok');
+      const by = new Map();
+      for (const t of ts) { if (!by.has(t.albumId)) by.set(t.albumId, []); by.get(t.albumId).push(t); }
+      const list = [...PRESET_ALBUMS.map((a) => ({ ...a, preset: true })), ...own];
+      return ok({ albums: list.map((a) => albumView(a, by.get(a.id) || [], key)) });
+    }
+    if (method === 'GET' && (m = path.match(/^\/api\/albums\/(al-[a-z0-9-]{3,40})$/))) {
+      const a = await albumOf(m[1]);
+      if (!a) return err(404, '没有这张合辑。');
+      const ts = (await store.list('tracks', { albumId: a.id })).filter((t) => t.status === 'ok').sort((x, y) => x.at.localeCompare(y.at));
+      return ok({ album: albumView(a, ts, key), tracks: ts.map((t) => trackView(t, key, a.key)) });
+    }
+    if (!authed) return err(401, '缺少作者键。');
+    if (method === 'POST' && path === '/api/albums') {
+      const b = body || {};
+      if (!ALBUM_ID_RE.test(String(b.id)) || PRESET_ALBUMS.some((a) => a.id === b.id)) return err(400, '合辑编号格式不对。');
+      const prev = await store.get('albums', b.id);
+      if (prev) return prev.key === key ? ok({ album: albumView(prev, [], key), again: true }) : err(409, '这个编号已被用过。');
+      const name = String(b.name || '').trim(), intro = String(b.intro || '').trim();
+      if (name.length < ALBUM.nameMin || name.length > ALBUM.nameMax) return err(400, `合辑名 ${ALBUM.nameMin} 到 ${ALBUM.nameMax} 个字。`);
+      const bad = validateLine(name, ALBUM.nameMax) || (intro ? validateLine(intro, ALBUM.introMax) : '');
+      if (bad) return err(400, bad);
+      const all = [...PRESET_ALBUMS, ...(await store.list('albums')).filter(albumVisible)];
+      if (all.some((a) => a.name === name)) return err(409, '已经有一张同名的合辑了，去那张里放吧。');
+      const a0 = cleanAuthor(b.author, key);
+      if (a0.error) return err(400, a0.error);
+      if (!allow('album-day', key, ALBUM.perDay, 86_400_000)) return err(429, '今天建的合辑够多了，明天再来。');
+      const a = { id: b.id, name, intro, key, author: a0.author, at: iso(), status: 'ok' };
+      await store.put('albums', a);
+      return ok({ album: albumView(a, [], key) }, 201);
+    }
+    if (method === 'POST' && (m = path.match(/^\/api\/albums\/(al-[a-z0-9-]{3,40})\/tracks$/))) {
+      const b = body || {};
+      const a = await albumOf(m[1]);
+      if (!a) return err(404, '没有这张合辑。');
+      if (!TRACK_ID_RE.test(String(b.id))) return err(400, '编号格式不对。');
+      const prev = await store.get('tracks', b.id);
+      if (prev) return prev.key === key ? ok({ track: trackView(prev, key, a.key), again: true }) : err(409, '这个编号已被用过。');
+      if (!b.soundId) return err(400, '要放一段声音进去。');
+      const sbad = await soundOk(b.soundId, key);
+      if (sbad) return err(400, sbad);
+      const ts = (await store.list('tracks', { albumId: a.id })).filter((t) => t.status === 'ok');
+      if ((a.seeds || []).includes(b.soundId) || ts.some((t) => t.soundId === b.soundId)) return err(409, '这一段已经在这张合辑里了。');
+      if (ts.length >= ALBUM.tracksMax) return err(409, `这张合辑满了（${ALBUM.tracksMax} 段）。建一张新的接着放吧。`);
+      const a0 = cleanAuthor(b.author, key);
+      if (a0.error) return err(400, a0.error);
+      if (!allow('track-min', key, ALBUM.trackPerMin, 60_000)) return err(429, '一分钟里放得太多了，过一会儿再来。');
+      if (!allow('track-day', key, ALBUM.trackPerDay, 86_400_000)) return err(429, '今天放得够多了，明天再来。');
+      const t = { id: b.id, albumId: a.id, soundId: b.soundId, key, author: a0.author, at: iso(), status: 'ok' };
+      await store.put('tracks', t);
+      return ok({ track: trackView(t, key, a.key) }, 201);
+    }
+    if (method === 'DELETE' && (m = path.match(/^\/api\/tracks\/(tk-[a-z0-9-]{6,40})$/))) {
+      const t = await store.get('tracks', m[1]);
+      if (!t) return err(404, '没有这一段。');
+      const a = await albumOf(t.albumId);
+      if (t.key !== key && !(a && !a.preset && a.key === key)) return err(403, '只有放它的人、建合辑的人能拿出来。');
+      await store.del('tracks', t.id);
+      return ok({});
+    }
+    if (method === 'DELETE' && (m = path.match(/^\/api\/albums\/(al-[a-z0-9-]{3,40})$/))) {
+      const a = await store.get('albums', m[1]);
+      if (!a || !albumVisible(a)) return err(404, '没有这张合辑。');
+      if (a.key !== key) return err(403, '只有建它的人能删。');
+      for (const t of await store.list('tracks', { albumId: a.id })) await store.del('tracks', t.id);
+      await store.del('albums', a.id);
+      return ok({});
+    }
+    return err(404, '没有这个接口。');
   }
 
   async function dropPhoto(id) {

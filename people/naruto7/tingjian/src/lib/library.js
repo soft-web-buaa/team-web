@@ -167,6 +167,7 @@ export function placeLine(pid) { return tallyText(counts(atPlace(pid).filter(isP
 export function siteCounts() { return counts(L.entries.filter(isPublic)); }
 /** 一行署名：真实盘写落款；示意不写人；史料写出处。 */
 export function byline(e) {
+  if (e.tier === 'mix') return `${e.mix.length} 个人的十秒`;
   if (e.tier === 'archival') return '史料';
   if (e.tier === 'synthetic') return '示意';
   const s = e.author ? signature(e.author) : '';
@@ -178,6 +179,7 @@ export function title(e) {
   return e.note || `${e.place}的十秒`;
 }
 export function whenText(e) {
+  if (e.tier === 'mix') { const ys = e.mix.map((x) => x.semester).filter(Boolean).sort(); return ys.length ? `${semesterLabel(ys[0])} 到 ${semesterLabel(ys.at(-1))}` : ''; }
   if (e.tier === 'archival') return e.dateKind === 'event' && e.date ? dateCN(e.date) : e.dateHint || '年份不详';
   const b = e.at ? bj(e.at) : null;
   const sem = semesterLabel(e.semester);
