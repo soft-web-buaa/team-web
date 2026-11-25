@@ -50,7 +50,12 @@ export function inspectWav(buf) {
       const seconds = bytes / 2 / fs;
       if (seconds > DISC.maxSec) return { ok: false, error: '最长十秒。' };
       if (seconds < DISC.minSec) return { ok: false, error: '太短了，至少一秒。' };
-      return { ok: true, fs, seconds };
+      // 响度：整段的均方根，dBFS。数据地图「安静角落」用它（量出来的，不是猜的）
+      let q = 0;
+      const n = Math.floor(bytes / 2);
+      for (let i = 0; i < n; i++) { const v = buf.readInt16LE(o + 8 + i * 2) / 32768; q += v * v; }
+      const db = Math.round(10 * Math.log10(q / Math.max(1, n) + 1e-12) * 10) / 10;
+      return { ok: true, fs, seconds, db };
     }
     o += 8 + size + (size & 1);
   }
@@ -74,7 +79,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
   function discView(d, key, extra = {}) {
     const mine = d.key === key;
     return {
-      id: d.id, placeId: d.placeId, at: d.at, slot: d.slot, hour: d.hour, semester: d.semester, week: d.week, seconds: d.seconds,
+      id: d.id, placeId: d.placeId, at: d.at, slot: d.slot, hour: d.hour, semester: d.semester, week: d.week, seconds: d.seconds, db: d.db ?? null,
       note: d.note || '', author: author(d.author), visibility: d.visibility, capsuleUntil: d.capsuleUntil || null,
       locked: !!locked(d), mine, tier: 'real', ...extra,
     };
@@ -232,7 +237,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         const at = Number.isFinite(ct) && ct <= now() + 60_000 && now() - ct < 36 * 3600000 ? new Date(Math.min(ct, now())).toISOString() : iso();
         const h = hourOf(at), sem = semesterOf(at, calendar);
         const ref = await store.putFile(`discs/${b.id}.wav`, audio, 'audio/wav');
-        const d = { id: b.id, key, placeId: b.placeId, at, hour: Math.round(h * 100) / 100, slot: slotOfHour(h), semester: sem.key, week: sem.week, seconds: Math.round(w.seconds * 100) / 100,
+        const d = { id: b.id, key, placeId: b.placeId, at, hour: Math.round(h * 100) / 100, slot: slotOfHour(h), semester: sem.key, week: sem.week, seconds: Math.round(w.seconds * 100) / 100, db: w.db,
           note, author: a.author, visibility, capsuleUntil, status: 'ok', audio: ref, createdAt: iso() };
         await store.put('discs', d);
         return ok({ disc: discView(d, key, { heard: 0, echoes: 0 }) }, 201);

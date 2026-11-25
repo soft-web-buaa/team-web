@@ -4,7 +4,7 @@
 import { computed, ref, onMounted } from 'vue';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
-import RingDial from '../components/RingDial.vue';
+import RingWood from '../components/RingWood.vue';
 import PostCard from '../components/PostCard.vue';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
@@ -59,7 +59,7 @@ onMounted(() => { refresh(); initCommunity(); });
 
     <section v-if="tab === 'discs'">
       <div v-if="!mine.length" class="slot" aria-hidden="true"><span></span><p class="fine">第一张会放在这里</p></div>
-      <RingDial v-if="mine.length" :list="mine" :size="280" caption="我的年轮。" />
+      <RingWood v-if="mine.length" :list="mine" :size="300" caption="我的年轮。" :playing-id="L.playing && L.playing.id" @pick="play" />
       <ol class="discs" style="margin-top: 12px">
         <li v-for="e in mine" :key="e.id" class="mine-row">
           <DiscRow :e="e" />

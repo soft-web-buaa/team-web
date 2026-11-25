@@ -43,7 +43,8 @@ export function say(t) { L.toast = t; clearTimeout(say.t); say.t = setTimeout(()
 // ====================================================================================
 const j = (p) => fetch(`${BASE}${p}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
 export async function init() {
-  const [campus, demo, arch, hist, cal, seed] = await Promise.all([j('data/campus-xy.json'), j('data/demo-catalog.json'), j('archive/catalog.json'), j('history/index.json'), j('data/calendar.json'), j('data/echo-seed.json')]);
+  const [campus, demo, arch, hist, cal, seed, loud] = await Promise.all([j('data/campus-xy.json'), j('data/demo-catalog.json'), j('archive/catalog.json'), j('history/index.json'), j('data/calendar.json'), j('data/echo-seed.json'), j('data/loudness.json')]);
+  const dbOf = (loud && loud.db) || {};
   if (!campus) { L.failed = '校园数据取不到。'; return; }
   L.campus = markRaw(campus);
   L.places = campus.places;
@@ -57,7 +58,7 @@ export async function init() {
     if (e.status !== 'accessioned' || tierOf(e) !== 'synthetic' || !L.placeById.has(e.placeId)) continue;
     const b = bj(e.at);
     list.push({ id: e.id, tier: 'synthetic', placeId: e.placeId, place: e.place, zoneId: L.placeById.get(e.placeId).z, at: e.at, hour: b ? b.h : null, slot: e.slot,
-      semester: e.semester, week: e.week, seconds: e.seconds, note: e.note, kind: e.kind, synth: e.synth, author: null, mine: false, heard: 0, echoN: 0, day: dayKey(e.at) });
+      semester: e.semester, week: e.week, seconds: e.seconds, note: e.note, kind: e.kind, synth: e.synth, author: null, mine: false, heard: 0, echoN: 0, day: dayKey(e.at), db: dbOf[e.id] ?? null });
   }
   const histBy = new Map(((hist && hist.items) || []).map((h) => [`arc-${h.packId}`, h]));
   for (const e of (arch && arch.entries) || []) {
@@ -114,7 +115,7 @@ function realNo(d) {
 function upsertReal(d) {
   let e = byId.get(d.id);
   const p = L.placeById.get(d.placeId);
-  const fields = { tier: 'real', placeId: d.placeId, place: p ? p.name : '', zoneId: p ? p.z : null, at: d.at, hour: d.hour, slot: d.slot, semester: d.semester, week: d.week, seconds: d.seconds,
+  const fields = { tier: 'real', placeId: d.placeId, place: p ? p.name : '', zoneId: p ? p.z : null, at: d.at, hour: d.hour, slot: d.slot, semester: d.semester, week: d.week, seconds: d.seconds, db: d.db ?? null,
     note: d.note, author: d.author && (d.author.grade || d.author.dept || d.author.name) ? d.author : null, mine: d.mine, heard: d.heard || 0, heardByMe: !!d.heardByMe, echoN: d.echoes || 0,
     visibility: d.visibility, capsuleUntil: d.capsuleUntil, locked: d.locked, url: cloud.audioUrl(d.id), day: dayKey(d.at), local: false };
   if (e) Object.assign(e, fields);

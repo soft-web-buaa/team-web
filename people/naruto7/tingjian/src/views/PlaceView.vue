@@ -5,7 +5,7 @@ import { computed, watch, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
-import RingDial from '../components/RingDial.vue';
+import RingWood from '../components/RingWood.vue';
 import EchoBand from '../components/EchoBand.vue';
 import { L, atPlace, placeLine, play, isPublic, toggleHeard, toggleFav, isFav, title } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
@@ -62,7 +62,7 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
     </template>
 
     <p class="h3">这里的年轮</p>
-    <RingDial :list="voices" :size="300" />
+    <RingWood :list="voices" :size="320" :playing-id="L.playing && L.playing.id" @pick="play" />
 
     <template v-if="past.length || facts.length">
       <p class="h3">这里的从前</p>

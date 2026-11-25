@@ -15,6 +15,7 @@ import DiscMini from '../components/DiscMini.vue';
 import PostCard from '../components/PostCard.vue';
 import PostThread from '../components/PostThread.vue';
 import Compose from '../components/Compose.vue';
+import DataPanel from '../components/DataPanel.vue';
 import { L, columns, isPublic, play, entryById, title, echoByline, refresh as refreshLib, whenText, byline } from '../lib/library.js';
 import { C, init, refresh, feed, topicById, topicCount, chains, scenes, sameSlot, moodTally, moodPlaces, heat, loadStats, ago } from '../lib/community.js';
 import { ui } from '../lib/ui.js';
@@ -25,6 +26,7 @@ import * as stage from '../stage/stage.js';
 const route = useRoute(), router = useRouter();
 const TABS = [['square', '广场'], ['topics', '话题'], ['relay', '接力'], ['scene', '多机位'], ['board', '看板'], ['sound', '声音']];
 const tab = computed(() => route.query.tab || 'square');
+const view = computed(() => (route.query.map === 'data' ? 'data' : 'plain'));   // 原始地图 / 数据地图（学黄泰霖原型）
 const topic = computed(() => route.query.topic || null);
 const postId = computed(() => route.query.post || null);
 const go = (q) => router.push({ path: '/community', query: { ...q } });
@@ -66,8 +68,8 @@ const LAYERS = [
   { id: 'real', name: '只数真实', test: (e) => e.tier === 'real', say: '只数同学亲手刻的。' },
 ];
 const layer = ref('all');
-function paint() { const L0 = LAYERS.find((x) => x.id === layer.value); stage.setColumns(columns((e) => isPublic(e) && e.tier !== 'archival' && L0.test(e))); }
-watch([layer, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true });
+function paint() { if (view.value === 'data') return; const L0 = LAYERS.find((x) => x.id === layer.value); stage.setColumns(columns((e) => isPublic(e) && e.tier !== 'archival' && L0.test(e))); }
+watch([layer, view, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true });
 const moods = computed(() => { void C.version; void C.stats; return moodTally(); });
 const moodMax = computed(() => Math.max(1, ...moods.value.map((m) => m.real + m.demo)));
 const moodPick = ref(null);
@@ -99,7 +101,13 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
     </template>
     <template v-else>
       <p class="kicker">众人 · {{ C.demo.length + C.posts.length }} 帖 · {{ pub.length }} 张公开的盘</p>
-      <h1 class="h1">{{ curTopic ? `#${curTopic.name}` : '别人听见了什么' }}</h1>
+      <h1 class="h1">{{ curTopic ? `#${curTopic.name}` : view === 'data' ? '校园的声音长什么样' : '别人听见了什么' }}</h1>
+      <div class="seg" role="tablist" aria-label="地图">
+        <button type="button" role="tab" :aria-selected="view === 'plain'" :class="{ on: view === 'plain' }" @click="go({ tab: tab === 'board' ? 'square' : tab })">原始地图</button>
+        <button type="button" role="tab" :aria-selected="view === 'data'" :class="{ on: view === 'data' }" @click="go({ map: 'data' })">数据地图</button>
+      </div>
+      <DataPanel v-if="view === 'data'" />
+      <template v-else>
       <p v-if="curTopic" class="lede">{{ curTopic.intro || '用户建的话题。' }} <button type="button" class="link fine" @click="go({})">回到全部</button></p>
       <nav class="tabs" aria-label="社区">
         <button v-for="t in TABS" :key="t[0]" type="button" class="tab" :class="{ on: tab === t[0] }" :aria-current="tab === t[0] ? 'page' : undefined" @click="go({ tab: t[0] })">{{ t[1] }}</button>
@@ -175,11 +183,7 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
 
       <!-- 看板 -->
       <section v-else-if="tab === 'board'">
-        <p class="h3">舞台上的光柱</p>
-        <div class="row" role="radiogroup" aria-label="光柱的口径">
-          <button v-for="x in LAYERS" :key="x.id" type="button" role="radio" class="chip" :class="{ on: layer === x.id }" :aria-checked="layer === x.id" @click="layer = x.id">{{ x.id === 'hour' ? cnHour(clock.shown) : x.name }}</button>
-        </div>
-        <p class="fine" style="margin-top: 8px">{{ LAYERS.find((x) => x.id === layer).say }}</p>
+        <p class="fine" style="margin-top: 12px">舞台上每根光柱是一个地方，高度是这里留下的张数。想换一种画法、只看某个钟点，去<button type="button" class="link" @click="go({ map: 'data' })">数据地图</button>。</p>
 
         <p class="h3">心情 · 共鸣</p>
         <p class="fine">心情是发帖的人自己选的，不从声音里猜。深色是真实的帖子（n = {{ moods.reduce((s, m) => s + m.real, 0) }}），浅色是示例帖（n = {{ moods.reduce((s, m) => s + m.demo, 0) }}）。点一种心情，看同样心情的人在哪儿。</p>
@@ -228,11 +232,15 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
           <ol class="discs"><DiscRow v-for="e in setList.slice(0, 30)" :key="e.id" :e="e" /></ol>
         </template>
       </section>
+      </template>
     </template>
   </Paper>
 </template>
 
 <style scoped>
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--wash); box-shadow: inset 0 0 0 1px var(--hair); margin: 0 0 14px; }
+.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 999px; font: 14px var(--f-show); letter-spacing: .06em; color: var(--ink-2); }
+.seg button.on { background: var(--ink); color: var(--paper); }
 .tabs { display: flex; gap: 2px; margin: 4px -4px 0; overflow-x: auto; border-bottom: 1px solid var(--hair); scrollbar-width: none; }
 .tab { flex: none; padding: 9px 10px 10px; border: 0; background: none; font: 15px var(--f-show); letter-spacing: .06em; color: var(--ink-2); position: relative; }
 .tab.on { color: var(--ink); }

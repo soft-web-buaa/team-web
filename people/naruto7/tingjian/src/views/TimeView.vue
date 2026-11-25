@@ -4,7 +4,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
-import RingDial from '../components/RingDial.vue';
+import RingWood from '../components/RingWood.vue';
 import { L, isPublic, play, entryById, ERA, semesterLabel } from '../lib/library.js';
 import { clock, goHour, backToNow, fmtHour, cnHour, slotOfHour } from '../lib/clock.js';
 import { hourColor } from '../lib/wave.js';
@@ -69,7 +69,7 @@ onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); });
 
 <template>
   <Paper label="年轮">
-    <p class="kicker">何时 · 一张盘一圈圈往里刻，一个学期一带</p>
+    <p class="kicker">何时 · 声音一年一圈地长</p>
     <h1 class="h1">声音怎么叠起来</h1>
     <div class="row" role="tablist" aria-label="三个尺度">
       <button v-for="s in [['day', '一天'], ['year', '一学年'], ['gen', '一代人']]" :key="s[0]" type="button" role="tab" class="chip" :class="{ on: scale === s[0] }" :aria-selected="scale === s[0]" @click="scale = s[0]">{{ s[1] }}</button>
@@ -96,8 +96,8 @@ onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); });
     </section>
 
     <section v-else-if="scale === 'year'" class="sec">
-      <p class="lede" style="margin-top: 16px">外圈最外一带是最早的学期，挨着校园的是最近的。点一个学期，盘上那一带亮起来，其余的暗下去。</p>
-      <RingDial :list="pub.filter((e) => e.tier !== 'archival')" :size="300" />
+      <p class="lede" style="margin-top: 16px">纸上的年轮像树：最里一圈最早，往外一圈一个学年。舞台上的唱片反过来，从外往里放：最外一带是最早的学期。点一个学期，唱片上那一带亮起来，其余的暗下去。</p>
+      <RingWood :list="pub.filter((e) => e.tier !== 'archival')" :size="320" :playing-id="L.playing && L.playing.id" @pick="play" />
       <div class="sems">
         <button v-for="b in sems" :key="b.semester" type="button" class="sem" :class="{ on: sem === b.semester, now: b.semester === L.nowSem }" @click="sem = sem === b.semester ? null : b.semester">
           <span class="show">{{ b.label }}</span><i>{{ b.n }}</i>

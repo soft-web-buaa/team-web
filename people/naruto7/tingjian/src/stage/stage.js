@@ -10,6 +10,7 @@ import { rigFor } from '../kesheng/web/plan3d/light-rig.js';
 import { SCENERY, crownPick, seasonOf } from '../kesheng/web/plan3d/model.js';
 import { clock, toHex } from '../lib/clock.js';
 import * as audio from '../lib/audio.js';
+import { paintGround, paintMedal, medalSpec } from './ground.js';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let G = null;                 // scene.js 返回的句柄
@@ -30,6 +31,7 @@ const S = {
   mineOnly: false,            // 我的：只有我的盘亮
   bands: [], open: [], layout: [], hoverBand: -1, activeBand: -1, focusSem: null,
   echoes: [], echoActive: -1,
+  data: null,                 // 社区的数据地图：{ form, metric, stats, hour }；null = 原始地图
   inset: 0,                   // 右侧纸压住画布的宽度（像素）：画面中心挪到左边那块的中间
   insetBottom: 0,             // 手机：底部抽屉压住画布的高度（像素）：画面中心挪到上面那块的中间
 };
@@ -50,7 +52,9 @@ function fitDist(radius) {
 }
 const POSES = {
   home: () => ({ t: V(60, -60, 60), d: Math.max(3000, fitDist((RP + 250) * 1.08)), polar: 0.8, az: -0.3 }),
-  community: () => ({ t: V(0, 40, 0), d: Math.max(3100, fitDist((RP + 200) * 1.12)), polar: 0.66, az: -0.62 }),
+  community: () => (S.data && S.data.form !== 'columns'
+    ? { t: V(0, 0, 40), d: Math.max(2600, fitDist(RIN * 1.18)), polar: 0.36, az: -0.18 }    // 地面上的图：俯看
+    : { t: V(0, 40, 0), d: Math.max(3100, fitDist((RP + 200) * 1.12)), polar: 0.66, az: -0.62 }),
   time: () => ({ t: V(0, 0, 0), d: fitDist(RP + 140), polar: 0.035, az: 0 }),
   mine: () => ({ t: V(40, -40, 40), d: Math.max(3000, fitDist((RP + 250) * 1.05)), polar: 0.74, az: 0.42 }),
   screen: () => grooveClose(),
@@ -138,6 +142,7 @@ export function setMode(mode, { pid = null } = {}) {
   S.place = mode === 'place' ? pid : null;
   S.zone = mode === 'place' && pid ? G.pinObj.get(pid).zone : null;
   S.mineOnly = mode === 'mine';
+  if (built && G.ground) G.ground.visible = mode === 'community' && !!S.data && S.data.form !== 'columns';
   G.controls_minPolar = mode === 'time' ? 0.02 : 0.32;
   controls.minPolarAngle = G.controls_minPolar;
   if (!revealed) return;
@@ -201,6 +206,41 @@ export function setColumns(columns) {
   S.columns = columns;
   S.colMax = Math.max(1, ...columns.values());
 }
+/** 数据地图。d = { form, metric, stats: Map(placeId → 统计), values: Map(placeId → 数), hour } 或 null（回到原始地图）。
+ *  光柱是三维的；热力、等高线、年轮、钟面画在地面贴图上。换画法时俯仰角跟着变（地面上的图要俯看）。 */
+export function setData(d) {
+  const prevForm = S.data ? S.data.form : null;
+  S.data = d;
+  if (d) setColumns(d.form === 'columns' ? d.values : new Map());
+  if (!built) return;
+  const on = !!d && d.form !== 'columns';
+  if (on) {
+    const t = clock.tokens;
+    paintGround(G.groundCanvas, { E: RIN, places: G.campus.places.map((p) => ({ id: p.id, x: p.x / 10, z: -p.y / 10 })), stats: d.stats, metric: d.metric, form: d.form, dark: t.dark, ink: t.ink.map(Math.round), hour: d.hour });
+    G.groundTex.needsUpdate = true;
+    // 白天正常叠（像墨印在纸上），夜里相加（像光）
+    G.ground.material.blending = t.dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+    G.ground.material.needsUpdate = true;
+  }
+  G.ground.visible = on;
+  // 年轮、钟面：每个地方上空一张小盘
+  const medal = !!d && (d.form === 'rings' || d.form === 'clock');
+  if (medal) {
+    const t = clock.tokens, spec = medalSpec(d.stats, d.metric, G.campus.places.map((p) => ({ ...p, name: p.name })), t.dark);
+    for (const m of spec.list) {
+      const o = G.pinObj.get(m.id);
+      const has = m.items.length > 0;
+      o.medal.visible = has;
+      if (!has) continue;
+      paintMedal(o.medalCanvas, d.form, m.items, { c: m.c, dark: t.dark, hour: d.hour, cmax: spec.cmax });
+      o.medalTex.needsUpdate = true;
+      o.medalR = 24 + 22 * m.k;
+    }
+  } else for (const o of G.pinObj.values()) o.medal.visible = false;
+  S.medals = medal;
+  const flat = (f) => !!f && f !== 'columns';
+  if (S.mode === 'community' && revealed && flat(prevForm) !== flat(d && d.form)) play([{ to: POSES.community, dur: 900, ease: 'inOut' }]);
+}
 /** 全部条目（含史料与概念盘）：外圈一个学期一带。 */
 export function setBands(list) {
   S.bands = semesterBands(list).slice(-32);
@@ -214,6 +254,9 @@ export function setEchoes(list) { S.echoes = list || []; syncEchoMarks(); }
 export function setEchoActive(i) { S.echoActive = i; }
 
 const MAXD = 14, PIN_STEP = 2.2;
+// 数据地图里校园的素纸色。白天的太阳很强（场景亮度会超过 1，最后的色调映射再压回白）：纸色要压得够暗，
+// 照亮之后才刚好是浅纸色；不然半透明的墨盖上去，也会被色调映射压回白，什么都看不见（2026-11-25 实测）
+const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C');
 const INKC = new THREE.Color(COL.ink), AGED = new THREE.Color('#A9B1BE'), SCOPEC = new THREE.Color(COL.scope), FADED = new THREE.Color('#7A828E');
 function paintPins() {
   for (const [pid, o] of G.pinObj) {
@@ -651,29 +694,47 @@ function buildTags() {
   }
 }
 const v3 = new THREE.Vector3();
-function placeTag(t, x, y, z, show) {
-  if (!show) { if (t.style.display !== 'none') t.style.display = 'none'; return; }
+// 签先算好位置，最后一起避让：按数从大到小，压到前面已经放下的签就先藏起来（悬停的、正在放的总是显示）
+function placeTag(t, x, y, z, show, below = false, rank = 0, must = false) {
+  if (!show) return null;
   v3.set(x, y, z).project(G.camera);
-  if (v3.z > 1) { t.style.display = 'none'; return; }
-  t.style.display = '';
-  t.style.transform = `translate(${((v3.x + 1) / 2) * canvas.clientWidth}px, ${((1 - v3.y) / 2) * canvas.clientHeight}px) translate(-50%, -100%)`;
+  if (v3.z > 1) return null;
+  const sx = ((v3.x + 1) / 2) * canvas.clientWidth, sy = ((1 - v3.y) / 2) * canvas.clientHeight;
+  const w = t._w || (t._w = Math.max(60, t.textContent.length * 13 + 34)), h = 26;
+  return { t, sx, sy, below, rank, must, box: [sx - w / 2, below ? sy + 2 : sy - h, sx + w / 2, below ? sy + 2 + h : sy] };
 }
 function updateTags() {
   const narrow = canvas.clientWidth < 720;
   // 社区里只给最高的几根挂名字（全挂会叠成一团），其余的悬停才出来
-  const topN = new Set(S.mode === 'community' ? [...S.columns.entries()].filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, narrow ? 3 : 6).map((x) => x[0]) : []);
+  const vals = S.data ? S.data.values : S.columns;
+  const topN = new Set(S.mode === 'community' ? [...vals.entries()].filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, narrow ? 3 : 6).map((x) => x[0]) : []);
+  const want = [];
   for (const p of G.campus.places) {
     const o = G.pinObj.get(p.id), t = tags.get(p.id);
     const crowd = S.mode === 'community';
     const mine = S.mode === 'mine' && (S.pins.get(p.id) || []).some((x) => x.mine);
-    const show = revealed && !shot && S.mode !== 'place' && S.mode !== 'time' && (S.hoverPlace === p.id || (crowd && topN.has(p.id)) || mine || (S.mode === 'home' && S.hover === p.z && !narrow));
-    const n = crowd ? (S.columns.get(p.id) || 0) : mine ? (S.pins.get(p.id) || []).filter((x) => x.mine).length : (S.pins.get(p.id) || []).length;
+    const show = revealed && !shot && S.mode !== 'place' && S.mode !== 'time' && (S.hoverPlace === p.id || (crowd && (S.medals ? o.medal && o.medal.visible : topN.has(p.id))) || mine || (S.mode === 'home' && S.hover === p.z && !narrow));
+    const n = crowd ? (vals.get(p.id) || 0) : mine ? (S.pins.get(p.id) || []).filter((x) => x.mine).length : (S.pins.get(p.id) || []).length;
     const b = t.querySelector('b');
     const txt = n ? String(n) : '';
-    if (b.textContent !== txt) b.textContent = txt;
-    t.classList.toggle('is-playing', !!(current && current.e.placeId === p.id));
-    const colH = crowd ? o.h : 0;
-    placeTag(t, o.group.position.x, o.group.position.y + Math.max(o.head.position.y + 6, colH + 8), o.group.position.z, show);
+    if (b.textContent !== txt) { b.textContent = txt; t._w = 0; }
+    const playingHere = !!(current && current.e.placeId === p.id);
+    t.classList.toggle('is-playing', playingHere);
+    const must = S.hoverPlace === p.id || playingHere;
+    let q;
+    if (crowd && S.medals && o.medal && o.medal.visible) q = placeTag(t, o.group.position.x, o.group.position.y + o.medal.position.y, o.group.position.z + o.medalR * 1.02, show, true, n, must);   // 小盘模式：签挂在盘的下沿（朝镜头那一边）
+    else q = placeTag(t, o.group.position.x, o.group.position.y + Math.max(o.head.position.y + 6, (crowd ? o.h : 0) + 8), o.group.position.z, show, false, n, must);
+    if (q) want.push(q); else if (t.style.display !== 'none') t.style.display = 'none';
+  }
+  want.sort((a, b) => (b.must - a.must) || (b.rank - a.rank));
+  const put = [];
+  for (const q of want) {
+    const [x0, y0, x1, y1] = q.box;
+    const hit = !q.must && put.some(([a0, b0, a1, b1]) => x0 < a1 && x1 > a0 && y0 < b1 && y1 > b0);
+    if (hit) { if (q.t.style.display !== 'none') q.t.style.display = 'none'; continue; }
+    put.push(q.box);
+    q.t.style.display = '';
+    q.t.style.transform = `translate(${q.sx}px, ${q.sy}px) translate(-50%, ${q.below ? '2px' : '-100%'})`;
   }
 }
 
@@ -741,9 +802,12 @@ function frame(now) {
     const sel = inPlace ? S.zone === id : false, hov = !inPlace && S.hover === id && S.mode === 'home';
     o.lift += ((hov ? 6 : 0) - o.lift) * (reduced ? 1 : 0.14);
     o.group.position.y = o.lift;
-    const dim = inPlace || (S.mode === 'mine');
+    const data = S.mode === 'community' && !!S.data && S.data.form !== 'columns';
+    const dim = inPlace || (S.mode === 'mine') || (S.mode === 'community' && !!S.data);
     const k = reduced ? 1 : 0.12;
-    for (const t of o.tints) t.mat.color.lerp(dim && !sel ? t.dim : t.on, k);
+    // 数据地图：校园褪成一张素纸（亮时浅、暗时深），地面上的图才压得住
+    const paleC = clock.tokens.dark ? DATA_DARK : DATA_LIGHT;
+    for (const t of o.tints) t.mat.color.lerp(data ? paleC : dim && !sel ? t.dim : t.on, k);
     o.bldMat.userData.win.value += ((dim && !sel ? 0.25 : 1) - o.bldMat.userData.win.value) * k;
   });
   // 地点楼：提起来、慢慢转、垫上纸台座；离开时落回原位
@@ -775,6 +839,11 @@ function frame(now) {
     o.column.material.opacity = Math.min(1, o.h / 30) * (dark ? 0.55 : 0.32);
     o.halo.material.opacity = Math.min(1, o.h / 30) * 0.7;
     o.halo.material.color.set(dark ? '#DDE4F0' : '#2B3954');
+    if (o.medal && o.medal.visible) {
+      o.medal.position.y = o.top + 30 + (reduced ? 0 : Math.sin(now / 1400 + o.top) * 1.5);
+      o.medal.scale.setScalar(o.medalR);
+      o.medal.visible = S.mode === 'community' && !!S.medals;
+    }
     if (landing && landing.pid === pid && o.n) {
       const t = reduced ? 1 : Math.min(1, (now - landing.t0) / 900);
       const kk = t < 0.8 ? Math.pow(t / 0.8, 2) : 1 - Math.sin(((t - 0.8) / 0.2) * Math.PI) * 0.08;
@@ -902,6 +971,33 @@ export async function init(canvasNode, labelsNode, campus) {
   await pause();
   await document.fonts.load('30px "Zhuque"').catch(() => {});
   G = await build(canvas, campus, { tier: t, pause });
+  // 数据地图的地面：一块画布贴图，铺在区块地面上方一点（ground.js 画）
+  G.groundCanvas = document.createElement('canvas');
+  G.groundCanvas.width = G.groundCanvas.height = lite ? 1024 : 2048;
+  G.groundTex = new THREE.CanvasTexture(G.groundCanvas);
+  G.groundTex.colorSpace = THREE.SRGBColorSpace;
+  G.groundTex.anisotropy = 4;
+  {
+    const geo = new THREE.PlaneGeometry(RIN * 2, RIN * 2); geo.rotateX(-Math.PI / 2);
+    G.ground = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: G.groundTex, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    G.ground.position.y = TILE_TOP + 0.35;
+    G.ground.renderOrder = 3;
+    G.ground.visible = false;
+    G.scene.add(G.ground);
+    const disc = new THREE.CircleGeometry(1, 72); disc.rotateX(-Math.PI / 2);
+    for (const o of G.pinObj.values()) {
+      o.medalCanvas = document.createElement('canvas');
+      o.medalCanvas.width = o.medalCanvas.height = lite ? 192 : 256;
+      o.medalTex = new THREE.CanvasTexture(o.medalCanvas);
+      o.medalTex.colorSpace = THREE.SRGBColorSpace;
+      o.medalTex.anisotropy = 4;
+      o.medal = new THREE.Mesh(disc, new THREE.MeshBasicMaterial({ map: o.medalTex, transparent: true, toneMapped: false, depthWrite: false }));
+      o.medal.renderOrder = 5;
+      o.medal.visible = false;
+      o.medalR = 30;
+      o.group.add(o.medal);
+    }
+  }
   controls = new OrbitControls(G.camera, canvas);
   G.camera.far = 20000; G.camera.updateProjectionMatrix();
   Object.assign(controls, { enablePan: false, enableDamping: true, dampingFactor: 0.08, minPolarAngle: 0.32, maxPolarAngle: 1.18, minDistance: 18, maxDistance: 14000, rotateSpeed: 0.6, zoomSpeed: 0.7 });

@@ -84,7 +84,7 @@ await until(p, () => window.__stage.mode === 'place' && !window.__stage.flying);
 await sleep(800);
 t('进地点：图书馆那栋楼被提起来了', (await p.evaluate(() => window.__stage.heroLift('XY01'))) > 20);
 t('地点页标题', (await text(p, '.paper .h1')) === '图书馆');
-t('地点页有年轮', !!(await p.$('.paper .ring svg')));
+t('地点页有年轮', !!(await p.$('.paper .wood svg')));
 await p.evaluate(() => { location.hash = '#/place/XY06'; });
 await until(p, () => window.__stage.mode === 'place' && window.__stage.place === 'XY06' && !window.__stage.flying);
 await until(p, () => window.__stage.heroLift('XY01') < 2 && window.__stage.heroLift('XY06') > 20, null, 20000);
@@ -98,12 +98,29 @@ await p.evaluate(() => { location.hash = '#/community'; });
 await until(p, () => window.__stage.mode === 'community');
 await sleep(3500);
 t('社区：光柱升起来了', (await p.evaluate(() => window.__stage.column('XY02'))) > 30);
-await p.evaluate(() => { location.hash = '#/community?tab=board'; });
-await until(p, () => document.querySelectorAll('.paper [role=radiogroup] .chip').length >= 4, null, 20000);
-const chips = await p.$$('.paper [role=radiogroup] .chip');
-await chips[1].click();
+// 光柱的口径挪进了数据地图：只看这个钟点，光柱跟着变矮
+await p.evaluate(() => { location.hash = '#/community?map=data'; });
+await until(p, () => !!document.querySelector('.dp'), null, 20000);
+await p.evaluate(() => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes('光柱')).click());
+await sleep(2500);
+const allH = await p.evaluate(() => window.__stage.column('XY02'));
+await p.evaluate(() => [...document.querySelectorAll('.dp .chip')].find((x) => x.textContent.startsWith('只看')).click());
+await sleep(2500);
+t('数据地图：只看这个钟点，图例跟着换', (await text(p, '.dp .legend')).includes('前后一个半小时'));
+t('数据地图：光柱跟着数据变', (await p.evaluate(() => window.__stage.column('XY02'))) !== allH);
+
+// —— 3b. 数据地图：五种画法都能切，地面图或小盘出来 ——
+console.log('— 3b. 数据地图');
+await p.evaluate(() => { location.hash = '#/community?map=data'; });
 await sleep(1500);
-t('社区：图层切到「本学期」，说明跟着换', (await text(p, '.paper')).includes('只数这个学期'));
+t('数据地图：有「看什么」和「怎么画」', !!(await p.$('[aria-label="看什么"]')) && !!(await p.$('[aria-label="怎么画"]')));
+for (const f of ['热力', '等高线', '年轮', '钟面', '光柱']) {
+  await p.evaluate((f) => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes(f)).click(), f);
+  await sleep(700);
+}
+t('数据地图：图例写了口径和张数', /张/.test(await text(p, '.dp .legend')));
+await p.evaluate(() => { location.hash = '#/community'; });
+await sleep(1200);
 
 // —— 4. 年轮：拖时针，整站变色 ——
 console.log('— 4. 年轮：拖时针，整站变色');
