@@ -184,9 +184,13 @@ export const tier = () => tierNow;
 // —— 立面：窗是印在卡纸上的（不开洞）。每个顶点带 aFac = [层高, 开间, 样式, 种子]（cardBuilding 写），按 OSM 的层数排窗。
 //      白天是灰蓝的油墨窗；入夜按比例亮起暖光。整张纸带一层很淡的纤维纹（轻微不均）。
 //      样式：0 普通窗格 / 1 五十年代（窄高窗 + 壁柱 + 勒脚）/ 2 新主楼（横向带窗）/ 3 住宅（小窗 + 阳台线）/ 4 不印窗
-function windowize(mat) {
+// detail：地点楼（会被提起来特写的那 16 栋）多一层细节，进楼时由 stage.js 把 uDetail 从 0 推到 1：
+//   窗洞有深度（过梁下一道影、窗樘一道影）、白色窗框（中梃 + 上亮子横档）、浅色窗台、每层一道楼板线；玻璃变光滑、反出影棚的软箱
+function windowize(mat, { detail = false } = {}) {
   mat.userData.win = { value: 1 };
+  if (detail) mat.userData.detail = { value: 0 };
   mat.onBeforeCompile = (sh) => {
+    if (detail) sh.uniforms.uDetail = mat.userData.detail;
     sh.uniforms.uNight = U.uNight;
     sh.uniforms.uLit = U.uLit;
     sh.uniforms.uWin = mat.userData.win;
@@ -196,6 +200,7 @@ function windowize(mat) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
+        ${detail ? '#define KS_DETAIL\n        uniform float uDetail;' : ''}
         varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; uniform float uNight, uLit, uWin, uSnow;
         float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         float box1(float x, float a, float b, float aa) { return smoothstep(a - aa, a + aa, x) * (1.0 - smoothstep(b - aa, b + aa, x)); }`)
@@ -215,19 +220,40 @@ function windowize(mat) {
             float aa = clamp(fwidth(cs) * 0.9, 0.0, 0.5), ab = clamp(fwidth(cy) * 0.9, 0.0, 0.5);
             float fade = 1.0 - smoothstep(0.32, 0.5, max(aa, ab));      // 远看糊成一片时只留一层淡灰，不出摩尔纹
             float win = 0.0, line = 0.0;
+            vec4 wb = vec4(0.22, 0.78, 0.3, 0.8);     // 窗在一格里的范围：x0, x1, y0, y1
             if (style < 0.5) win = box1(f.x, 0.22, 0.78, aa) * box1(f.y, 0.3, 0.8, ab);
             else if (style < 1.5) {
+              wb = vec4(0.3, 0.7, 0.24, 0.84);
               win = box1(f.x, 0.3, 0.7, aa) * box1(f.y, 0.24, 0.84, ab) * step(0.6, cy);
               float pil = fract(cs / 3.0);
               line = box1(pil, 0.0, 0.05, aa / 3.0) * 0.6 + (1.0 - smoothstep(0.55, 0.6, vLoc.y / vFac.x)) * 0.35;   // 壁柱 + 勒脚
             } else if (style < 2.5) {
+              wb = vec4(0.04, 1.0, 0.38, 0.86);
               win = box1(f.y, 0.38, 0.86, ab) * (1.0 - box1(f.x, 0.0, 0.04, aa));
             } else {
+              wb = vec4(0.3, 0.7, 0.34, 0.76);
               win = box1(f.x, 0.3, 0.7, aa) * box1(f.y, 0.34, 0.76, ab);
               line = box1(f.y, 0.08, 0.14, ab) * step(0.5, fract(cs * 0.5)) * 0.7;
             }
             win *= side * step(0.25, cy);
             float ink = win * fade;
+            #ifdef KS_DETAIL
+            if (uDetail > 0.001) {
+              float d = uDetail * side * fade;
+              float u = (f.x - wb.x) / (wb.y - wb.x), v = (f.y - wb.z) / (wb.w - wb.z);
+              float lintel = win * smoothstep(0.8, 1.0, v);
+              float jamb = win * (1.0 - smoothstep(0.0, 0.1, u));
+              float frame = win * max(box1(u, 0.485, 0.515, aa * 2.0), box1(v, 0.68, 0.71, ab * 2.0));
+              float sill = box1(f.x, wb.x - 0.03, wb.y + 0.03, aa) * box1(f.y, wb.z - 0.05, wb.z, ab) * step(0.25, cy) * step(style, 3.5);
+              float slab = box1(f.y, 0.0, 0.03, ab) * step(0.6, cy);
+              diffuseColor.rgb *= 1.0 - d * (0.5 * lintel + 0.28 * jamb + 0.12 * slab);
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.94, 0.91), d * max(frame * 0.9, sill * 0.55));
+              roughnessFactor = mix(roughnessFactor, 0.22, d * win * (1.0 - frame));
+              metalnessFactor = mix(metalnessFactor, 0.18, d * win * (1.0 - frame));
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.5, 0.58), d * win * (1.0 - frame) * 0.35);
+              ink *= 1.0 - 0.6 * frame * uDetail;
+            }
+            #endif
             vec3 glass = vec3(0.30, 0.37, 0.45);
             diffuseColor.rgb = mix(diffuseColor.rgb, glass, ink * 0.62 * (1.0 - uNight * 0.5));
             diffuseColor.rgb *= 1.0 - line * side * fade * 0.16 - (1.0 - fade) * 0.06 * side;
@@ -237,7 +263,7 @@ function windowize(mat) {
           }
         }`);
   };
-  mat.customProgramCacheKey = () => 'ks-card-v2';
+  mat.customProgramCacheKey = () => (detail ? 'ks-card-v2-d' : 'ks-card-v2');
 }
 
 // —— 影棚：三盏长条软箱（世界坐标，米）。黑胶上的镜面反射、各向异性高光，和楼、金属件的环境反射，都来自同这三盏 ——
@@ -792,7 +818,7 @@ function hipRoof(o, y0) {
 }
 const NONE_FAC = (seed) => [1, 1, STYLE.none, seed];
 /** 一栋楼的全部卡片。返回几何的数组（同一区块里合并成一个网格）。 */
-function cardBuilding(b, zi) {
+function cardBuilding(b, zi, { detail = false } = {}) {
   const out = [];
   const pts = ringM(b.r[0]), holes = b.r.slice(1).map(ringM);
   const pool = b.n === '游泳馆';
@@ -802,6 +828,12 @@ function cardBuilding(b, zi) {
   const wall = paperOf(pool ? POOL_STONE : era ? era.wall : FUNC_CARD[b.f ?? 0], key);
   const roof = paperOf(ROOF_PAPER, key + '屋');
   const fc = facadeOf(b, H);
+  // 地点楼：名字以「馆」结尾的不全是体育馆（图书馆、博物馆、音乐厅都有窗）。特写时按公开照片给一种立面：
+  // 图书馆是普通窗格，博物馆、音乐厅是横向带窗（照片上是成片的玻璃）。体育馆、游泳馆、看台另做，不在这里
+  if (detail && fc.style === STYLE.none) {
+    if (/图书馆|校医院/.test(b.n)) { fc.style = STYLE.grid; fc.bay = 3.6; }
+    else if (/博物馆|音乐厅/.test(b.n)) { fc.style = STYLE.ribbon; fc.bay = 4.2; }
+  }
   const seed = Math.min(0.999, Math.max(0, tintOf(key + '窗').dw * 16 + 0.5));
   const thin = b.o[4] < 90;                         // 宽不到 9 米的小房子：不倒角、不起女儿墙
   out.push(dress(slab(pts, 0, H, { bevel: thin ? 0 : 0.35, holes }), wall, roof, [fc.floor, fc.bay, pool ? STYLE.none : fc.style, seed]));
@@ -815,6 +847,7 @@ function cardBuilding(b, zi) {
     rim(eOut, 1.0, H - eH, H, eCol);
     if (era) rim(eOut * 0.55, 0.6, H - eH - 0.7, H - eH, paperOf(era.under, key + '椽'));
   }
+  if (detail && !holes.length) out.push(...detailParts(b, pts, H, wall, roof, fc, seed, thin));
   if (b.rf === 'hipped') {
     out.push(dress(hipRoof(b.o, H), roof, roof, NONE_FAC(seed)));
   } else if (!thin && !holes.length) {
@@ -830,6 +863,49 @@ function cardBuilding(b, zi) {
       bx.translate(q.x + Math.sin(q.rotY) * off, H + h / 2, q.z + Math.cos(q.rotY) * off);
       out.push(dress(bx, wall.clone().multiplyScalar(0.94), roof, NONE_FAC(seed)));
     }
+  }
+  return out;
+}
+
+/** 地点楼的细节（拉近才看得见）：勒脚、入口（门洞 + 雨篷）、屋顶设备、女儿墙压顶。入口放在最朝南的那条长边上（北方的楼多朝南；是示意，不是测绘）。 */
+const STONE = new THREE.Color('#8E8A82'), DOOR = new THREE.Color('#2B3242'), CANOPY = new THREE.Color('#EDEBE4'), KIT = new THREE.Color('#B9BDC1');
+function detailParts(b, pts, H, wall, roof, fc, seed, thin) {
+  const out = [], F = NONE_FAC(seed);
+  const base = Math.min(fc.floor * 0.75, 3.2);
+  out.push(dress(slab(offsetRing(pts, 0.28), 0, base), wall.clone().lerp(STONE, 0.55), wall.clone().lerp(STONE, 0.4), F));
+  // 入口：外法线最朝南、又够长的那条边
+  let best = null;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length], L = Math.hypot(bx - ax, by - ay);
+    if (L < 6) continue;
+    const ny = -(bx - ax) / L, score = L * Math.max(0.05, -ny);
+    if (!best || score > best.score) best = { ax, ay, bx, by, L, score, nx: (by - ay) / L, ny };
+  }
+  if (best) {
+    const { ax, ay, bx, by, L, nx, ny } = best, th = Math.atan2(by - ay, bx - ax), mx = (ax + bx) / 2, my = (ay + by) / 2;
+    const at = (geo, off, y) => { geo.rotateY(th); geo.translate(mx + nx * off, y, -(my + ny * off)); return geo; };
+    const dw = Math.min(L * 0.22, 5.5), dh = Math.min(fc.floor * 0.92, 4.2);
+    out.push(dress(at(new THREE.BoxGeometry(dw, dh, 0.5), 0.05, dh / 2), DOOR, DOOR, F));
+    const cw = Math.min(L * 0.34, 10), cd = 3.0;
+    out.push(dress(at(new THREE.BoxGeometry(cw, 0.45, cd), cd / 2, dh + 0.25), CANOPY, CANOPY, F));
+    for (const s of [-1, 1]) out.push(dress(at(new THREE.BoxGeometry(0.35, dh, 0.35).translate(s * (cw / 2 - 0.4), 0, 0), cd - 0.4, dh / 2), CANOPY, CANOPY, F));
+    // 台阶两级
+    for (let k = 0; k < 2; k++) out.push(dress(at(new THREE.BoxGeometry(cw * (0.9 - k * 0.12), 0.32, cd + 1.6 - k * 0.9), (cd + 1.6 - k * 0.9) / 2, 0.16 + k * 0.32), STONE, STONE, F));
+  }
+  if (!thin && b.rf !== 'hipped') {
+    // 女儿墙压顶：一道比墙浅的细边
+    const inner = offsetRing(pts, -0.65), top = H + 1.1 * (EX / 1.6);
+    if (Math.abs(ringArea(inner)) > 20) out.push(dress(slab(offsetRing(pts, 0.12), top, top + 0.22, { holes: [inner.slice().reverse()] }), CANOPY, CANOPY, F));
+    // 屋顶设备：几台空调外机、一只水箱
+    const q = obb(b.o), ax = [Math.sin(q.rotY), Math.cos(q.rotY)], px = [Math.cos(q.rotY), -Math.sin(q.rotY)];
+    const spots = [[-0.3, -0.22], [-0.18, 0.2], [0.26, -0.18], [0.34, 0.16]];
+    spots.forEach(([u, v], k) => {
+      const w = k === 3 ? 3.2 : 1.8, hh = k === 3 ? 2.4 : 1.2, d = k === 3 ? 3.2 : 1.1;
+      const g = new THREE.BoxGeometry(w, hh, d);
+      g.rotateY(q.rotY);
+      g.translate(q.x + ax[0] * u * q.L + px[0] * v * q.W, H + hh / 2, q.z + ax[1] * u * q.L + px[1] * v * q.W);
+      out.push(dress(g, KIT, KIT.clone().multiplyScalar(1.08), F));
+    });
   }
   return out;
 }
@@ -1182,12 +1258,12 @@ function buildCampus() {
     bgroup.add(bld);
     pickables.push(bld);
     const heroMats = [];
-    const heroMat = () => { const mt = std({ color: '#FFFFFF', roughness: 0.78, vertexColors: true }); windowize(mt); heroMats.push(mt); return mt; };
+    const heroMat = () => { const mt = std({ color: '#FFFFFF', roughness: 0.78, vertexColors: true }); windowize(mt, { detail: true }); heroMats.push(mt); return mt; };
     const heroMeshes = new Map();       // 楼名 → 这栋楼的全部部件（之后挪进它自己的枢轴组）
     for (const b of bs) {
       const p = heroOf.get(b.n);
       if (!p || b.n === '体育馆') continue;
-      const hm = new THREE.Mesh(mergeGeometries(cardBuilding(b, zi)), heroMat());
+      const hm = new THREE.Mesh(mergeGeometries(cardBuilding(b, zi, { detail: true })), heroMat());
       hm.castShadow = true; hm.receiveShadow = true;
       hm.userData.zone = z.id; hm.userData.place = p.id;
       bgroup.add(hm);
@@ -1329,12 +1405,13 @@ function buildCampus() {
       pivot.position.set(ctr.x, 0, ctr.z);
       bgroup.add(pivot);
       for (const o of objs) { bgroup.remove(o); o.position.x -= ctr.x; o.position.z -= ctr.z; pivot.add(o); }
-      const R = Math.max(size.x, size.z) * 0.62 + 6;
+      // 台座（2026-11-26 改小改暗：原来一大块亮纸盘抢了楼的戏）：一张薄的灰卡纸托，比楼的外接圆大一圈，底下一道细的示波黄
+      const R = Math.hypot(size.x, size.z) * 0.5 + 4;
       const pedestal = new THREE.Group();
-      const ped = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 1.04, 5, 72), new THREE.MeshStandardMaterial({ color: '#EDEBE4', roughness: 0.92 }));
-      ped.position.y = -2.6; ped.castShadow = true; ped.receiveShadow = true;
-      const edge = new THREE.Mesh(new THREE.TorusGeometry(R * 1.04, 0.35, 6, 96), new THREE.MeshBasicMaterial({ color: COL.scope, toneMapped: false }));
-      edge.rotation.x = Math.PI / 2; edge.position.y = -5.1;
+      const ped = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 2.4, 96), new THREE.MeshStandardMaterial({ color: '#B9B6AE', roughness: 0.95 }));
+      ped.position.y = -1.25; ped.castShadow = false; ped.receiveShadow = true;
+      const edge = new THREE.Mesh(new THREE.TorusGeometry(R, 0.16, 6, 128), new THREE.MeshBasicMaterial({ color: COL.scope, toneMapped: false }));
+      edge.rotation.x = Math.PI / 2; edge.position.y = -2.4;
       pedestal.add(ped, edge);
       pedestal.visible = false;
       pivot.add(pedestal);

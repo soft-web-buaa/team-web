@@ -3,6 +3,7 @@
 // 场景怎么「搭」在 scene.js（移植自刻声 plan3d.js）。页面（Vue）只通过下面导出的函数说话，不碰 three.js。
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { build, setTier, tier as tierNow, TIERS, RIN, ROUT, RP, TILE_TOP, LABEL_R, TAU, COL, WAVE_FS, WAVE_W, WAVE_H, EX } from './scene.js';
 import { cutWhole, GrooveCutter, TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { semesterBands, bandLayout, bandAt } from '../kesheng/web/plan3d/bands.js';
@@ -71,8 +72,8 @@ function heroPose(pid, az = null) {
   const z = G.zoneObj.get(h.zone);
   const wp = new THREE.Vector3();
   h.pivot.getWorldPosition(wp);
-  const r = Math.max(h.size.x, h.size.z) * 0.75 + h.size.y * 1.2 + 30;   // 楼连同台座占画面一半左右
-  return { t: V(wp.x, TILE_TOP + z.lift + LIFT(h) * 0.7 + h.size.y * 0.3, wp.z), d: Math.max(260, fitDist(r)), polar: 1.0, az: az ?? poseNow().az };
+  const r = Math.max(h.size.x, h.size.z) * 0.62 + h.size.y * 0.8 + 14;   // 楼连同台座占画面一大半（2026-11-26 拉近：细节要看得见）
+  return { t: V(wp.x, TILE_TOP + z.lift + LIFT(h) * 0.7 + h.size.y * 0.35, wp.z), d: Math.max(220, fitDist(r)), polar: 1.1, az: az ?? poseNow().az };   // 放低一点：多看立面、少看屋顶
 }
 const LIFT = (h) => 36 + h.size.y * 0.35;
 function grooveClose() {
@@ -864,6 +865,7 @@ function frame(now) {
     h.pivot.position.y = h.lift;
     if (on && !reduced) h.spin += dt * 0.16; else h.spin += (Math.round(h.spin / TAU) * TAU - h.spin) * (reduced ? 1 : 0.08);
     h.pivot.rotation.y = h.spin;
+    for (const mt of h.mats) if (mt.userData.detail) mt.userData.detail.value = Math.min(1, h.lift / LIFT(h));
     h.pedestal.visible = h.lift > 0.6;
     h.pedestal.scale.setScalar(Math.min(1, h.lift / Math.max(1, goal || LIFT(h))));
   });
@@ -987,24 +989,70 @@ function frame(now) {
   // 选择性聚焦（学 Confused-Tree 声景校园的双层画法，但在同一块画布里）：只画第 1 层（地点楼、台座、波纹），清掉深度、不画背景、不重画阴影
   let anyLift = false;
   G.heroObj.forEach((h) => { if (h.lift > 0.5) anyLift = true; });
-  if (anyLift) {
-    const r = G.renderer, bg = G.scene.background, ac = r.autoClear, su = r.shadowMap.autoUpdate;
-    r.autoClear = false; r.shadowMap.autoUpdate = false;
-    r.setRenderTarget(null);
-    r.clearDepth();
-    G.scene.background = null;
-    // 第 1 层上有全部 16 栋地点楼：这一遍只留被提起来的，别的在上一遍里已经画过（虚的）
-    const off = [];
-    G.heroObj.forEach((h) => { if (h.lift <= 0.5 && h.pivot.visible) { h.pivot.visible = false; off.push(h); } });
-    G.camera.layers.set(1);
-    r.render(G.scene, G.camera);
-    G.camera.layers.set(0);
-    for (const h of off) h.pivot.visible = true;
-    G.scene.background = bg; r.autoClear = ac; r.shadowMap.autoUpdate = su;
-  }
+  if (anyLift) heroPass();
   watchFrames(now);
 }
 let tilt = 0.5, focusR = 0.5;
+
+// —— 特写（2026-11-26：组员与组长说进楼放大后楼看着糙）——
+// 被提起的那栋楼单独画一遍：画进一块 4× 多重采样的缓冲（原来直接画到屏幕上，没有抗锯齿，边是锯齿），再贴回画面。
+// 这一遍有自己的光（像拍产品）：一盏主光从镜头左上方来、一盏轮廓光从楼背后来，太阳压一点。两盏只在第 1 层，不照别的东西
+let heroRT = null, heroQuad = null, keyL = null, rimL = null;
+// 两盏补光开场就在（平时亮度 0）：灯的盏数一变，所有材质都要重编着色器；放在开场，屏风后面就一起编好了
+function buildHeroLights() {
+  keyL = new THREE.DirectionalLight(0xffffff, 0); rimL = new THREE.DirectionalLight(0xffffff, 0);
+  for (const l of [keyL, rimL]) l.layers.enableAll();
+  G.scene.add(keyL, keyL.target, rimL, rimL.target);
+}
+const ccol = new THREE.Color();
+function heroPass() {
+  const r = G.renderer, w = r.domElement.width, h = r.domElement.height;
+  if (!heroRT) {
+    heroRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: tierNow() === 'low' ? 0 : 4 });
+    heroQuad = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: { t: { value: heroRT.texture } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      // 缓冲里是线性、预乘过透明度的颜色：先除回去，再做色调映射和 sRGB，最后按预乘叠到画面上（边缘不发黑）
+      fragmentShader: `uniform sampler2D t; varying vec2 vUv;
+        void main(){ vec4 c = texture2D(t, vUv); if (c.a < 0.002) discard; gl_FragColor = vec4(c.rgb / c.a, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          gl_FragColor = vec4(gl_FragColor.rgb * c.a, c.a); }`,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, depthTest: false, depthWrite: false,
+    }));
+  }
+  if (heroRT.width !== w || heroRT.height !== h) heroRT.setSize(w, h);
+  let lifted = null;
+  G.heroObj.forEach((x) => { if (x.lift > 0.5 && (!lifted || x.lift > lifted.lift)) lifted = x; });
+  const k = lifted ? Math.min(1, lifted.lift / LIFT(lifted)) : 0;
+  // 光：主光在镜头方位左转 50°、仰 38°；轮廓光在楼背后、仰 24°。夜里主光弱一些、轮廓光偏暖（窗里的灯）
+  const L = toks().light, az = controls.getAzimuthalAngle(), c = lifted.pivot.getWorldPosition(v3).clone();
+  const at = (a, el, d = 600) => c.clone().add(new THREE.Vector3(Math.sin(a) * Math.cos(el), Math.sin(el), Math.cos(a) * Math.cos(el)).multiplyScalar(d));
+  keyL.position.copy(at(az + 0.87, 0.66)); keyL.target.position.copy(c);
+  rimL.position.copy(at(az + Math.PI + 0.35, 0.42)); rimL.target.position.copy(c);
+  keyL.intensity = k * (1.25 - 0.55 * L.night);
+  keyL.color.setRGB(1, 0.985, 0.96);
+  rimL.intensity = k * (1.8 + 0.6 * L.night);
+  rimL.color.copy(ccol.set(L.night > 0.5 ? '#FFC892' : '#DCE6FF'));
+  const sunI = G.sun.intensity, hemiI = G.hemi.intensity;
+  G.sun.intensity = sunI * (1 - 0.45 * k); G.hemi.intensity = hemiI * (1 - 0.2 * k);
+  const bg = G.scene.background, ac = r.autoClear, su = r.shadowMap.autoUpdate, cc = r.getClearColor(new THREE.Color()), ca = r.getClearAlpha();
+  r.autoClear = false; r.shadowMap.autoUpdate = false;
+  G.scene.background = null;
+  // 第 1 层上有全部 16 栋地点楼：这一遍只留被提起来的，别的在上一遍里已经画过（虚的）
+  const off = [];
+  G.heroObj.forEach((x) => { if (x.lift <= 0.5 && x.pivot.visible) { x.pivot.visible = false; off.push(x); } });
+  r.setRenderTarget(heroRT);
+  r.setClearColor(0x000000, 0); r.clear(true, true, false);
+  G.camera.layers.set(1);
+  r.render(G.scene, G.camera);
+  G.camera.layers.set(0);
+  r.setRenderTarget(null);
+  heroQuad.render(r);
+  for (const x of off) x.pivot.visible = true;
+  G.sun.intensity = sunI; G.hemi.intensity = hemiI; keyL.intensity = 0; rimL.intensity = 0;
+  G.scene.background = bg; r.autoClear = ac; r.shadowMap.autoUpdate = su; r.setClearColor(cc, ca);
+}
 
 // ====================================================================================
 // 启动
@@ -1059,6 +1107,7 @@ export async function init(canvasNode, labelsNode, campus) {
     }
   }
   G.fx = createDataFx({ scene: G.scene, campus: G.campus, TILE_TOP, EX, lite });
+  buildHeroLights();
   controls = new OrbitControls(G.camera, canvas);
   G.camera.far = 20000; G.camera.updateProjectionMatrix();
   Object.assign(controls, { enablePan: false, enableDamping: true, dampingFactor: 0.08, minPolarAngle: 0.32, maxPolarAngle: 1.18, minDistance: 18, maxDistance: 14000, rotateSpeed: 0.6, zoomSpeed: 0.7 });
