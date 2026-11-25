@@ -22,7 +22,8 @@ function localApi() {
 export default defineConfig({
   base: './',
   plugins: [vue(), localApi()],
-  build: { target: 'es2022', chunkSizeWarningLimit: 1200 },
+  // three.js 单独成一块：它不常变，浏览器缓存住以后，改页面只要重新下小的那一块
+  build: { target: 'es2022', chunkSizeWarningLimit: 900, rolldownOptions: { output: { advancedChunks: { groups: [{ name: 'three', test: /node_modules[\/]three/ }, { name: 'vue', test: /node_modules[\/](@vue|vue|vue-router)/ }] } } } },
   server: { port: 5273, host: '127.0.0.1' },
   preview: { port: 5274, host: '127.0.0.1' },
 });

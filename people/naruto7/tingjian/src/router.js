@@ -5,9 +5,10 @@ import PlaceView from './views/PlaceView.vue';
 import CommunityView from './views/CommunityView.vue';
 import TimeView from './views/TimeView.vue';
 import MineView from './views/MineView.vue';
-import AboutView from './views/AboutView.vue';
-import LabView from './views/LabView.vue';
-import ShelfView from './views/ShelfView.vue';
+// 不在进站路上的三页按需加载（首屏的包小一点）
+const AboutView = () => import('./views/AboutView.vue');
+const LabView = () => import('./views/LabView.vue');
+const ShelfView = () => import('./views/ShelfView.vue');
 
 export const NAV = [
   { name: 'home', to: '/', label: '留声机', hint: '何处' },
