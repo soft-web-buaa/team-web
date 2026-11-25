@@ -3,14 +3,15 @@
 // 场景怎么「搭」在 scene.js（移植自刻声 plan3d.js）。页面（Vue）只通过下面导出的函数说话，不碰 three.js。
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { build, setTier, tier as tierNow, TIERS, RIN, ROUT, RP, TILE_TOP, LABEL_R, TAU, COL, WAVE_FS, WAVE_W, WAVE_H } from './scene.js';
+import { build, setTier, tier as tierNow, TIERS, RIN, ROUT, RP, TILE_TOP, LABEL_R, TAU, COL, WAVE_FS, WAVE_W, WAVE_H, EX } from './scene.js';
 import { cutWhole, GrooveCutter, TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { semesterBands, bandLayout, bandAt } from '../kesheng/web/plan3d/bands.js';
 import { rigFor } from '../kesheng/web/plan3d/light-rig.js';
 import { SCENERY, crownPick, seasonOf } from '../kesheng/web/plan3d/model.js';
-import { clock, toHex } from '../lib/clock.js';
+import { clock, toHex, tokensAt } from '../lib/clock.js';
 import * as audio from '../lib/audio.js';
 import { paintGround, paintMedal, medalSpec } from './ground.js';
+import { createDataFx } from './datafx.js';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let G = null;                 // scene.js 返回的句柄
@@ -52,9 +53,13 @@ function fitDist(radius) {
 }
 const POSES = {
   home: () => ({ t: V(60, -60, 60), d: Math.max(3000, fitDist((RP + 250) * 1.08)), polar: 0.8, az: -0.3 }),
-  community: () => (S.data && S.data.form !== 'columns'
-    ? { t: V(0, 0, 40), d: Math.max(2600, fitDist(RIN * 1.18)), polar: 0.36, az: -0.18 }    // 地面上的图：俯看
-    : { t: V(0, 40, 0), d: Math.max(3100, fitDist((RP + 200) * 1.12)), polar: 0.66, az: -0.62 }),
+  community: () => {
+    const f = S.data && S.data.form;
+    if (f === 'lights') return { t: V(0, 0, 40), d: Math.max(2500, fitDist(RIN * 1.1)), polar: 0.42, az: -0.18 };       // 夜景：像卫星，偏俯看
+    if (f === 'nebula' || f === 'surface' || f === 'fill') return { t: V(0, 80, 20), d: Math.max(2500, fitDist(RIN * 1.15)), polar: 0.86, az: -0.5 };   // 有高度的：斜着看，峰才立得起来
+    if (f && f !== 'columns') return { t: V(0, 0, 40), d: Math.max(2600, fitDist(RIN * 1.18)), polar: 0.36, az: -0.18 };   // 地面上的图：俯看
+    return { t: V(0, 40, 0), d: Math.max(3100, fitDist((RP + 200) * 1.12)), polar: 0.66, az: -0.62 };
+  },
   time: () => ({ t: V(0, 0, 0), d: fitDist(RP + 140), polar: 0.035, az: 0 }),
   mine: () => ({ t: V(40, -40, 40), d: Math.max(3000, fitDist((RP + 250) * 1.05)), polar: 0.74, az: 0.42 }),
   screen: () => grooveClose(),
@@ -208,12 +213,18 @@ export function setColumns(columns) {
 }
 /** 数据地图。d = { form, metric, stats: Map(placeId → 统计), values: Map(placeId → 数), hour } 或 null（回到原始地图）。
  *  光柱是三维的；热力、等高线、年轮、钟面画在地面贴图上。换画法时俯仰角跟着变（地面上的图要俯看）。 */
+const FX_FORMS = new Set(['nebula', 'lights', 'surface', 'fill']);
+const GROUND_FORMS = new Set(['heat', 'contour', 'rings', 'clock']);
 export function setData(d) {
   const prevForm = S.data ? S.data.form : null;
   S.data = d;
   if (d) setColumns(d.form === 'columns' ? d.values : new Map());
+  S.night = !!d && d.pal === 'night';
   if (!built) return;
-  const on = !!d && d.form !== 'columns';
+  const fx = !!d && FX_FORMS.has(d.form);
+  const nightAhead = S.night || clock.tokens.dark;
+  G.fx.set(fx ? { form: d.form, values: d.values, colors: d.colors, metric: d.metric, dark: nightAhead } : { form: null, values: new Map() });
+  const on = !!d && GROUND_FORMS.has(d.form);
   if (on) {
     const t = clock.tokens;
     paintGround(G.groundCanvas, { E: RIN, places: G.campus.places.map((p) => ({ id: p.id, x: p.x / 10, z: -p.y / 10 })), stats: d.stats, metric: d.metric, form: d.form, dark: t.dark, ink: t.ink.map(Math.round), hour: d.hour });
@@ -238,8 +249,8 @@ export function setData(d) {
     }
   } else for (const o of G.pinObj.values()) o.medal.visible = false;
   S.medals = medal;
-  const flat = (f) => !!f && f !== 'columns';
-  if (S.mode === 'community' && revealed && flat(prevForm) !== flat(d && d.form)) play([{ to: POSES.community, dur: 900, ease: 'inOut' }]);
+  const kind = (f) => (!f || f === 'columns' ? 0 : f === 'lights' ? 1 : FX_FORMS.has(f) ? 2 : 3);
+  if (S.mode === 'community' && revealed && kind(prevForm) !== kind(d && d.form)) play([{ to: POSES.community, dur: 1100, ease: 'inOut' }]);
 }
 /** 全部条目（含史料与概念盘）：外圈一个学期一带。 */
 export function setBands(list) {
@@ -256,8 +267,11 @@ export function setEchoActive(i) { S.echoActive = i; }
 const MAXD = 14, PIN_STEP = 2.2;
 // 数据地图里校园的素纸色。白天的太阳很强（场景亮度会超过 1，最后的色调映射再压回白）：纸色要压得够暗，
 // 照亮之后才刚好是浅纸色；不然半透明的墨盖上去，也会被色调映射压回白，什么都看不见（2026-11-25 实测）
-const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C');
+const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C'), DATA_NIGHT = new THREE.Color('#10131F');
 const INKC = new THREE.Color(COL.ink), AGED = new THREE.Color('#A9B1BE'), SCOPEC = new THREE.Color(COL.scope), FADED = new THREE.Color('#7A828E');
+// 光柱的尺子：一张盘多高（米），刻线几张一道
+const COL_K = () => Math.min(14, 330 / Math.max(1, S.colMax));
+const COL_UNIT = () => (S.colMax > 80 ? 10 : S.colMax > 36 ? 5 : 1);
 function paintPins() {
   for (const [pid, o] of G.pinObj) {
     const list = (S.pins.get(pid) || []).slice(-MAXD);
@@ -511,8 +525,24 @@ function stepBands(dt) {
 // ====================================================================================
 let envHex = '', envT = 0, bgKey = '';
 const tmpC = new THREE.Color();
+// 夜观：数据地图选「夜观色」时，舞台的光与背景渐变到入夜的蓝紫（21:30），页面的纸照旧跟着钟点。离开就渐变回来
+const NIGHT_T = tokensAt(21.5);
+let nightK = 0, mixed = null;
+const lerpA = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+function toks() {
+  const a = clock.tokens;
+  if (nightK < 0.001) return a;
+  const b = NIGHT_T, t = nightK;
+  if (!mixed || mixed.a !== a || mixed.t !== t) {
+    const daz = ((b.light.az - a.light.az + 540) % 360) - 180;
+    const light = { az: (a.light.az + daz * t + 360) % 360, col: lerpA(a.light.col, b.light.col, t) };
+    for (const k of ['el', 'i', 'hemi', 'night', 'lit', 'plat']) light[k] = a.light[k] + (b.light[k] - a.light[k]) * t;
+    mixed = { a, t, v: { ...a, dark: t > 0.5 ? true : a.dark, bg0: lerpA(a.bg0, b.bg0, t), bg1: lerpA(a.bg1, b.bg1, t), light } };
+  }
+  return mixed.v;
+}
 function stepLight(now) {
-  const T = clock.tokens, L = T.light;
+  const T = toks(), L = T.light;
   const az = (L.az * Math.PI) / 180, el = (L.el * Math.PI) / 180;
   G.sun.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).multiplyScalar(2400);
   G.sun.intensity = L.i;
@@ -541,6 +571,19 @@ function stepLight(now) {
   const placeDim = S.mode === 'place' ? 0.62 : 1;
   u.uBright.value = L.plat * placeDim;
   G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.5 * L.night; });
+  // 操场（2026-11-26 组员：整站变色时操场一直不变，突兀）：草皮、塑胶跑道的饱和色在暗光下仍然显眼，
+  // 画线是不受光的白线。入夜时两种场地色往这个钟点的天光色里褪、压暗；画线跟着天光的亮度走
+  const nk = L.night, sunK = Math.min(1, L.i / 2.6);
+  tmpC.setRGB(L.col[0] / 255, L.col[1] / 255, L.col[2] / 255, THREE.SRGBColorSpace);
+  for (const z of G.seasonal) {
+    if (!z.pitchMat) continue;
+    for (const t of z.tints) {
+      if (t.mat === z.pitchMat) t.on.set('#5E9A5A').lerp(tmpC, 0.18 + 0.3 * nk).multiplyScalar(1 - 0.35 * nk);
+      else if (t.mat === z.trackMat) t.on.set('#B85C45').lerp(tmpC, 0.18 + 0.3 * nk).multiplyScalar(1 - 0.35 * nk);
+    }
+    z.lineMat.color.set(COL.paper).multiply(tmpC).multiplyScalar(0.35 + 0.65 * sunK);
+    z.lineMat.opacity = 0.85 - 0.45 * nk;
+  }
   G.bloom.strength = 0.08 + 0.42 * L.night;
   G.bloom.threshold = 1.9;          // 只让窗灯、路灯、示波黄发亮；唱臂的镀铬在月光下不该糊成一团
   const key = `${T.bg0.map(Math.round)}|${T.bg1.map(Math.round)}`;
@@ -716,14 +759,16 @@ function updateTags() {
     const show = revealed && !shot && S.mode !== 'place' && S.mode !== 'time' && (S.hoverPlace === p.id || (crowd && (S.medals ? o.medal && o.medal.visible : topN.has(p.id))) || mine || (S.mode === 'home' && S.hover === p.z && !narrow));
     const n = crowd ? (vals.get(p.id) || 0) : mine ? (S.pins.get(p.id) || []).filter((x) => x.mine).length : (S.pins.get(p.id) || []).length;
     const b = t.querySelector('b');
-    const txt = n ? String(n) : '';
+    const txt = n ? (crowd && (!S.data || S.data.metric === 'count') ? `${n} 张` : String(n)) : '';
     if (b.textContent !== txt) { b.textContent = txt; t._w = 0; }
     const playingHere = !!(current && current.e.placeId === p.id);
     t.classList.toggle('is-playing', playingHere);
     const must = S.hoverPlace === p.id || playingHere;
     let q;
-    if (crowd && S.medals && o.medal && o.medal.visible) q = placeTag(t, o.group.position.x, o.group.position.y + o.medal.position.y, o.group.position.z + o.medalR * 1.02, show, true, n, must);   // 小盘模式：签挂在盘的下沿（朝镜头那一边）
-    else q = placeTag(t, o.group.position.x, o.group.position.y + Math.max(o.head.position.y + 6, (crowd ? o.h : 0) + 8), o.group.position.z, show, false, n, must);
+    const fy = crowd && S.data && FX_FORMS.has(S.data.form) ? G.fx.tagY(p.id) : null;
+    if (fy != null) q = placeTag(t, o.group.position.x, fy, o.group.position.z, show, false, n, must);
+    else if (crowd && S.medals && o.medal && o.medal.visible) q = placeTag(t, o.group.position.x, o.group.position.y + o.medal.position.y, o.group.position.z + o.medalR * 1.02, show, true, n, must);   // 小盘模式：签挂在盘的下沿（朝镜头那一边）
+    else q = placeTag(t, o.group.position.x, o.group.position.y + Math.max(o.head.position.y + 6, (crowd ? o.h : 0) + 10), o.group.position.z, show, false, n, must);
     if (q) want.push(q); else if (t.style.display !== 'none') t.style.display = 'none';
   }
   want.sort((a, b) => (b.must - a.must) || (b.rank - a.rank));
@@ -806,9 +851,9 @@ function frame(now) {
     const dim = inPlace || (S.mode === 'mine') || (S.mode === 'community' && !!S.data);
     const k = reduced ? 1 : 0.12;
     // 数据地图：校园褪成一张素纸（亮时浅、暗时深），地面上的图才压得住
-    const paleC = clock.tokens.dark ? DATA_DARK : DATA_LIGHT;
+    const paleC = S.data && S.data.form === 'lights' ? DATA_NIGHT : toks().dark ? DATA_DARK : DATA_LIGHT;
     for (const t of o.tints) t.mat.color.lerp(data ? paleC : dim && !sel ? t.dim : t.on, k);
-    o.bldMat.userData.win.value += ((dim && !sel ? 0.25 : 1) - o.bldMat.userData.win.value) * k;
+    o.bldMat.userData.win.value += ((data && FX_FORMS.has(S.data.form) ? 0 : dim && !sel ? 0.25 : 1) - o.bldMat.userData.win.value) * k;
   });
   // 地点楼：提起来、慢慢转、垫上纸台座；离开时落回原位
   G.heroObj.forEach((h, pid) => {
@@ -828,17 +873,28 @@ function frame(now) {
     o.group.position.y = TILE_TOP + z.lift;
     o.group.scale.y = Math.max(0.001, easeOut(z.rise));
     o.group.visible = z.rise > 0.02 && S.mode !== 'place';
+    // 光柱（2026-11-26 重做：原来又细又淡，白天看不见，也看不出是什么）。高度和张数成正比，柱上一道刻线一张（多了五张、十张一道），
+    // 柱顶一张小盘、签上写「n 张」；白天是墨色的实柱（像印在纸上），夜里是会发光的光柱；底下一圈光环慢慢往外走
     const crowd = S.mode === 'community';
-    const goalH = crowd ? 30 + 360 * Math.sqrt((S.columns.get(pid) || 0) / S.colMax) : 0;
+    const n = S.columns.get(pid) || 0;
+    const goalH = crowd && n ? 18 + n * COL_K() : 0;
     o.h += (goalH - o.h) * (reduced ? 1 : 1 - Math.exp(-dt / 0.45));
     o.column.scale.set(1, Math.max(0.001, o.h), 1);
     o.column.position.y = 0;
-    const dark = clock.tokens.dark;
-    o.column.material.color.set(S.hoverPlace === pid ? COL.scope : dark ? '#DDE4F0' : '#2B3954');
-    o.column.material.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
-    o.column.material.opacity = Math.min(1, o.h / 30) * (dark ? 0.55 : 0.32);
-    o.halo.material.opacity = Math.min(1, o.h / 30) * 0.7;
-    o.halo.material.color.set(dark ? '#DDE4F0' : '#2B3954');
+    const dark = toks().dark, hot = S.hoverPlace === pid;
+    const cu = o.column.material.uniforms;
+    cu.uH.value = Math.max(0.001, o.h); cu.uStep.value = COL_K() * COL_UNIT(); cu.uBase.value = 18;
+    cu.uCol.value.set(hot ? COL.scope : dark ? '#E4E9F6' : '#24304A');
+    cu.uDark.value = dark ? 1 : 0; cu.uK.value = Math.min(1, o.h / 18);
+    const blend = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+    if (o.column.material.blending !== blend) { o.column.material.blending = blend; o.column.material.needsUpdate = true; }
+    o.cap.visible = o.h > 4;
+    o.cap.position.y = o.h + 1.2;
+    o.cap.material.color.set(hot ? COL.scope : dark ? '#F2F4F8' : '#F4F1EA');
+    const ph = reduced ? 0.5 : ((now / 1000) * 0.35 + (o.top % 1)) % 1;
+    o.halo.scale.setScalar(1 + ph * 1.6);
+    o.halo.material.opacity = Math.min(1, o.h / 18) * (dark ? 0.75 : 0.6) * (1 - ph);
+    o.halo.material.color.set(hot ? COL.scope : dark ? '#E4E9F6' : '#24304A');
     if (o.medal && o.medal.visible) {
       o.medal.position.y = o.top + 30 + (reduced ? 0 : Math.sin(now / 1400 + o.top) * 1.5);
       o.medal.scale.setScalar(o.medalR);
@@ -853,6 +909,10 @@ function frame(now) {
       if (t >= 1) { d.position.y = y; d.rotation.y = 0; o.head.position.y = y + 3.5; landing = null; }
     }
   });
+  const nightGoal = S.night && S.mode === 'community' ? 1 : 0;
+  nightK += (nightGoal - nightK) * (reduced ? 1 : 1 - Math.exp(-dt / 0.5));
+  if (Math.abs(nightK - nightGoal) < 0.002) nightK = nightGoal;
+  G.fx.step(dt, { camera: G.camera, height: canvas.clientHeight, pixelRatio: G.renderer.getPixelRatio(), reduced });
   stepShot(now);
   controls.update();
   const camD = G.camera.position.distanceTo(controls.target);
@@ -998,6 +1058,7 @@ export async function init(canvasNode, labelsNode, campus) {
       o.group.add(o.medal);
     }
   }
+  G.fx = createDataFx({ scene: G.scene, campus: G.campus, TILE_TOP, EX, lite });
   controls = new OrbitControls(G.camera, canvas);
   G.camera.far = 20000; G.camera.updateProjectionMatrix();
   Object.assign(controls, { enablePan: false, enableDamping: true, dampingFactor: 0.08, minPolarAngle: 0.32, maxPolarAngle: 1.18, minDistance: 18, maxDistance: 14000, rotateSpeed: 0.6, zoomSpeed: 0.7 });

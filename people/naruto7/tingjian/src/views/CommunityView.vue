@@ -4,7 +4,7 @@
 //   话题：预置的和用户建的 #话题，一个话题一个广场
 //   接力：一人一棒，链从第一棒排到最后一棒
 //   多机位：同一个地方、前后半小时里的几段录音，自动归成「一场」，切机位从同一秒接着放
-//   看板：心情的共鸣、地点 × 钟点、舞台上光柱的口径
+//   看板：心情、地点 × 钟点、舞台上光柱的口径
 //   合辑：官方征集的和大家建的合辑，一段接一段听或叠成一张（学黄泰霖原型的主题合辑与共建唱片）
 //   声音：随手遇见、钉在某一秒的话
 // 页面状态放在网址里（?tab=&topic=&post=），分享出去、按 F5 都还在原处。
@@ -189,7 +189,7 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
       <section v-else-if="tab === 'board'">
         <p class="fine" style="margin-top: 12px">舞台上每根光柱是一个地方，高度是这里留下的张数。想换一种画法、只看某个钟点，去<button type="button" class="link" @click="go({ map: 'data' })">数据地图</button>。</p>
 
-        <p class="h3">心情 · 共鸣</p>
+        <p class="h3">心情</p>
         <p class="fine">心情是发帖的人自己选的，不从声音里猜。深色是真实的帖子（n = {{ moods.reduce((s, m) => s + m.real, 0) }}），浅色是示例帖（n = {{ moods.reduce((s, m) => s + m.demo, 0) }}）。点一种心情，看同样心情的人在哪儿。</p>
         <div class="moods">
           <button v-for="m in moods" :key="m.id" type="button" class="mood" :class="{ on: moodPick === m.id }" @click="moodPick = moodPick === m.id ? null : m.id">

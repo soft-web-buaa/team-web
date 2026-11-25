@@ -1,7 +1,7 @@
-// 听见校园 · 社区（客户端）：帖子、楼中楼、话题、抱抱与我也是、接力、多机位、看板。接口在 server/api.mjs 的 community()。
+// 听见校园 · 社区（客户端）：帖子、楼中楼、话题、共鸣与我也是、接力、多机位、看板。接口在 server/api.mjs 的 community()。
 // 学了几家：贴吧的楼层与楼中楼（只两层）、豆瓣小组的「回应」、小红书的 #话题、网易云音乐的抱抱、Instagram 的 Add Yours 接力、
 // SoundCloud 钉在某一秒的评论（已经有：回声）、aporee 声音地图只收现场录音的口径。
-// 示例帖在 public/data/demo-posts.json：标「示例」，不算人数，删不掉；但在它下面回复、抱抱是真的，存在云上。
+// 示例帖在 public/data/demo-posts.json：标「示例」，不算人数，删不掉；但在它下面回复、共鸣是真的，存在云上。
 import { reactive } from 'vue';
 import * as cloud from './cloud.js';
 import { validateLine } from '../kesheng/web/contract.js';
@@ -61,7 +61,7 @@ export function countsOf(p) {
   const c = C.counts[p.id] || zero();
   return { ...c, my: c.my || [], replies: (c.replies || 0) + C.demoReplies.filter((r) => r.postId === p.id).length };
 }
-/** 帖子流。热门：回复 4、我也是 2、抱抱 1，一天折半（和服务端同一个公式）。 */
+/** 帖子流。热门：回复 4、我也是 2、共鸣 1，一天折半（和服务端同一个公式）。 */
 export function feed({ sort = 'new', topic = null, place = null } = {}) {
   let a = allPosts();
   if (topic) a = a.filter((p) => p.topics.includes(topic));
@@ -150,7 +150,7 @@ export function sameSlot() {
 }
 
 // ====================================================================================
-// 看板：心情的共鸣、地点 × 钟点
+// 看板：心情、地点 × 钟点
 // ====================================================================================
 /** 心情：真实帖（云上统计）和示例帖分开数，页面上两种颜色、各写 n。 */
 export function moodTally() {
@@ -210,7 +210,7 @@ export async function reply(postId, text, { parentId = null, soundId = null } = 
   C.version++;
   return r.json.reply;
 }
-/** 抱抱 / 我也是：再点一次取消。holder 是页面上显示这一条计数的那个对象（帖子或楼层），直接改它。 */
+/** 共鸣 / 我也是：再点一次取消。holder 是页面上显示这一条计数的那个对象（帖子或楼层），直接改它。 */
 export async function react(target, type, holder) {
   const r = await cloud.request('POST', '/react', { target, type }, { create: true });
   if (!r.ok) throw fail(r, '点');

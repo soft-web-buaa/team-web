@@ -114,11 +114,18 @@ console.log('— 3b. 数据地图');
 await p.evaluate(() => { location.hash = '#/community?map=data'; });
 await sleep(1500);
 t('数据地图：有「看什么」和「怎么画」', !!(await p.$('[aria-label="看什么"]')) && !!(await p.$('[aria-label="怎么画"]')));
-for (const f of ['热力', '等高线', '年轮', '钟面', '光柱']) {
+for (const f of ['星云', '夜景', '曲面', '注满', '光柱']) {
   await p.evaluate((f) => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes(f)).click(), f);
   await sleep(700);
 }
 t('数据地图：图例写了口径和张数', /张/.test(await text(p, '.dp .legend')));
+await p.evaluate(() => [...document.querySelectorAll('.dp .link')].find((x) => x.textContent.includes('旧画法')).click());
+await sleep(300);
+for (const f of ['热力', '等高线', '年轮', '钟面']) {
+  await p.evaluate((f) => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes(f)).click(), f);
+  await sleep(600);
+}
+t('数据地图：旧画法也还能切', (await p.$$('[aria-label="怎么画"] [role=radio]')).length === 9);
 await p.evaluate(() => { location.hash = '#/community'; });
 await sleep(1200);
 
@@ -190,7 +197,7 @@ const heard = await q.evaluate(async (id) => { const k = 'e'.repeat(16); const r
 t('B 点「我也听过」', heard === 1);
 await q.close();
 await B.close();
-// —— 社区：发帖、回楼中楼、抱抱、接一棒 ——
+// —— 社区：发帖、回楼中楼、共鸣、接一棒 ——
 console.log('— 社区');
 await go(p, '?h=19#/community');
 await until(p, () => document.querySelectorAll('.paper .post').length >= 10, null, 30000);
@@ -216,8 +223,8 @@ await until(p, () => document.querySelector('.thread .kids'), null, 15000);
 t('楼中楼：挂在 2 楼下面', (await text(p, '.thread .kids')).includes('楼中楼'));
 const hug = (await p.$$('.thread .post footer .act'))[1];
 await hug.click();
-await until(p, () => /抱抱 1/.test(document.querySelector('.thread .post footer').textContent), null, 10000);
-t('抱抱：计数 1，按钮亮起来', (await text(p, '.thread .post footer')).includes('抱抱 1'));
+await until(p, () => /共鸣 1/.test(document.querySelector('.thread .post footer').textContent), null, 10000);
+t('共鸣：计数 1，按钮亮起来', (await text(p, '.thread .post footer')).includes('共鸣 1'));
 await go(p, '?h=19#/community?post=ps-demo-r3');
 await until(p, () => document.querySelector('.thread .chain'), null, 20000);
 t('接力：示例链三棒都在', (await p.$$('.thread .chain li:not(.next)')).length === 3);

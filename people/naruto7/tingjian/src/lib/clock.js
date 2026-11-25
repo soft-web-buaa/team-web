@@ -6,18 +6,19 @@ import { reactive } from 'vue';
 
 // —— 关键帧 ——  bg0 / bg1：舞台背景的上、下两色；paper：纸；ink：墨；dark：这一帧是不是暗底
 // 光：az 太阳方位（从正北顺时针，度）、el 高度角、i 强度、col 光色、hemi 天光、night 入夜程度、lit 亮窗比例、plat 唱片亮度
+// 2026-11-26 组员反馈后改：日出、黄昏的饱和度提上去，黄昏更红；深夜不再回到偏青的藏青，一直停在初入夜那种蓝紫（只是更深）
 const KF = [
-  { h: 0, name: '夜', bg0: '#18223C', bg1: '#04060C', paper: '#111A2D', ink: '#E7EBF3', dark: true, az: 40, el: 40, i: 0.5, col: '#9DB2DA', hemi: 0.35, night: 1, lit: 0.3, plat: 0.34 },
-  { h: 4.7, name: '夜', bg0: '#272845', bg1: '#06060E', paper: '#15172B', ink: '#E7E5EF', dark: true, az: 62, el: 26, i: 0.55, col: '#A9B2D8', hemi: 0.4, night: 0.95, lit: 0.16, plat: 0.4 },
-  { h: 5.3, name: '晨', bg0: '#E9D4CB', bg1: '#80829A', paper: '#F4EDE9', ink: '#2A2433', az: 78, el: 4, i: 1.4, col: '#FFC6A6', hemi: 0.72, night: 0.5, lit: 0.22, plat: 0.72 },
-  { h: 7, name: '晨', bg0: '#E2E3DF', bg1: '#93A0AD', paper: '#F2F3F0', ink: '#1F2A36', az: 92, el: 11, i: 2.1, col: '#FFDDBA', hemi: 0.92, night: 0.2, lit: 0.16, plat: 0.86 },
+  { h: 0, name: '夜', bg0: '#2A2A5E', bg1: '#06061A', paper: '#141634', ink: '#ECEAF6', dark: true, az: 40, el: 40, i: 0.5, col: '#A8A2E0', hemi: 0.35, night: 1, lit: 0.3, plat: 0.34 },
+  { h: 4.6, name: '夜', bg0: '#33306A', bg1: '#07061A', paper: '#171634', ink: '#ECE8F4', dark: true, az: 62, el: 26, i: 0.55, col: '#B0A6DE', hemi: 0.4, night: 0.95, lit: 0.16, plat: 0.4 },
+  { h: 5.3, name: '晨', bg0: '#F6B49A', bg1: '#6C5F9C', paper: '#FBEBE3', ink: '#2E2033', az: 78, el: 4, i: 1.5, col: '#FFAF8A', hemi: 0.72, night: 0.5, lit: 0.22, plat: 0.72 },
+  { h: 7, name: '晨', bg0: '#F6DCC0', bg1: '#8C9AB4', paper: '#F8F1EA', ink: '#22283A', az: 92, el: 11, i: 2.1, col: '#FFD2A6', hemi: 0.92, night: 0.2, lit: 0.16, plat: 0.86 },
   { h: 10, name: '上午', bg0: '#E3E9EA', bg1: '#9AA8B3', paper: '#F3F5F4', ink: '#1C2833', az: 132, el: 36, i: 2.6, col: '#FFF6E8', hemi: 1.21, night: 0, lit: 0, plat: 1 },
   { h: 12.5, name: '午', bg0: '#EEEFEC', bg1: '#ABB3B7', paper: '#F7F7F4', ink: '#1B2430', az: 180, el: 63, i: 2.8, col: '#FFFFFF', hemi: 1.36, night: 0, lit: 0, plat: 1.04 },
-  { h: 15.8, name: '下午', bg0: '#EEE6D6', bg1: '#A69D8D', paper: '#F7F2E9', ink: '#2A251E', az: 232, el: 30, i: 2.6, col: '#FFF1DE', hemi: 1.21, night: 0, lit: 0, plat: 1 },
-  { h: 18.2, name: '晚', bg0: '#F1C79E', bg1: '#7B4C50', paper: '#F8EBDD', ink: '#3A2224', az: 262, el: 12, i: 3.0, col: '#FFB27A', hemi: 0.92, night: 0.36, lit: 0.42, plat: 0.78 },
-  { h: 18.8, name: '晚', bg0: '#3C4A78', bg1: '#0B1021', paper: '#172038', ink: '#EAE8F2', dark: true, az: 276, el: 5, i: 1.2, col: '#B9A6D0', hemi: 0.6, night: 0.78, lit: 0.55, plat: 0.5 },
-  { h: 22, name: '夜', bg0: '#1A2442', bg1: '#05070E', paper: '#121B30', ink: '#E7EBF3', dark: true, az: 20, el: 38, i: 0.55, col: '#9DB2DA', hemi: 0.38, night: 1, lit: 0.42, plat: 0.36 },
-  { h: 24, name: '夜', bg0: '#18223C', bg1: '#04060C', paper: '#111A2D', ink: '#E7EBF3', dark: true, az: 40, el: 40, i: 0.5, col: '#9DB2DA', hemi: 0.35, night: 1, lit: 0.3, plat: 0.34 },
+  { h: 15.8, name: '下午', bg0: '#F2E2C8', bg1: '#A69680', paper: '#F8F1E6', ink: '#2A251E', az: 232, el: 30, i: 2.6, col: '#FFEBCF', hemi: 1.21, night: 0, lit: 0, plat: 1 },
+  { h: 18.2, name: '晚', bg0: '#F4875E', bg1: '#7E1F36', paper: '#FCE7DC', ink: '#3A1A20', az: 262, el: 12, i: 3.0, col: '#FF8A58', hemi: 0.92, night: 0.36, lit: 0.42, plat: 0.78 },
+  { h: 18.8, name: '晚', bg0: '#3E4482', bg1: '#0C0D26', paper: '#191C3E', ink: '#ECEAF6', dark: true, az: 276, el: 5, i: 1.2, col: '#B6A2DA', hemi: 0.6, night: 0.78, lit: 0.55, plat: 0.5 },
+  { h: 22, name: '夜', bg0: '#2E3070', bg1: '#07071C', paper: '#151838', ink: '#ECEAF6', dark: true, az: 20, el: 38, i: 0.55, col: '#AAA4E0', hemi: 0.38, night: 1, lit: 0.42, plat: 0.36 },
+  { h: 24, name: '夜', bg0: '#2A2A5E', bg1: '#06061A', paper: '#141634', ink: '#ECEAF6', dark: true, az: 40, el: 40, i: 0.5, col: '#A8A2E0', hemi: 0.35, night: 1, lit: 0.3, plat: 0.34 },
 ];
 const LIGHT_KEYS = ['el', 'i', 'hemi', 'night', 'lit', 'plat'];
 

@@ -5,13 +5,14 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { L, isPublic } from '../lib/library.js';
 import { allPosts, C } from '../lib/community.js';
-import { METRICS, FORMS, MOOD_COL, MOOD_NAME, placeStats, valueOf, legendLine } from '../lib/datamap.js';
+import { METRICS, FORMS, OLD_FORMS, PALETTES, MOOD_COL, MOOD_NAME, placeStats, valueOf, legendLine } from '../lib/datamap.js';
 import { clock, cnHour, goHour, backToNow } from '../lib/clock.js';
 import { bj } from '../lib/when.js';
 import * as stage from '../stage/stage.js';
 
 const router = useRouter();
-const metric = ref('count'), form = ref('contour'), byHour = ref(false);
+const metric = ref('count'), form = ref('nebula'), pal = ref('night'), byHour = ref(false), showOld = ref(false);
+const ALL_FORMS = [...FORMS, ...OLD_FORMS];
 const entries = computed(() => { void L.version; return L.entries.filter((e) => isPublic(e) && e.tier !== 'archival' && e.placeId); });
 const posts = computed(() => { void C.version; return allPosts().filter((p) => p.placeId).map((p) => ({ ...p, hour: p.at ? bj(p.at).h : null })); });
 const hourQ = computed(() => (byHour.value ? Math.round(clock.shown * 4) / 4 : null));
@@ -22,8 +23,9 @@ const vmax = computed(() => Math.max(1, ...ranked.value.map((x) => x.v)));
 const demoMood = computed(() => posts.value.filter((p) => p.demo && p.mood).length);
 const legend = computed(() => legendLine(stats.value, metric.value, { hour: hourQ.value, demo: demoMood.value }));
 
-function paint() { stage.setData({ form: form.value, metric: metric.value, stats: stats.value, values: values.value, hour: hourQ.value ?? (form.value === 'clock' || form.value === 'rings' ? clock.shown : null) }); }
-watch([form, metric, stats, () => clock.tokens.dark, () => (form.value === 'clock' || form.value === 'rings' ? Math.round(clock.shown * 4) : 0)], paint, { immediate: true });
+const colors = computed(() => new Map([...stats.value].map(([k, s]) => [k, metric.value === 'mood' && s.mood ? MOOD_COL[s.mood] : null])));
+function paint() { stage.setData({ form: form.value, pal: pal.value, metric: metric.value, stats: stats.value, values: values.value, colors: colors.value, hour: hourQ.value ?? (form.value === 'clock' || form.value === 'rings' ? clock.shown : null) }); }
+watch([form, pal, metric, stats, () => clock.tokens.dark, () => (form.value === 'clock' || form.value === 'rings' ? Math.round(clock.shown * 4) : 0)], paint, { immediate: true });
 onBeforeUnmount(() => stage.setData(null));
 const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 'quiet' ? `${x.s.db.toFixed(1)} dBFS · ${x.s.dbN} 张` : `${MOOD_NAME[x.s.mood]} · ${x.s.moodN} 帖`);
 </script>
@@ -38,9 +40,13 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
 
     <p class="h3">怎么画</p>
     <div class="forms" role="radiogroup" aria-label="怎么画">
-      <button v-for="f in FORMS" :key="f.id" type="button" role="radio" class="form" :class="{ on: form === f.id }" :aria-checked="form === f.id" @click="form = f.id">
+      <button v-for="f in (showOld ? ALL_FORMS : FORMS)" :key="f.id" type="button" role="radio" class="form" :class="{ on: form === f.id, old: !FORMS.includes(f) }" :aria-checked="form === f.id" @click="form = f.id">
         <svg viewBox="0 0 40 28" aria-hidden="true">
-          <template v-if="f.id === 'columns'"><path d="M8 26 L10 10 L14 10 L16 26Z M19 26 L21 4 L25 4 L27 26Z M30 26 L31.5 16 L34.5 16 L36 26Z" /></template>
+          <template v-if="f.id === 'nebula'"><circle v-for="i in 22" :key="i" :cx="14 + Math.cos(i * 2.4) * (i % 7) * 1.4" :cy="13 + Math.sin(i * 2.4) * (i % 7) * 1.1" :r="i % 3 ? 0.9 : 1.4" /><circle v-for="i in 10" :key="'b' + i" :cx="30 + Math.cos(i * 2.4) * (i % 5) * 1.1" :cy="17 + Math.sin(i * 2.4) * (i % 5) * 0.9" r="0.8" /></template>
+          <template v-else-if="f.id === 'lights'"><circle v-for="i in 30" :key="i" :cx="3 + (i * 7.3) % 34" :cy="4 + ((i * 11) % 20) + (i % 2) * 1.5" :r="(i * 7.3) % 34 < 14 && (i * 11) % 20 < 12 ? 1.3 : 0.6" /></template>
+          <template v-else-if="f.id === 'surface'"><g class="ln"><path d="M2 22 Q12 22 16 8 Q19 2 22 10 Q26 20 38 20" /><path d="M2 25 Q12 25 16 13 Q19 8 22 14 Q26 23 38 23" class="soft" /></g><line x1="19" y1="5" x2="19" y2="26" class="tkl" /></template>
+          <template v-else-if="f.id === 'fill'"><rect x="5" y="8" width="9" height="18" class="ln" /><rect x="5" y="16" width="9" height="10" /><rect x="18" y="4" width="8" height="22" class="ln" /><rect x="18" y="8" width="8" height="18" /><rect x="30" y="12" width="7" height="14" class="ln" /><rect x="30" y="22" width="7" height="4" /></template>
+          <template v-else-if="f.id === 'columns'"><path d="M8 26 L10 10 L14 10 L16 26Z M19 26 L21 4 L25 4 L27 26Z M30 26 L31.5 16 L34.5 16 L36 26Z" /></template>
           <template v-else-if="f.id === 'heat'"><circle cx="15" cy="14" r="10" class="soft" /><circle cx="27" cy="16" r="7" class="soft" /><circle cx="15" cy="14" r="4" /></template>
           <template v-else-if="f.id === 'contour'"><ellipse cx="20" cy="14" rx="17" ry="11" class="ln" /><ellipse cx="18" cy="14" rx="11" ry="7" class="ln" /><ellipse cx="17" cy="14" rx="5" ry="3.2" class="ln" /></template>
           <template v-else-if="f.id === 'rings'"><circle cx="20" cy="14" r="12" class="ln" /><circle cx="20" cy="14" r="8.5" class="ln" /><circle cx="20" cy="14" r="5" class="ln" /><circle cx="20" cy="14" r="1.6" /></template>
@@ -49,7 +55,13 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
         <span>{{ f.name }}</span>
       </button>
     </div>
-    <p class="fine">{{ FORMS.find((f) => f.id === form).say }}</p>
+    <p class="fine">{{ ALL_FORMS.find((f) => f.id === form).say }} <button type="button" class="link fine" @click="showOld = !showOld">{{ showOld ? '收起旧画法' : '旧画法（热力、等高线…）' }}</button></p>
+
+    <p class="h3">配色</p>
+    <div class="row" role="radiogroup" aria-label="配色">
+      <button v-for="c in PALETTES" :key="c.id" type="button" role="radio" class="chip" :class="{ on: pal === c.id }" :aria-checked="pal === c.id" @click="pal = c.id">{{ c.name }}</button>
+    </div>
+    <p class="fine">{{ PALETTES.find((c) => c.id === pal).say }}</p>
 
     <p class="h3">什么时候</p>
     <div class="row">
@@ -81,6 +93,8 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
 
 <style scoped>
 .forms { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.form.old { border-style: dashed; }
+.form .tkl { stroke: var(--ink-2); stroke-width: 0.8; stroke-dasharray: 1.5 1.5; }
 .form { display: grid; justify-items: center; gap: 4px; padding: 8px 2px 7px; border-radius: 3px; border: 1px solid var(--hair); background: none; font-size: 12px; color: var(--ink-2); }
 .form svg { width: 40px; height: 28px; fill: var(--ink-2); }
 .form .soft { opacity: .3; }

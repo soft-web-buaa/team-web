@@ -1,5 +1,5 @@
 <script setup>
-// 广场里的一个帖子：谁、何时、在哪、什么心情、一段话、附的那段声音、#话题，下面是回复数、抱抱、我也是。点正文进楼。
+// 广场里的一个帖子：谁、何时、在哪、什么心情、一段话、附的那段声音、#话题，下面是回复数、共鸣、我也是。点正文进楼。
 import { computed } from 'vue';
 import DiscMini from './DiscMini.vue';
 import { countsOf, ago, topicName, react } from '../lib/community.js';
@@ -41,7 +41,7 @@ async function hit(type) {
     </div>
     <footer>
       <button type="button" class="act" @click="emit('open', post)">回复{{ c.replies ? ` ${c.replies}` : '' }}</button>
-      <button type="button" class="act" :class="{ on: on('hug') }" :aria-pressed="on('hug')" @click="hit('hug')">抱抱{{ c.hug ? ` ${c.hug}` : '' }}</button>
+      <button type="button" class="act" :class="{ on: on('hug') }" :aria-pressed="on('hug')" @click="hit('hug')">共鸣{{ c.hug ? ` ${c.hug}` : '' }}</button>
       <button type="button" class="act" :class="{ on: on('same') }" :aria-pressed="on('same')" @click="hit('same')">我也是{{ c.same ? ` ${c.same}` : '' }}</button>
     </footer>
   </article>

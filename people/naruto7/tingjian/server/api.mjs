@@ -192,7 +192,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
           const inbox = [];
           for (const x of await store.list('echoes')) if (myIds.has(x.discId) && x.key !== key && x.status === 'ok') inbox.push({ kind: 'echo', discId: x.discId, at: x.at, text: x.text, t: x.t, author: author(x.author) });
           for (const x of heard) if (myIds.has(x.discId) && x.key !== key) inbox.push({ kind: 'heard', discId: x.discId, at: x.at });
-          // 社区里回应我的：回我帖子的、回我那一层的、给我抱抱或我也是的
+          // 社区里回应我的：回我帖子的、回我那一层的、给我共鸣或我也是的
           const myPosts = new Set((await store.list('posts', { key })).map((p) => p.id));
           const myReplyPost = new Map((await store.list('replies', { key })).map((r) => [r.id, r.postId]));
           const myReplies = new Set(myReplyPost.keys());
@@ -318,7 +318,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         return ok({ held: n >= LIMITS.reportsToHold });
       }
 
-      // —— 社区：帖子、楼中楼、话题、抱抱与我也是、接力 ——
+      // —— 社区：帖子、楼中楼、话题、共鸣与我也是、接力 ——
       const cm = await community({ method, path, query, body, key, authed });
       if (cm) return cm;
       const am = await albums({ method, path, body, key, authed });
@@ -351,9 +351,9 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
   // 社区（学贴吧的楼层、豆瓣小组的「回应」、小红书的 #话题、网易云的抱抱、Instagram 的 Add Yours 接力）
   //   帖子 post：一段文字，可以带一段声音（自己刻的、示意盘、史料）、一个地点、一种心情、至多 3 个话题
   //   回复 reply：楼层；回复某一层就是楼中楼，只有两层（Reddit 的十层对一周的课程项目是负担）
-  //   反应 react：抱抱（不评价，只说「我在」）、我也是（同一种经历）。再点一次取消
+  //   反应 react：共鸣（不评价，只说「我在」）、我也是（同一种经历）。再点一次取消
   //   接力 relay：帖子带 relayOf 就是接在某一棒后面；链按根帖归，第几棒由服务端数
-  //   示例帖（ps-demo-xx）在页面里，不在云上：可以回复、可以抱抱，但删不掉、不算人数
+  //   示例帖（ps-demo-xx）在页面里，不在云上：可以回复、可以共鸣，但删不掉、不算人数
   // ====================================================================================
   const postVisible = (p, key) => p && p.status !== 'removed' && (p.status !== 'held' || p.key === key);
   const isDemo = (id) => DEMO_POST_RE.test(String(id));
@@ -404,7 +404,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       for (const r of replies) rn.set(r.postId, (rn.get(r.postId) || 0) + 1);
       const rc = await reactCounts(posts.map((p) => p.id), key);
       const out = posts.map((p) => postView(p, key, { replies: rn.get(p.id) || 0, ...(rc.get(p.id) || { hug: 0, same: 0, my: [] }) }));
-      // 热门：回复 4、我也是 2、抱抱 1，按时间衰减（一天折半）。最新：按时间
+      // 热门：回复 4、我也是 2、共鸣 1，按时间衰减（一天折半）。最新：按时间
       const score = (p) => (p.replies * 4 + p.same * 2 + p.hug) / Math.pow(1 + (now() - Date.parse(p.at)) / 86400000, 1);
       out.sort(query.sort === 'hot' ? (a, b) => score(b) - score(a) : (a, b) => b.at.localeCompare(a.at));
       // 示例帖上的回复数和反应数也带回去（示例帖本身在页面里）
@@ -535,7 +535,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
     }
     if (method === 'POST' && path === '/api/react') {
       const b = body || {};
-      if (!['hug', 'same'].includes(b.type)) return err(400, '只有「抱抱」和「我也是」。');
+      if (!['hug', 'same'].includes(b.type)) return err(400, '只有「共鸣」和「我也是」。');
       const target = String(b.target || '');
       const tp = /^ps-/.test(target) ? (isDemo(target) ? { status: 'ok' } : await store.get('posts', target)) : /^rp-/.test(target) ? (isDemoReply(target) ? { status: 'ok' } : await store.get('replies', target)) : null;
       if (!tp || tp.status === 'removed') return err(404, '没有这一条。');

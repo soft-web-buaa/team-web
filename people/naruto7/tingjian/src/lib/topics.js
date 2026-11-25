@@ -26,9 +26,9 @@ export const MOODS = [
 export const MOOD_IDS = new Set(MOODS.map((m) => m.id));
 export const moodName = (id) => (MOODS.find((m) => m.id === id) || {}).name || '';
 
-// 反应：抱抱（不评价内容，只说「我在」，学网易云音乐的抱抱）、我也是（同一种经历）。用声音回应走「回复」，附一段声音
+// 反应：共鸣（不评价内容，只说「我听见了，也被打动」。原先叫「抱抱」，学网易云音乐；组员说太亲昵，2026-11-26 改名，数据里的 id 仍是 hug）、我也是（同一种经历）。用声音回应走「回复」，附一段声音
 export const REACTIONS = [
-  { id: 'hug', name: '抱抱' },
+  { id: 'hug', name: '共鸣' },
   { id: 'same', name: '我也是' },
 ];
 

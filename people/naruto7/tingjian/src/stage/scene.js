@@ -1125,11 +1125,13 @@ function buildCampus() {
     seasonal.push({ tints, tileMat, roadMat, greenMat });
     const pitchMat = mat('#5E9A5A', {}, '#5B6968');
     const trackMat = mat('#B85C45', {}, '#6B6466');
+    seasonal.at(-1).pitchMat = pitchMat; seasonal.at(-1).trackMat = trackMat;
     const bldMat = mat('#FFFFFF', { roughness: 0.78, vertexColors: true }, '#A3A9B1');
     windowize(bldMat);
     const treeMat = mat('#FFFFFF', { roughness: 0.95 }, '#7F8890');
     const edgeMat = new THREE.LineBasicMaterial({ color: COL.ink, transparent: true, opacity: 0.32 });
     const lineMat = new THREE.LineBasicMaterial({ color: COL.paper, transparent: true, opacity: 0.85 });
+    seasonal.at(-1).lineMat = lineMat;   // 画线不受光：stage.js 每帧按天光压暗，免得夜里一圈白线亮着
     const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
 
     // 地块：一块一个网格。r9 把几块并成一个几何体（mergeGeometries 默认丢掉材质分组），配上 [顶面, 切边] 两个材质之后
@@ -1380,15 +1382,20 @@ function buildPins() {
     group.add(head);
     pickables.push(head);
     // 社区的光柱：一根从地面升起的细光，高度是这里的张数（stage.js 每帧往目标高度靠）。平时高度为 0，看不见
-    const column = new THREE.Mesh(COLUMN_GEO, new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    const column = new THREE.Mesh(COLUMN_GEO, columnMat());
     column.scale.set(1, 0.001, 1);
     column.renderOrder = 4;
     group.add(column);
-    const halo = new THREE.Mesh(new THREE.RingGeometry(18, 22, 64), new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+    // 柱顶一张小盘（像一摞盘最上面那张）
+    const cap = new THREE.Mesh(CAP_GEO, new THREE.MeshBasicMaterial({ color: COL.paper, toneMapped: false }));
+    cap.visible = false;
+    cap.renderOrder = 4;
+    group.add(cap);
+    const halo = new THREE.Mesh(new THREE.RingGeometry(16, 19, 64), new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
     halo.rotation.x = -Math.PI / 2; halo.position.y = 0.4; halo.renderOrder = 4;
     group.add(halo);
     scene.add(group);
-    pinObj.set(p.id, { group, needle, discs, head, top, zone: p.z, n: 0, column, halo, h: 0 });
+    pinObj.set(p.id, { group, needle, discs, head, top, zone: p.z, n: 0, column, cap, halo, h: 0 });
   }
   // 正在放的地点：地面上一圈圈往外走的刻纹
   const rmat = new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
@@ -1402,7 +1409,37 @@ function buildPins() {
     ripples.push(r);
   }
 }
-const COLUMN_GEO = (() => { const g = new THREE.CylinderGeometry(9, 15, 1, 32, 1, true); g.translate(0, 0.5, 0); return g; })();
+const COLUMN_GEO = (() => { const g = new THREE.CylinderGeometry(11, 13, 1, 40, 1, true); g.translate(0, 0.5, 0); return g; })();
+const CAP_GEO = new THREE.CylinderGeometry(15, 15, 2.2, 48);
+/** 光柱的材质：底下实、往上渐淡；边缘比正中浓（看得出是一根柱子，不是一片雾）；一张盘一道刻线。 */
+function columnMat() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color(COL.ink) }, uH: { value: 1 }, uStep: { value: 10 }, uBase: { value: 18 }, uDark: { value: 0 }, uK: { value: 0 } },
+    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uCol; uniform float uH, uStep, uBase, uDark, uK; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        float y = vUv.y * uH;   // 圆柱的 uv.y 顶上是 1
+        float edge = 1.0 - abs(dot(vN, vV));
+        float fade = mix(1.0, 0.55, y / uH);
+        float t = (y - uBase) / uStep;
+        float tick = y > uBase ? 1.0 - smoothstep(0.0, 0.09, abs(fract(t + 0.5) - 0.5)) : 0.0;
+        float top = smoothstep(uH - 2.0, uH, y);
+        float a;
+        vec3 c = uCol;
+        if (uDark > 0.5) { a = (0.22 + 0.55 * edge) * fade + 0.5 * tick + 0.6 * top; c *= 1.0 + 1.4 * tick + 1.2 * top; gl_FragColor = vec4(c * a * uK, a * uK); }
+        else {
+          // 白天：柱子背后多半是深蓝的盘心，墨色的柱子会消失（2026-11-26 实测）。改成一根纸卷：纸白的身子、往两边压成墨色的边、墨色的刻线
+          vec3 paper = vec3(0.96, 0.95, 0.92);
+          c = mix(paper, uCol, clamp(edge * 1.25, 0.0, 1.0) * 0.8);
+          c = mix(c, uCol, 0.85 * tick);
+          a = mix(0.92, 0.7, y / uH);
+          gl_FragColor = vec4(c, a * uK);
+        }
+      }`,
+    transparent: true, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending,
+  });
+}
 // —— 唱臂：右后方一根枢轴唱臂（直管 + 偏角唱头），针尖落在正在放的那一带上 ——
 // 几何按真唱臂做：枢轴固定，唱臂是刚体，只绕枢轴转；在中间半径上让唱头与刻纹相切，换半径时解一次两圆相交求转角。
 // 抬针 / 落针 = 绕枢轴的水平轴抬起几度（armLift 米 ≈ 针尖抬高）。

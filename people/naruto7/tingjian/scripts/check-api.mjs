@@ -106,10 +106,10 @@ const q2 = await call('POST', '/api/posts/ps-test-0001/replies', { id: 'rp-test-
 const q3 = await call('POST', '/api/posts/ps-test-0001/replies', { id: 'rp-test-0003', text: '三楼', parentId: 'rp-test-0002' }, C);
 t('楼层与楼中楼：回楼中楼也挂在那一层下', q1.status === 201 && q2.json.reply.parentId === 'rp-test-0001' && q3.json.reply.parentId === 'rp-test-0001');
 t('示例帖也能回', (await call('POST', '/api/posts/ps-demo-01/replies', { id: 'rp-test-0004', text: '同感' }, C)).status === 201);
-t('抱抱', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 1);
+t('共鸣', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 1);
 t('我也是', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'same' }, D)).json.same === 1);
-t('再点一次抱抱就取消', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 0);
-t('示例帖也能抱抱', (await call('POST', '/api/react', { target: 'ps-demo-01', type: 'hug' }, D)).json.hug === 1);
+t('再点一次共鸣就取消', (await call('POST', '/api/react', { target: 'ps-test-0001', type: 'hug' }, C)).json.hug === 0);
+t('示例帖也能共鸣', (await call('POST', '/api/react', { target: 'ps-demo-01', type: 'hug' }, D)).json.hug === 1);
 const pd = (await call('GET', '/api/posts/ps-test-0001', null, A)).json;
 t('帖子详情：三条回复、我也是 1', pd.replies.length === 3 && pd.post.same === 1);
 const feedP = (await call('GET', '/api/posts?sort=hot&demo=ps-demo-01', null, A)).json;
@@ -131,7 +131,7 @@ t('删楼层：楼中楼升成一层，不跟着消失', (await call('DELETE', '
 t('别人删不了我的帖', (await call('DELETE', '/api/posts/ps-test-0001', null, C)).status === 403);
 t('删帖：回复与反应一并删', (await call('DELETE', '/api/posts/ps-test-0001', null, B)).status === 200 && (await call('GET', '/api/posts/ps-test-0001', null, A)).status === 404);
 
-t('示例楼层也能回、也能抱抱', (await call('POST', '/api/posts/ps-demo-01/replies', { id: 'rp-test-0020', text: '我也等', parentId: 'rp-demo-01' }, C)).json.reply.parentId === 'rp-demo-01'
+t('示例楼层也能回、也能共鸣', (await call('POST', '/api/posts/ps-demo-01/replies', { id: 'rp-test-0020', text: '我也等', parentId: 'rp-demo-01' }, C)).json.reply.parentId === 'rp-demo-01'
   && (await call('POST', '/api/react', { target: 'rp-demo-01', type: 'same' }, C)).json.same === 1);
 const dj = await call('POST', '/api/posts', { id: 'ps-test-0030', text: '第四棒', soundId: 'concept-051', relayOf: 'ps-demo-r3', relayRoot: 'ps-demo-r1', relayUpIndex: 3 }, C);
 t('接示例接力：根是示例链的第一棒，第 4 棒', dj.json.post.relayRoot === 'ps-demo-r1' && dj.json.post.relayIndex === 4

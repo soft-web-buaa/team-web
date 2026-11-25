@@ -1,5 +1,5 @@
 <script setup>
-// 一个帖子的楼：楼主（1 楼）、楼层、楼中楼（只两层），每一层可以抱抱、我也是、回复；
+// 一个帖子的楼：楼主（1 楼）、楼层、楼中楼（只两层），每一层可以共鸣、我也是、回复；
 // 帖子在接力链里的，上面有整条链，可以从这一棒接下去。
 import { ref, watch } from 'vue';
 import PostCard from './PostCard.vue';
@@ -70,7 +70,7 @@ function relayNext() {
           <button v-if="f.soundId && entryById(f.soundId)" type="button" class="snd" @click="play(entryById(f.soundId))"><DiscMini :e="entryById(f.soundId)" :size="24" /> 回了一段声音：{{ title(entryById(f.soundId)) }}</button>
           <div class="acts">
             <button type="button" class="act" @click="to = f">回复</button>
-            <button type="button" class="act" :class="{ on: (f.my || []).includes('hug') }" @click="hit(f, 'hug')">抱抱{{ f.hug ? ` ${f.hug}` : '' }}</button>
+            <button type="button" class="act" :class="{ on: (f.my || []).includes('hug') }" @click="hit(f, 'hug')">共鸣{{ f.hug ? ` ${f.hug}` : '' }}</button>
             <button type="button" class="act" :class="{ on: (f.my || []).includes('same') }" @click="hit(f, 'same')">我也是{{ f.same ? ` ${f.same}` : '' }}</button>
             <button v-if="f.mine" type="button" class="act" @click="delReply(f)">删掉</button>
             <button v-else-if="!f.demo" type="button" class="act" @click="rep('replies', f.id)">举报</button>
@@ -80,7 +80,7 @@ function relayNext() {
               <span class="who">{{ who(k.author) }}</span><span v-if="k.demo" class="tier">示例</span>：{{ k.text }}
               <span class="m">{{ ago(k.at) }}</span>
               <button type="button" class="act small" @click="to = f">回复</button>
-              <button type="button" class="act small" :class="{ on: (k.my || []).includes('hug') }" @click="hit(k, 'hug')">抱抱{{ k.hug ? ` ${k.hug}` : '' }}</button>
+              <button type="button" class="act small" :class="{ on: (k.my || []).includes('hug') }" @click="hit(k, 'hug')">共鸣{{ k.hug ? ` ${k.hug}` : '' }}</button>
               <button v-if="k.mine" type="button" class="act small" @click="delReply(k)">删掉</button>
             </li>
           </ol>

@@ -17,12 +17,12 @@ const tab = ref('discs');
 const mine = computed(() => { void L.version; return L.entries.filter((e) => e.mine).slice().reverse(); });
 const favs = computed(() => L.me.favs.map(entryById).filter(Boolean));
 const inboxAll = computed(() => L.me.inbox.map((x) => ({ ...x, e: x.discId ? entryById(x.discId) : null, fresh: x.at > (L.readAt || '') })).filter((x) => x.e || x.postId || x.albumId));
-// 类型：声音上的（钉的话、也听过）、帖子上的（回复、抱抱、我也是）
+// 类型：声音上的（钉的话、也听过）、帖子上的（回复、共鸣、我也是）
 const KINDS = [['all', '全部'], ['sound', '声音上的', ['echo', 'heard']], ['post', '帖子上的', ['reply', 'hug', 'same']], ['album', '合辑里的', ['track']]];
 const kind = ref('all');
 const inbox = computed(() => { const k = KINDS.find((x) => x[0] === kind.value); return k[2] ? inboxAll.value.filter((x) => k[2].includes(x.kind)) : inboxAll.value; });
 const myPosts = computed(() => { void C.version; return C.posts.filter((p) => p.mine); });
-const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '抱了抱你', same: '说「我也是」', track: '往你的合辑里放了一段' };
+const KIND = { echo: '钉了一句话', heard: '也听过', reply: '回了你', hug: '和你共鸣', same: '说「我也是」', track: '往你的合辑里放了一段' };
 const together = computed(() => { void A.version; return A.list.filter((a) => a.mine || a.joined).length; });
 function openMsg(x) {
   if (x.kind === 'track') { tab.value = 'albums'; router.push({ path: '/mine', query: { album: x.albumId } }); return; }
