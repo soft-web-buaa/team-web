@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import Paper from '../components/Paper.vue';
 import { L, siteCounts } from '../lib/library.js';
+import { PLANES } from '../stage/landmarks.js';
 
 const c = computed(() => { void L.version; return siteCounts(); });
 </script>
@@ -32,6 +33,8 @@ const c = computed(() => { void L.version; return siteCounts(); });
     <p class="h3">素材</p>
     <ul class="fine src">
       <li>地图：© OpenStreetMap contributors（ODbL 1.0）；校园体量参考 MrRoam/buaa-xueyuan-campus-3d。楼高是估算，分区是示意。</li>
+      <li>博物馆门外的露天展机（{{ PLANES.length }} 架）：低多边形模型，CC BY 3.0，改成了卡纸的颜色。<template v-for="(p, i) in PLANES" :key="p.file">{{ i ? '；' : '' }}{{ p.name }}，作者 {{ p.by }}，<a :href="p.src" target="_blank" rel="noreferrer">Poly Pizza</a></template>。馆外有展机是真的，但地图上没有每一架的位置，摆的地方和机型都是示意。</li>
+      <li>校门的位置和四周的路名：OpenStreetMap（2026-11-25 的数据）。</li>
       <li>字：朱雀仿宋（SIL OFL 1.1），按页面用到的字做了子集。</li>
       <li>三维：three.js（MIT）。刻纹、搓盘、录音、灯光、季节来自刻声。</li>
       <li>史料片段来自 B 站公开稿件与网易云电台，版权归原作者与上传者，随课程作业展示，不二次分发。</li>

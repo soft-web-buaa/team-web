@@ -20,7 +20,7 @@ async function shot(name, url, { w = 1440, h = 900, wait = 9000, act = null, scr
   if (only && !only.split(',').some((o) => name === o || (o.endsWith('*') && name.startsWith(o.slice(0, -1))))) return;   // 名字用逗号隔开；结尾带 * 是前缀
   const page = await browser.newPage();
   await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
-  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`${name} [${m.type()}] ${m.text()}`); });
+  page.on('console', (m) => { if (['error', 'warning', 'warn'].includes(m.type())) problems.push(`${name} [${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => problems.push(`${name} [pageerror] ${e.message}`));
   page.on('requestfailed', (r) => problems.push(`${name} [requestfailed] ${r.url()} ${r.failure() && r.failure().errorText}`));
   if (!screen) await page.evaluateOnNewDocument(() => { try { sessionStorage.setItem('tj-entered', '1'); } catch { /* */ } });

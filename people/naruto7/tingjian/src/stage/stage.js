@@ -206,7 +206,7 @@ export function setInset(px, bottom = 0) {
 // 数据进来：钉点上的盘、社区的光柱、学期带、回声针
 // ====================================================================================
 /** pins：Map(placeId → [{ id, mine, age }])，按时间从早到晚。 */
-export function setPins(pins) { S.pins = pins; if (built) paintPins(); }
+export function setPins(pins) { S.pins = pins; shadowDirty = true; if (built) paintPins(); }
 /** columns：Map(placeId → 数)。社区板块里光柱的高度。 */
 export function setColumns(columns) {
   S.columns = columns;
@@ -537,6 +537,10 @@ function stepBands(dt) {
 // 光：只读 clock.js 的钟点。太阳、软箱、天光、窗灯、背景、纸纹暗角都从同一个钟点来
 // ====================================================================================
 let envHex = '', envT = 0, bgKey = '';
+// 阴影（2026-11-26，进站掉帧）：阴影贴图原来每帧都把整个校园再画一遍。现在只在有东西动的时候重画：太阳挪了、区块在立起或抬起、
+// 地点楼在提起或转、盘落到针上、唱臂在动、季节换了、校园在沉。其余的帧沿用上一张
+let shadowDirty = true;
+const sunLast = new THREE.Vector3();
 const tmpC = new THREE.Color();
 // 夜观：数据地图选「夜观色」时，舞台的光与背景渐变到入夜的蓝紫（21:30），页面的纸照旧跟着钟点。离开就渐变回来
 const NIGHT_T = tokensAt(21.5);
@@ -558,6 +562,7 @@ function stepLight(now) {
   const T = toks(), L = T.light;
   const az = (L.az * Math.PI) / 180, el = (L.el * Math.PI) / 180;
   G.sun.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).multiplyScalar(2400);
+  if (G.sun.position.distanceToSquared(sunLast) > 4) { sunLast.copy(G.sun.position); shadowDirty = true; }
   G.sun.intensity = L.i;
   G.sun.color.setRGB(L.col[0] / 255, L.col[1] / 255, L.col[2] / 255, THREE.SRGBColorSpace);
   const u = G.platterMat.uniforms;
@@ -617,6 +622,7 @@ const hidden = new THREE.Matrix4().makeScale(0, 0, 0), tint = new THREE.Color();
 function applySeason(name) {
   if (seasonCur === name) return;
   seasonCur = name;
+  shadowDirty = true;
   const Sx = SCENERY[name];
   const cols = Sx.crown.map(([c]) => new THREE.Color(c));
   for (const f of G.forest) {
@@ -808,6 +814,7 @@ let gpuName = '';
 const strongGpu = () => /NVIDIA|GeForce|RTX|Quadro|Radeon RX|Radeon Pro|Arc A|Apple M\d (Pro|Max|Ultra)/i.test(gpuName);
 function remember(t) { try { localStorage.setItem('tj-tier', JSON.stringify({ t, gpu: gpuName })); } catch { /* 隐私模式 */ } }
 function goTier(t) {
+  shadowDirty = true;
   setTier(t); lite = t === 'low'; resizeNow = true;
   quality.samples = []; quality.last = 0; quality.after = performance.now() + 1500;
 }
@@ -1001,6 +1008,12 @@ function frame(now) {
   G.tiltV.uniforms.v.value = (tilt / W) * W / Math.max(1, canvas.clientHeight);
   G.tiltH.uniforms.r.value = G.tiltV.uniforms.r.value = focusR;
   if (S.mode === 'screen' && warmed && !shot) return;   // 屏风盖着画布：不画（进站时 App 先换模式再拉镜头）
+  // 有东西在动：区块立起 / 抬起、地点楼提起或在转、盘在落、唱臂在动、校园在沉
+  G.zoneObj.forEach((o) => { if (o.rise < 1 || Math.abs(o.lift - o.liftShadow) > 0.05) { shadowDirty = true; o.liftShadow = o.lift; } });
+  G.heroObj.forEach((h) => { if (h.lift > 0.05 || h.liftShadow > 0.05) { shadowDirty = true; } h.liftShadow = h.lift; });
+  if (landing || Math.abs(armLift - armShadow) > 0.05 || Math.abs(G.ARM.r - armRShadow) > 0.2 || (sinkK > 0.001 && sinkK < 0.999)) { shadowDirty = true; armShadow = armLift; armRShadow = G.ARM.r; }
+  G.renderer.shadowMap.autoUpdate = false;
+  if (shadowDirty) { G.renderer.shadowMap.needsUpdate = true; shadowDirty = false; }
   G.composer.render();
   // 选择性聚焦（学 Confused-Tree 声景校园的双层画法，但在同一块画布里）：只画第 1 层（地点楼、台座、波纹），清掉深度、不画背景、不重画阴影
   let anyLift = false;
@@ -1008,7 +1021,7 @@ function frame(now) {
   if (anyLift) heroPass();
   watchFrames(now);
 }
-let tilt = 0.5, focusR = 0.5;
+let tilt = 0.5, focusR = 0.5, armShadow = 0, armRShadow = 0;
 
 // —— 特写（2026-11-26：组员与组长说进楼放大后楼看着糙）——
 // 被提起的那栋楼单独画一遍：画进一块 4× 多重采样的缓冲（原来直接画到屏幕上，没有抗锯齿，边是锯齿），再贴回画面。
@@ -1017,7 +1030,7 @@ let heroRT = null, heroQuad = null, keyL = null, rimL = null;
 // 两盏补光开场就在（平时亮度 0）：灯的盏数一变，所有材质都要重编着色器；放在开场，屏风后面就一起编好了
 function buildHeroLights() {
   keyL = new THREE.DirectionalLight(0xffffff, 0); rimL = new THREE.DirectionalLight(0xffffff, 0);
-  for (const l of [keyL, rimL]) l.layers.enableAll();
+  for (const l of [keyL, rimL]) l.layers.set(1);   // 只照第 1 层：盘和校园的着色器不多算两盏灯
   G.scene.add(keyL, keyL.target, rimL, rimL.target);
 }
 const ccol = new THREE.Color();
@@ -1150,7 +1163,8 @@ export async function init(canvasNode, labelsNode, campus) {
     heroLift: (pid) => G.heroObj.get(pid)?.lift ?? null, column: (pid) => G.pinObj.get(pid)?.h ?? null, get revealed() { return revealed; },
     pinScreen: (pid) => { const o = G.pinObj.get(pid); const v = o.group.position.clone().setY(o.group.position.y + o.head.position.y - 2).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     heroScreen: (pid) => { const h = G.heroObj.get(pid); const v = h.pivot.getWorldPosition(new THREE.Vector3()).setY(TILE_TOP + h.size.y * 0.5).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
-    dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }) };
+    dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }),
+    look: (x, z, d, polar, az) => play([{ to: { t: V(x, TILE_TOP + 4, z), d, polar, az }, dur: 1, ease: 'out' }]) };   // 截图走查用：看某一处
   return true;
 }
 /** 预编译：第一帧要编译约 50 个着色器（实测核显上 3 秒 + 1.5 秒卡死）。
@@ -1160,7 +1174,11 @@ async function warm(pause) {
   try {
     r.setRenderTarget(G.composer.renderTarget1);
     await r.compileAsync(G.scene, G.camera);
-  } catch { /* 不支持并行编译：退回第一帧里同步编 */ }
+    // 地点楼在特写里多两盏补光（只在第 1 层）：灯的盏数不同就是另一套着色器，也在这里先编好，免得第一次进楼时卡一下
+    G.camera.layers.set(1);
+    await r.compileAsync(G.scene, G.camera);
+    G.camera.layers.set(0);
+  } catch { G.camera.layers.set(0); /* 不支持并行编译：退回第一帧里同步编 */ }
   r.setRenderTarget(null);
   await pause();
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -1182,6 +1200,9 @@ async function warm(pause) {
   G.composer.render();
   resizeNow = true; lastW = 0; void w; void h;
   resize();
+  // 再在屏风后面画一帧全尺寸的：全尺寸的渲染目标（泛光、移轴、环境光遮蔽）第一次用时要分配显存，原来这一下落在进站的第一帧（约 70 毫秒）
+  await pause();
+  G.composer.render();
   warmed = true;
 }
 export const isBuilt = () => built;

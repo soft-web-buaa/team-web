@@ -15,6 +15,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import { TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
+import { buildLandmarks, paintStreets } from './landmarks.js';
 import { FUNC_CARD, ERA, ROOF_PAPER, POOL_STONE, STYLE, tintOf, facadeOf, offsetRing, ringArea, obbOf, SCENERY } from '../kesheng/web/plan3d/model.js';
 
 export const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量）
@@ -630,6 +631,8 @@ function buildLabel() {
     g.fillText(ch, 0, 0);
     g.restore();
   });
+  // 校园四边外面的四条路（OpenStreetMap）：认得出是学院路上的这一块
+  paintStreets(g, k, '"Zhuque", "Noto Serif CJK SC", "STFangsong", "FangSong", serif');
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -1342,7 +1345,7 @@ function buildCampus() {
       crowns.castShadow = trunks.castShadow = true;
       crowns.receiveShadow = true;
       bgroup.add(trunks, crowns);
-      forest.push({ crowns, seeds: treeSeeds, mtx: treeMtx });
+      forest.push({ crowns, trunks, seeds: treeSeeds, mtx: treeMtx, xz: Array.from({ length: nT }, (_, i) => [m(z.trees[i * 3]), -m(z.trees[i * 3 + 1])]) });
     }
     // 人的尺度：楼门口一排排共享单车（黄 / 蓝 / 绿三家）、园里的长椅、球场的球门和篮架。尺寸按真实放大 1.6 倍，拉近才看得清
     const nB = (z.bikes || []).length / 3;
@@ -1665,6 +1668,13 @@ export async function build(canvas, campusData, { tier: tn = 'mid', pause = asyn
   buildPlatter();
   await pause();
   buildCampus();
+  await pause();
+  // 露天展机、校门（模型文件很小，在屏风后面加载；加载失败就不摆，不影响别的）
+  const inRing = (x, y, v) => { let c = false; for (let i = 0, j = v.length - 2; i < v.length; j = i, i += 2) { const xi = v[i] / 10, yi = v[i + 1] / 10, xj = v[j] / 10, yj = v[j + 1] / 10; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+  const zoneOf = (x, y) => { const z = campus.zones.find((q) => q.tiles.some((t) => inRing(x, y, t.r[0]))); return z ? { id: z.id, ...zoneObj.get(z.id) } : null; };
+  // 展机的水泥坪上不该有树：把坪里的树藏起来（四季换冠色时也一直藏着）
+  const clearTrees = (x, z, r) => { const zero = new THREE.Matrix4().makeScale(0, 0, 0); for (const f of forest) { let hit = false; f.xz.forEach(([tx, tz], i) => { if ((tx - x) ** 2 + (tz - z) ** 2 < r * r) { f.mtx[i] = zero; f.crowns.setMatrixAt(i, zero); f.trunks.setMatrixAt(i, zero); hit = true; } }); if (hit) { f.crowns.instanceMatrix.needsUpdate = true; f.trunks.instanceMatrix.needsUpdate = true; } } };
+  await buildLandmarks({ base: import.meta.env.BASE_URL, zoneOf, plate, pickables, clearTrees, place: campus.places.find((p) => p.name === '航空航天博物馆')?.id }).catch(() => {});
   await pause();
   buildPins();
   buildCarriage();
