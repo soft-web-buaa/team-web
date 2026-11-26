@@ -92,29 +92,28 @@ t('换到体育馆：图书馆落回去，体育馆提起来', (await p.evaluate
 t('体育馆的从前：奥运举重的史料', (await text(p, '.paper')).includes('这里的从前'));
 t('进地点的完整过场：每会话最多两次', (await p.evaluate(() => window.__stage.shows().enterPlace)) <= 3);
 
-// —— 3. 社区：光柱升起来 ——
-console.log('— 3. 社区：光柱升起来');
+// —— 3. 社区：原始地图上空是星云 ——
+console.log('— 3. 社区：星云');
 await p.evaluate(() => { location.hash = '#/community'; });
 await until(p, () => window.__stage.mode === 'community');
-await sleep(3500);
-t('社区：光柱升起来了', (await p.evaluate(() => window.__stage.column('XY02'))) > 30);
-// 光柱的口径挪进了数据地图：只看这个钟点，光柱跟着变矮
+await sleep(2500);
+t('社区：原始地图是星云，数着每处的张数', (await p.evaluate(() => window.__stage.dataForm)) === 'nebula' && (await p.evaluate(() => window.__stage.crowd('XY02'))) > 0);
+// 数据地图：只看这个钟点，数跟着变
 await p.evaluate(() => { location.hash = '#/community?map=data'; });
 await until(p, () => !!document.querySelector('.dp'), null, 20000);
-await p.evaluate(() => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes('光柱')).click());
-await sleep(2500);
-const allH = await p.evaluate(() => window.__stage.column('XY02'));
+await sleep(1500);
+const allH = await p.evaluate(() => window.__stage.crowd('XY02'));
 await p.evaluate(() => [...document.querySelectorAll('.dp .chip')].find((x) => x.textContent.startsWith('只看')).click());
-await sleep(2500);
+await sleep(2000);
 t('数据地图：只看这个钟点，图例跟着换', (await text(p, '.dp .legend')).includes('前后一个半小时'));
-t('数据地图：光柱跟着数据变', (await p.evaluate(() => window.__stage.column('XY02'))) !== allH);
+t('数据地图：舞台上的数跟着变', (await p.evaluate(() => window.__stage.crowd('XY02'))) !== allH);
 
-// —— 3b. 数据地图：五种画法都能切，地面图或小盘出来 ——
+// —— 3b. 数据地图：四种画法都能切，地面图或小盘出来 ——
 console.log('— 3b. 数据地图');
 await p.evaluate(() => { location.hash = '#/community?map=data'; });
 await sleep(1500);
 t('数据地图：有「看什么」和「怎么画」', !!(await p.$('[aria-label="看什么"]')) && !!(await p.$('[aria-label="怎么画"]')));
-for (const f of ['星云', '夜景', '曲面', '注满', '光柱']) {
+for (const f of ['星云', '夜景', '曲面', '注满']) {
   await p.evaluate((f) => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes(f)).click(), f);
   await sleep(700);
 }
@@ -125,7 +124,7 @@ for (const f of ['热力', '等高线', '年轮', '钟面']) {
   await p.evaluate((f) => [...document.querySelectorAll('[aria-label="怎么画"] [role=radio]')].find((x) => x.textContent.includes(f)).click(), f);
   await sleep(600);
 }
-t('数据地图：旧画法也还能切', (await p.$$('[aria-label="怎么画"] [role=radio]')).length === 9);
+t('数据地图：旧画法也还能切', (await p.$$('[aria-label="怎么画"] [role=radio]')).length === 8);
 await p.evaluate(() => { location.hash = '#/community'; });
 await sleep(1200);
 

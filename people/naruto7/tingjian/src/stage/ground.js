@@ -1,5 +1,5 @@
 // 听见校园 · 数据地图的「地面」：一张画在校园地面上的图（一块画布贴图，铺在区块地面上方一点）。
-// 热力、等高线、地上的年轮、地上的钟面都画在这里。光柱是三维的，不在这里（stage.js）。
+// 热力、等高线、地上的年轮、地上的钟面都画在这里。三维的四种在 datafx.js。
 // 只管画；画什么由 src/lib/datamap.js 算好传进来。
 import { grainLayout, at, K } from '../lib/ringlayout.js';
 import { valueOf, MOOD_COL } from '../lib/datamap.js';
@@ -16,7 +16,7 @@ export function paintGround(cv, o) {
   const g = cv.getContext('2d'), W = cv.width, E = o.E;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, W, W);
-  if (!o.form || o.form === 'columns' || o.form === 'rings' || o.form === 'clock') return false;
+  if (!o.form || o.form === 'rings' || o.form === 'clock') return false;
   const px = W / (2 * E);
   g.setTransform(px, 0, 0, px, E * px, E * px);        // 之后都用世界坐标（米）画：x 向右，z 向下
   const vals = o.places.map((p) => ({ p, s: o.stats.get(p.id), v: valueOf(o.stats.get(p.id), o.metric) }));

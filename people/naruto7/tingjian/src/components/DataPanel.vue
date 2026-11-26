@@ -46,7 +46,6 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
           <template v-else-if="f.id === 'lights'"><circle v-for="i in 30" :key="i" :cx="3 + (i * 7.3) % 34" :cy="4 + ((i * 11) % 20) + (i % 2) * 1.5" :r="(i * 7.3) % 34 < 14 && (i * 11) % 20 < 12 ? 1.3 : 0.6" /></template>
           <template v-else-if="f.id === 'surface'"><g class="ln"><path d="M2 22 Q12 22 16 8 Q19 2 22 10 Q26 20 38 20" /><path d="M2 25 Q12 25 16 13 Q19 8 22 14 Q26 23 38 23" class="soft" /></g><line x1="19" y1="5" x2="19" y2="26" class="tkl" /></template>
           <template v-else-if="f.id === 'fill'"><rect x="5" y="8" width="9" height="18" class="ln" /><rect x="5" y="16" width="9" height="10" /><rect x="18" y="4" width="8" height="22" class="ln" /><rect x="18" y="8" width="8" height="18" /><rect x="30" y="12" width="7" height="14" class="ln" /><rect x="30" y="22" width="7" height="4" /></template>
-          <template v-else-if="f.id === 'columns'"><path d="M8 26 L10 10 L14 10 L16 26Z M19 26 L21 4 L25 4 L27 26Z M30 26 L31.5 16 L34.5 16 L36 26Z" /></template>
           <template v-else-if="f.id === 'heat'"><circle cx="15" cy="14" r="10" class="soft" /><circle cx="27" cy="16" r="7" class="soft" /><circle cx="15" cy="14" r="4" /></template>
           <template v-else-if="f.id === 'contour'"><ellipse cx="20" cy="14" rx="17" ry="11" class="ln" /><ellipse cx="18" cy="14" rx="11" ry="7" class="ln" /><ellipse cx="17" cy="14" rx="5" ry="3.2" class="ln" /></template>
           <template v-else-if="f.id === 'rings'"><circle cx="20" cy="14" r="12" class="ln" /><circle cx="20" cy="14" r="8.5" class="ln" /><circle cx="20" cy="14" r="5" class="ln" /><circle cx="20" cy="14" r="1.6" /></template>
@@ -92,7 +91,7 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
 </template>
 
 <style scoped>
-.forms { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.forms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .form.old { border-style: dashed; }
 .form .tkl { stroke: var(--ink-2); stroke-width: 0.8; stroke-dasharray: 1.5 1.5; }
 .form { display: grid; justify-items: center; gap: 4px; padding: 8px 2px 7px; border-radius: 3px; border: 1px solid var(--hair); background: none; font-size: 12px; color: var(--ink-2); }

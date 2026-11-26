@@ -137,7 +137,7 @@ function addLocal(p) {
 }
 
 // ====================================================================================
-// 给三维舞台的：钉点上的盘、学期带、社区的光柱
+// 给三维舞台的：钉点上的盘、学期带、社区每处的张数
 // ====================================================================================
 export function pushToStage() {
   const nowSeq = semesterSeq(L.nowSem);
@@ -151,8 +151,8 @@ export function pushToStage() {
   stage.setPins(pins);
   stage.setBands(L.entries.filter((e) => e.semester && !(e.tier === 'real' && e.visibility === 'private')));
 }
-/** 社区的光柱：每个地点符合 test 的张数。 */
-export function columns(test = () => true) {
+/** 社区：每个地点符合 test 的张数。 */
+export function countByPlace(test = () => true) {
   const m = new Map(L.places.map((p) => [p.id, 0]));
   for (const e of L.entries) if (e.placeId && test(e)) m.set(e.placeId, (m.get(e.placeId) || 0) + 1);
   return m;

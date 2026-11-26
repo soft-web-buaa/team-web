@@ -1,5 +1,5 @@
 // 听见校园 · 舞台：整站唯一的一块三维画布。换板块只换机位和模式，所以过场是连贯的一镜（DESIGN.md §4）。
-// 这里「演」：每帧的光（读 clock.js 的钟点）、机位与过场、地点楼的提起与落回、社区的光柱、唱片的刻纹与唱臂、搓盘、刻。
+// 这里「演」：每帧的光（读 clock.js 的钟点）、机位与过场、地点楼的提起与落回、社区的数据、唱片的刻纹与唱臂、搓盘、刻。
 // 场景怎么「搭」在 scene.js（移植自刻声 plan3d.js）。页面（Vue）只通过下面导出的函数说话，不碰 three.js。
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -28,8 +28,6 @@ const S = {
   mode: 'screen',             // screen 屏风后 / home 留声机 / place 地点 / community 社区 / time 年轮 / mine 我的
   place: null, zone: null, hover: null, hoverPlace: null,
   pins: new Map(),            // placeId → [{ mine, age(0..1), id }]（下面的最早）
-  columns: new Map(),         // placeId → 张数（社区的光柱）
-  colMax: 1,
   mineOnly: false,            // 我的：只有我的盘亮
   bands: [], open: [], layout: [], hoverBand: -1, activeBand: -1, focusSem: null,
   echoes: [], echoActive: -1,
@@ -60,7 +58,7 @@ const POSES = {
     const f = S.data && S.data.form;
     if (f === 'lights') return { t: V(0, 0, 40), d: Math.max(2500, fitDist(RIN * 1.1)), polar: 0.42, az: -0.18 };       // 夜景：像卫星，偏俯看
     if (f === 'nebula' || f === 'surface' || f === 'fill') return { t: V(0, 80, 20), d: Math.max(2500, fitDist(RIN * 1.15)), polar: 0.86, az: -0.5 };   // 有高度的：斜着看，峰才立得起来
-    if (f && f !== 'columns') return { t: V(0, 0, 40), d: Math.max(2600, fitDist(RIN * 1.18)), polar: 0.36, az: -0.18 };   // 地面上的图：俯看
+    if (f) return { t: V(0, 0, 40), d: Math.max(2600, fitDist(RIN * 1.18)), polar: 0.36, az: -0.18 };   // 地面上的图：俯看
     return { t: V(0, 40, 0), d: Math.max(3100, fitDist((RP + 200) * 1.12)), polar: 0.66, az: -0.62 };
   },
   time: () => ({ t: V(0, 0, 0), d: fitDist(RP + 140), polar: 0.035, az: 0 }),
@@ -153,7 +151,7 @@ export function setMode(mode, { pid = null } = {}) {
   S.place = mode === 'place' ? pid : null;
   S.zone = mode === 'place' && pid ? G.pinObj.get(pid).zone : null;
   S.mineOnly = mode === 'mine';
-  if (built && G.ground) G.ground.visible = mode === 'community' && !!S.data && S.data.form !== 'columns';
+  if (built && G.ground) G.ground.visible = mode === 'community' && !!S.data && GROUND_FORMS.has(S.data.form);
   G.controls_minPolar = mode === 'time' ? 0.02 : 0.32;
   controls.minPolarAngle = G.controls_minPolar;
   if (!revealed) return;
@@ -168,7 +166,7 @@ export function setMode(mode, { pid = null } = {}) {
       ]);
     } else play([{ to: () => heroPose(pid, az + (prev === 'place' ? 0.25 : 0.3)), dur: 760, ease: 'out', live: true }]);
   } else if (prev === 'place' && crowd && full(mode === 'mine' ? 'toMine' : 'toCrowd')) {
-    // 个体 → 群体：楼落回盘里，镜头拉高看整张盘，再转到目标；光柱在最后一段里升起来
+    // 个体 → 群体：楼落回盘里，镜头拉高看整张盘，再转到目标；星云在最后一段里聚起来
     play([
       { to: () => ({ ...heroPose(prevPlace), d: heroPose(prevPlace).d * 1.6, polar: 0.82 }), dur: 520, ease: 'inOut', live: true },
       { to: POSES.high, dur: 1000, ease: 'inOut' },
@@ -208,23 +206,17 @@ export function setInset(px, bottom = 0) {
 }
 
 // ====================================================================================
-// 数据进来：钉点上的盘、社区的光柱、学期带、回声针
+// 数据进来：钉点上的盘、学期带、回声针
 // ====================================================================================
 /** pins：Map(placeId → [{ id, mine, age }])，按时间从早到晚。 */
 export function setPins(pins) { S.pins = pins; shadowDirty = true; if (built) paintPins(); }
-/** columns：Map(placeId → 数)。社区板块里光柱的高度。 */
-export function setColumns(columns) {
-  S.columns = columns;
-  S.colMax = Math.max(1, ...columns.values());
-}
 /** 数据地图。d = { form, metric, stats: Map(placeId → 统计), values: Map(placeId → 数), hour } 或 null（回到原始地图）。
- *  光柱是三维的；热力、等高线、年轮、钟面画在地面贴图上。换画法时俯仰角跟着变（地面上的图要俯看）。 */
+ *  星云、夜景、曲面、注满是三维的（datafx.js）；热力、等高线、年轮、钟面画在地面贴图上。换画法时俯仰角跟着变（地面上的图要俯看）。 */
 const FX_FORMS = new Set(['nebula', 'lights', 'surface', 'fill']);
 const GROUND_FORMS = new Set(['heat', 'contour', 'rings', 'clock']);
 export function setData(d) {
   const prevForm = S.data ? S.data.form : null;
   S.data = d;
-  if (d) setColumns(d.form === 'columns' ? d.values : new Map());
   S.night = !!d && d.pal === 'night';
   if (!built) return;
   const fx = !!d && FX_FORMS.has(d.form);
@@ -255,7 +247,7 @@ export function setData(d) {
     }
   } else for (const o of G.pinObj.values()) o.medal.visible = false;
   S.medals = medal;
-  const kind = (f) => (!f || f === 'columns' ? 0 : f === 'lights' ? 1 : FX_FORMS.has(f) ? 2 : 3);
+  const kind = (f) => (!f ? 0 : f === 'lights' ? 1 : FX_FORMS.has(f) ? 2 : 3);
   if (S.mode === 'community' && revealed && kind(prevForm) !== kind(d && d.form)) play([{ to: POSES.community, dur: 1100, ease: 'inOut' }]);
 }
 /** 全部条目（含史料与概念盘）：外圈一个学期一带。 */
@@ -287,9 +279,6 @@ const MAXD = 14, PIN_STEP = 2.2;
 // 照亮之后才刚好是浅纸色；不然半透明的墨盖上去，也会被色调映射压回白，什么都看不见（2026-11-25 实测）
 const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C'), DATA_NIGHT = new THREE.Color('#10131F');
 const INKC = new THREE.Color(COL.ink), AGED = new THREE.Color('#A9B1BE'), SCOPEC = new THREE.Color(COL.scope), FADED = new THREE.Color('#7A828E');
-// 光柱的尺子：一张盘多高（米），刻线几张一道
-const COL_K = () => Math.min(14, 330 / Math.max(1, S.colMax));
-const COL_UNIT = () => (S.colMax > 80 ? 10 : S.colMax > 36 ? 5 : 1);
 function paintPins() {
   for (const [pid, o] of G.pinObj) {
     const list = (S.pins.get(pid) || []).slice(-MAXD);
@@ -777,7 +766,7 @@ function placeTag(t, x, y, z, show, below = false, rank = 0, must = false) {
 function updateTags() {
   const narrow = canvas.clientWidth < 720;
   // 社区里只给最高的几根挂名字（全挂会叠成一团），其余的悬停才出来
-  const vals = S.data ? S.data.values : S.columns;
+  const vals = S.data ? S.data.values : new Map();
   const topN = new Set(S.mode === 'community' ? [...vals.entries()].filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, narrow ? 3 : 6).map((x) => x[0]) : []);
   const want = [];
   for (const p of G.campus.places) {
@@ -880,8 +869,8 @@ function frame(now) {
     const sel = inPlace ? S.zone === id : false, hov = !inPlace && S.hover === id && S.mode === 'home';
     o.lift += ((hov ? 6 : 0) - o.lift) * (reduced ? 1 : 0.14);
     o.group.position.y = o.lift;
-    const data = S.mode === 'community' && !!S.data && S.data.form !== 'columns';
-    const dim = inPlace || (S.mode === 'mine') || (S.mode === 'community' && !!S.data);
+    const data = S.mode === 'community' && !!S.data && !S.data.plain;   // plain：社区的原始地图，校园照旧上色，只在上空加星云
+    const dim = inPlace || (S.mode === 'mine') || data;
     const k = reduced ? 1 : 0.12;
     // 数据地图：校园褪成一张素纸（亮时浅、暗时深），地面上的图才压得住
     const paleC = S.data && S.data.form === 'lights' ? DATA_NIGHT : toks().dark ? DATA_DARK : DATA_LIGHT;
@@ -901,34 +890,12 @@ function frame(now) {
     h.pedestal.visible = h.lift > 0.6;
     h.pedestal.scale.setScalar(Math.min(1, h.lift / Math.max(1, goal || LIFT(h))));
   });
-  // 钉点：随区块立起；地点模式下藏起来；社区里升起光柱
+  // 钉点：随区块立起；地点模式下藏起来
   G.pinObj.forEach((o, pid) => {
     const z = G.zoneObj.get(o.zone);
     o.group.position.y = TILE_TOP + z.lift;
     o.group.scale.y = Math.max(0.001, easeOut(z.rise));
     o.group.visible = z.rise > 0.02 && S.mode !== 'place' && sinkK < 0.4;
-    // 光柱（2026-11-26 重做：原来又细又淡，白天看不见，也看不出是什么）。高度和张数成正比，柱上一道刻线一张（多了五张、十张一道），
-    // 柱顶一张小盘、签上写「n 张」；白天是墨色的实柱（像印在纸上），夜里是会发光的光柱；底下一圈光环慢慢往外走
-    const crowd = S.mode === 'community';
-    const n = S.columns.get(pid) || 0;
-    const goalH = crowd && n ? 18 + n * COL_K() : 0;
-    o.h += (goalH - o.h) * (reduced ? 1 : 1 - Math.exp(-dt / 0.45));
-    o.column.scale.set(1, Math.max(0.001, o.h), 1);
-    o.column.position.y = 0;
-    const dark = toks().dark, hot = S.hoverPlace === pid;
-    const cu = o.column.material.uniforms;
-    cu.uH.value = Math.max(0.001, o.h); cu.uStep.value = COL_K() * COL_UNIT(); cu.uBase.value = 18;
-    cu.uCol.value.set(hot ? COL.scope : dark ? '#E4E9F6' : '#24304A');
-    cu.uDark.value = dark ? 1 : 0; cu.uK.value = Math.min(1, o.h / 18);
-    const blend = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
-    if (o.column.material.blending !== blend) { o.column.material.blending = blend; o.column.material.needsUpdate = true; }
-    o.cap.visible = o.h > 4;
-    o.cap.position.y = o.h + 1.2;
-    o.cap.material.color.set(hot ? COL.scope : dark ? '#F2F4F8' : '#F4F1EA');
-    const ph = reduced ? 0.5 : ((now / 1000) * 0.35 + (o.top % 1)) % 1;
-    o.halo.scale.setScalar(1 + ph * 1.6);
-    o.halo.material.opacity = Math.min(1, o.h / 18) * (dark ? 0.75 : 0.6) * (1 - ph);
-    o.halo.material.color.set(hot ? COL.scope : dark ? '#E4E9F6' : '#24304A');
     if (o.medal && o.medal.visible) {
       o.medal.position.y = o.top + 30 + (reduced ? 0 : Math.sin(now / 1400 + o.top) * 1.5);
       o.medal.scale.setScalar(o.medalR);
@@ -1173,7 +1140,7 @@ export async function init(canvasNode, labelsNode, campus) {
   if (pendingReveal) { const p = pendingReveal; pendingReveal = null; reveal(p); }
   window.__stage = { get mode() { return S.mode; }, get place() { return S.place; }, get frames() { return frames; }, get flying() { return !!shot; }, get lite() { return lite; }, get tier() { return tierNow(); }, get quality() { return quality.median; }, get warmed() { return warmed; },
     shows, get season() { return seasonCur; }, get pos() { return position(); }, get playing() { return playing(); }, get clip() { return current && current.e.id; },
-    heroLift: (pid) => G.heroObj.get(pid)?.lift ?? null, column: (pid) => G.pinObj.get(pid)?.h ?? null, get revealed() { return revealed; },
+    heroLift: (pid) => G.heroObj.get(pid)?.lift ?? null, crowd: (pid) => (S.data ? S.data.values.get(pid) ?? 0 : null), get dataForm() { return S.data ? S.data.form : null; }, get revealed() { return revealed; },
     pinScreen: (pid) => { const o = G.pinObj.get(pid); const v = o.group.position.clone().setY(o.group.position.y + o.head.position.y - 2).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     heroScreen: (pid) => { const h = G.heroObj.get(pid); const v = h.pivot.getWorldPosition(new THREE.Vector3()).setY(TILE_TOP + h.size.y * 0.5).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }),

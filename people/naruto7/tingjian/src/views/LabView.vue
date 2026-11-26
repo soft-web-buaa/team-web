@@ -39,7 +39,7 @@ const list = computed(() => SETS.find((s) => s.id === set.value).make(base.value
         <li>地点页（每处 9 到 19 张）、我的：A 点，数据少，点都够用。</li>
         <li>B 到 F 留在这里对比。</li>
       </ul>
-      <p class="fine">数据地图的五种画法（星云、夜景、曲面、注满、光柱）和旧的四种在 <RouterLink to="/community?map=data">社区 · 数据地图</RouterLink> 里切。</p>
+      <p class="fine">数据地图的四种画法（星云、夜景、曲面、注满）和旧的四种在 <RouterLink to="/community?map=data">社区 · 数据地图</RouterLink> 里切。</p>
     </div>
     <div class="grid">
       <article class="wide">

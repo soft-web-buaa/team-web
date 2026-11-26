@@ -4,7 +4,7 @@
 //   话题：预置的和用户建的 #话题，一个话题一个广场
 //   接力：一人一棒，链从第一棒排到最后一棒
 //   多机位：同一个地方、前后半小时里的几段录音，自动归成「一场」，切机位从同一秒接着放
-//   看板：心情、地点 × 钟点、舞台上光柱的口径
+//   看板：心情、地点 × 钟点、舞台上星云的口径
 //   合辑：官方征集的和大家建的合辑，一段接一段听或叠成一张（学黄泰霖原型的主题合辑与共建唱片）
 //   声音：随手遇见、钉在某一秒的话
 // 页面状态放在网址里（?tab=&topic=&post=），分享出去、按 F5 都还在原处。
@@ -19,7 +19,7 @@ import Compose from '../components/Compose.vue';
 import DataPanel from '../components/DataPanel.vue';
 import AlbumShelf from '../components/AlbumShelf.vue';
 import { playQueue, A, albumById, itemsOf } from '../lib/albums.js';
-import { L, columns, isPublic, play, entryById, title, echoByline, refresh as refreshLib, whenText, byline } from '../lib/library.js';
+import { L, countByPlace, isPublic, play, entryById, title, echoByline, refresh as refreshLib, whenText, byline } from '../lib/library.js';
 import { C, init, refresh, feed, topicById, topicCount, chains, scenes, sameSlot, moodTally, moodPlaces, heat, loadStats, ago } from '../lib/community.js';
 import { ui } from '../lib/ui.js';
 import { clock, cnHour, goHour } from '../lib/clock.js';
@@ -38,7 +38,7 @@ const writing = ref(!!ui.compose);
 
 onMounted(() => { init(); loadStats(); });
 const timer = setInterval(() => { if (!document.hidden) { refresh(); refreshLib(); } }, 20000);
-onBeforeUnmount(() => { clearInterval(timer); stage.setColumns(new Map()); });
+onBeforeUnmount(() => { clearInterval(timer); stage.setData(null); });
 
 // —— 广场 ——
 const list = computed(() => { void C.version; return feed({ sort: sort.value, topic: topic.value }); });
@@ -65,20 +65,24 @@ function openScene(k, group) { sceneOpen.value = sceneOpen.value === k ? null : 
 
 // —— 看板 ——
 const LAYERS = [
-  { id: 'all', name: '全部', test: () => true, say: '每根光柱是一个地方，高度是这里留下的张数。' },
+  { id: 'all', name: '全部', test: () => true, say: '每团星云是一个地方：留得越多，星越密越亮。' },
   { id: 'sem', name: '本学期', test: (e) => e.semester === L.nowSem, say: '只数这个学期留下的。' },
   { id: 'hour', name: '这个钟点', test: (e) => e.hour != null && Math.min(Math.abs(e.hour - clock.shown), 24 - Math.abs(e.hour - clock.shown)) < 1.5, say: '只数前后一个半小时里录的：这个钟点，哪里最热闹。' },
   { id: 'real', name: '只数真实', test: (e) => e.tier === 'real', say: '只数同学亲手刻的。' },
 ];
 const layer = ref('all');
-// 打开一张合辑时，光柱只数这张合辑里的：一眼看出这张盘是从哪些地方凑起来的
+// 打开一张合辑时，星云只数这张合辑里的：一眼看出这张盘是从哪些地方凑起来的
 const albumOpen = computed(() => { void A.version; return tab.value === 'albums' && route.query.album ? albumById(route.query.album) : null; });
 function paint() {
   if (view.value === 'data') return;
-  if (albumOpen.value) { const ids = new Set(itemsOf(albumOpen.value).map((x) => x.e.id)); stage.setColumns(columns((e) => ids.has(e.id))); return; }
-  const L0 = LAYERS.find((x) => x.id === layer.value); stage.setColumns(columns((e) => isPublic(e) && e.tier !== 'archival' && L0.test(e)));
+  // 原始地图（2026-11-26 去掉光柱）：每处上空一团星云，跟着钟点配色；数据地图里换画法、换配色
+  const L0 = LAYERS.find((x) => x.id === layer.value);
+  const ids = albumOpen.value ? new Set(itemsOf(albumOpen.value).map((x) => x.e.id)) : null;
+  const values = countByPlace(ids ? (e) => ids.has(e.id) : (e) => isPublic(e) && e.tier !== 'archival' && L0.test(e));
+  stage.setData({ plain: true, form: 'nebula', pal: 'clock', metric: 'count', stats: null, values, colors: new Map(), hour: null });
 }
-watch([layer, view, albumOpen, () => A.version, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true });
+// flush post：从数据地图切回来时，DataPanel 卸载时的 setData(null) 先跑，这里再画
+watch([layer, view, albumOpen, () => A.version, () => L.version, () => Math.round(clock.shown * 2)], paint, { immediate: true, flush: 'post' });
 const moods = computed(() => { void C.version; void C.stats; return moodTally(); });
 const moodMax = computed(() => Math.max(1, ...moods.value.map((m) => m.real + m.demo)));
 const moodPick = ref(null);
@@ -187,7 +191,7 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
 
       <!-- 看板 -->
       <section v-else-if="tab === 'board'">
-        <p class="fine" style="margin-top: 12px">舞台上每根光柱是一个地方，高度是这里留下的张数。想换一种画法、只看某个钟点，去<button type="button" class="link" @click="go({ map: 'data' })">数据地图</button>。</p>
+        <p class="fine" style="margin-top: 12px">舞台上每团星云是一个地方，留得越多星越密越亮。想换一种画法、只看某个钟点，去<button type="button" class="link" @click="go({ map: 'data' })">数据地图</button>。</p>
 
         <p class="h3">心情</p>
         <p class="fine">心情是发帖的人自己选的，不从声音里猜。深色是真实的帖子（n = {{ moods.reduce((s, m) => s + m.real, 0) }}），浅色是示例帖（n = {{ moods.reduce((s, m) => s + m.demo, 0) }}）。点一种心情，看同样心情的人在哪儿。</p>

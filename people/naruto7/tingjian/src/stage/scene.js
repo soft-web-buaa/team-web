@@ -2,7 +2,6 @@
 // 移植自刻声 plan3d.js（第十轮）：唱片、刻纹、机座、唱臂、卡纸校园、钉点、后期。这里只「搭」，不「演」：
 // 每帧的光、机位、播放、过场都在 stage.js。和刻声的差别：
 //   1. 地点所在的那栋楼单独成一个网格（hero），点进地点时它能被从模型里提起来，落在一只纸台座上（DESIGN.md §4）。
-//   2. 每根钉点多一根光柱，社区板块里它升起来，高度是这里的张数。
 //   3. 画布与页面解耦：画布由外面传进来，画质、可见性由 stage.js 管。
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -32,7 +31,7 @@ let campus = null, canvasEl = null, renderer = null;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(28, 1, 20, 12000);
 const zoneObj = new Map();            // id → { group, tile, tints, bldMat, ... }
-const pinObj = new Map();             // placeId → { group, needle, discs, head, top, column }
+const pinObj = new Map();             // placeId → { group, needle, discs, head, top }
 const heroObj = new Map();            // placeId → { group, pivot, base, size, pedestal }
 const pickables = [];
 let waveTex = null, inscTex = null, inscCanvas = null;
@@ -1461,21 +1460,8 @@ function buildPins() {
     head.userData.place = p.id;
     group.add(head);
     pickables.push(head);
-    // 社区的光柱：一根从地面升起的细光，高度是这里的张数（stage.js 每帧往目标高度靠）。平时高度为 0，看不见
-    const column = new THREE.Mesh(COLUMN_GEO, columnMat());
-    column.scale.set(1, 0.001, 1);
-    column.renderOrder = 4;
-    group.add(column);
-    // 柱顶一张小盘（像一摞盘最上面那张）
-    const cap = new THREE.Mesh(CAP_GEO, new THREE.MeshBasicMaterial({ color: COL.paper, toneMapped: false }));
-    cap.visible = false;
-    cap.renderOrder = 4;
-    group.add(cap);
-    const halo = new THREE.Mesh(new THREE.RingGeometry(16, 19, 64), new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
-    halo.rotation.x = -Math.PI / 2; halo.position.y = 0.4; halo.renderOrder = 4;
-    group.add(halo);
     scene.add(group);
-    pinObj.set(p.id, { group, needle, discs, head, top, zone: p.z, n: 0, column, cap, halo, h: 0 });
+    pinObj.set(p.id, { group, needle, discs, head, top, zone: p.z, n: 0 });
   }
   // 正在放的地点：地面上一圈圈往外走的刻纹
   const rmat = new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
@@ -1488,37 +1474,6 @@ function buildPins() {
     scene.add(r);
     ripples.push(r);
   }
-}
-const COLUMN_GEO = (() => { const g = new THREE.CylinderGeometry(11, 13, 1, 40, 1, true); g.translate(0, 0.5, 0); return g; })();
-const CAP_GEO = new THREE.CylinderGeometry(15, 15, 2.2, 48);
-/** 光柱的材质：底下实、往上渐淡；边缘比正中浓（看得出是一根柱子，不是一片雾）；一张盘一道刻线。 */
-function columnMat() {
-  return new THREE.ShaderMaterial({
-    uniforms: { uCol: { value: new THREE.Color(COL.ink) }, uH: { value: 1 }, uStep: { value: 10 }, uBase: { value: 18 }, uDark: { value: 0 }, uK: { value: 0 } },
-    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vV;
-      void main() { vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform vec3 uCol; uniform float uH, uStep, uBase, uDark, uK; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
-      void main() {
-        float y = vUv.y * uH;   // 圆柱的 uv.y 顶上是 1
-        float edge = 1.0 - abs(dot(vN, vV));
-        float fade = mix(1.0, 0.55, y / uH);
-        float t = (y - uBase) / uStep;
-        float tick = y > uBase ? 1.0 - smoothstep(0.0, 0.09, abs(fract(t + 0.5) - 0.5)) : 0.0;
-        float top = smoothstep(uH - 2.0, uH, y);
-        float a;
-        vec3 c = uCol;
-        if (uDark > 0.5) { a = (0.22 + 0.55 * edge) * fade + 0.5 * tick + 0.6 * top; c *= 1.0 + 1.4 * tick + 1.2 * top; gl_FragColor = vec4(c * a * uK, a * uK); }
-        else {
-          // 白天：柱子背后多半是深蓝的盘心，墨色的柱子会消失（2026-11-26 实测）。改成一根纸卷：纸白的身子、往两边压成墨色的边、墨色的刻线
-          vec3 paper = vec3(0.96, 0.95, 0.92);
-          c = mix(paper, uCol, clamp(edge * 1.25, 0.0, 1.0) * 0.8);
-          c = mix(c, uCol, 0.85 * tick);
-          a = mix(0.92, 0.7, y / uH);
-          gl_FragColor = vec4(c, a * uK);
-        }
-      }`,
-    transparent: true, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending,
-  });
 }
 // —— 唱臂：右后方一根枢轴唱臂（直管 + 偏角唱头），针尖落在正在放的那一带上 ——
 // 几何按真唱臂做：枢轴固定，唱臂是刚体，只绕枢轴转；在中间半径上让唱头与刻纹相切，换半径时解一次两圆相交求转角。
