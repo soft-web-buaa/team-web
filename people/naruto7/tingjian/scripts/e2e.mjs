@@ -294,7 +294,7 @@ await go(p, '?h=19#/mine');
 await sleep(2500);
 t('A 的「我的」：刻过一张', (await text(p, '.paper .h1')).startsWith('1 张'));
 const tabsM = await p.$$('.paper [role=tab]');
-await tabsM[4].click();   // 我刻的 / 收藏 / 我的帖子 / 共建 / 回应我的 / 刻声卡
+await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('回应我的')).click());   // 我刻的 / 唱片架 / 收藏 / 我的帖子 / 共建 / 回应我的 / 刻声卡（按字找，加页签不会错位）
 await sleep(500);
 t('A 的「回应我的」：有人也听过', (await text(p, '.paper')).includes('也听过'));
 await tabsM[0].click();
