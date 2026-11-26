@@ -94,7 +94,8 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
 .forms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .form.old { border-style: dashed; }
 .form .tkl { stroke: var(--ink-2); stroke-width: 0.8; stroke-dasharray: 1.5 1.5; }
-.form { display: grid; justify-items: center; gap: 4px; padding: 8px 2px 7px; border-radius: 3px; border: 1px solid var(--hair); background: none; font-size: 12px; color: var(--ink-2); }
+.form { display: grid; justify-items: center; gap: 4px; padding: 8px 2px 7px; border-radius: 4px; border: 1px solid var(--hair); background: none; font-size: 12px; color: var(--ink-2); transition: border-color .16s, background-color .16s, color .16s; }
+.form:hover { border-color: var(--ink-2); color: var(--ink); background: var(--wash); }
 .form svg { width: 40px; height: 28px; fill: var(--ink-2); }
 .form .soft { opacity: .3; }
 .form .ln { fill: none; stroke: var(--ink-2); stroke-width: 1.2; }
@@ -106,7 +107,8 @@ const unit = (x) => (metric.value === 'count' ? `${x.v} 张` : metric.value === 
 .moods { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
 .moods i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 .rank { list-style: none; padding: 0; margin: 4px 0 0; }
-.rk { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 6px 0; border: 0; border-top: 1px solid var(--hair); background: none; text-align: left; }
+.rk { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 6px 8px; margin: 0 -8px; border: 0; border-top: 1px solid var(--hair); border-radius: 0 0 4px 4px; background: none; text-align: left; transition: background-color .16s; }
+.rk:hover { background: var(--wash); }
 .rk .nm { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rk .bar { height: 8px; border-radius: 2px; background: var(--hair); overflow: hidden; }
 .rk .bar i { display: block; height: 100%; background: var(--ink); }

@@ -136,28 +136,29 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
 </template>
 
 <style scoped>
-.now-title { font: 20px/1.4 var(--f-show); margin: 0; }
+.now-title { font: 21px/1.4 var(--f-show); letter-spacing: .02em; margin: 0; }
 .sleeve { position: relative; margin: 0 0 8px; }
 .sleeve img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 3px; display: block; }
 .sleeve .tier { position: absolute; left: 8px; top: 8px; background: var(--paper); }
 .facts { padding: 0 0 0 1.1em; margin: 0 0 8px; font-size: 14px; }
 .facts li { margin: 0 0 6px; }
 .facts a { font-size: 12px; color: var(--ink-2); }
-.contact { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-.frame { position: relative; display: block; }
-.frame img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; border-radius: 2px; }
+.contact { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.frame { position: relative; display: block; border-radius: 3px; overflow: hidden; }
+.frame img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; transition: transform .4s var(--ease); }
+.frame:hover img { transform: scale(1.03); }
 .frame .tier { position: absolute; left: 4px; bottom: 4px; background: var(--paper); }
 .chip { text-decoration: none; }
 /* 后来：最新的一张在上，小幅错落 */
 .laters { margin: 16px 0 0; }
 .laters-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font: 600 13px/1.4 var(--f-ui); letter-spacing: .08em; color: var(--ink-2); }
-.laters-head .n { font-weight: 400; font-size: 11px; letter-spacing: .04em; opacity: .7; }
+.laters-head .n { font-weight: 400; font-size: 12px; letter-spacing: .04em; opacity: .7; }
 .slip-stack { display: grid; margin: 0 0 10px; }
 .slip-stack > * + * { margin-top: -6px; }
 .slip-stack > *:nth-child(2n) { margin-left: 10px; }
 .slip-stack > *:nth-child(3n) { margin-right: 6px; }
-.later-form { margin: 10px 0 0; padding: 14px; border-radius: 4px; background: var(--wash); }
+.later-form { margin: 10px 0 0; padding: 14px; border-radius: 5px; background-color: var(--wash); background-image: var(--grain); border: 1px solid var(--hair); }
 .later-input { height: auto; min-height: 76px; padding: 10px 12px; line-height: 1.6; resize: vertical; }
 .later-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 6px 0 2px; }
-.later-meta .count { font-size: 11px; color: var(--ink-2); }
+.later-meta .count { font-size: 12px; color: var(--ink-2); }
 </style>

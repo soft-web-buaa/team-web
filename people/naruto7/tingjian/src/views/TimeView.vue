@@ -181,11 +181,12 @@ onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); stage.setSink(fal
 .dayline svg { width: 100%; height: 64px; display: block; }
 .dayline input { position: absolute; left: 0; right: 0; top: 0; height: 64px; width: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
 .dayline input:focus-visible + .ticks { outline: 2px solid var(--scope); }
-.ticks { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-2); margin-top: 4px; }
-.big { font-size: 34px; margin: 12px 0 12px; }
-.big span { font: 14px var(--f-ui); color: var(--ink-2); margin-left: 8px; }
+.ticks { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.big { font: 400 32px/1.2 var(--f-show); letter-spacing: .02em; margin: 12px 0 12px; }
+.big span { font: 14px var(--f-ui); letter-spacing: 0; color: var(--ink-2); margin-left: 8px; }
 .sems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 14px; }
-.sem { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 10px; border-radius: 3px; border: 1px solid var(--hair); background: none; }
+.sem { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--hair); background: none; transition: border-color .16s, background-color .16s; }
+.sem:hover { border-color: var(--ink-2); background: var(--wash); }
 .sem i { font-style: normal; font-size: 12px; color: var(--ink-2); }
 .sem.now { border-style: dashed; border-color: var(--line); }
 .sem.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }

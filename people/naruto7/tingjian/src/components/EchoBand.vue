@@ -110,7 +110,7 @@ const src = (x) => (x.photo && x.photo.id ? photoUrl(x.photo.id, 'thumb') : null
 .by { font-size: 12px; color: var(--ink-2); }
 .dev { border-radius: 2px; object-fit: cover; animation: develop 1.6s ease-out both; }
 @keyframes develop { from { filter: brightness(2.2) saturate(0) blur(2px); opacity: .2; } to { filter: none; opacity: 1; } }
-.form { margin: 14px 0 0; padding: 14px; border-radius: 4px; background: var(--wash); }
+.form { margin: 14px 0 0; padding: 14px; border-radius: 5px; background-color: var(--wash); background-image: var(--grain); border: 1px solid var(--hair); }
 .form input[type='range'] { width: 100%; accent-color: var(--ink); }
 .photo { display: grid; gap: 8px; margin: 0 0 6px; }
 .photo img { border-radius: 2px; object-fit: cover; }

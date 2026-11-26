@@ -11,7 +11,7 @@ const c = computed(() => { void L.version; return siteCounts(); });
 <template>
   <Paper label="关于">
     <p class="kicker">关于 · 听见校园</p>
-    <h1 class="h1">一台放了很多年的留声机</h1>
+    <h1 class="h1">一台放了<br>很多年的留声机</h1>
     <p class="lede">学院路校园坐在盘心，外圈的刻纹一个学期一带。每一张盘是某人在某处某刻留下的十秒。以组长 naruto7 的个人作品「刻声」为底，团队重做。</p>
 
     <p class="h3">现在有多少</p>
@@ -44,10 +44,10 @@ const c = computed(() => { void L.version; return siteCounts(); });
 </template>
 
 <style scoped>
-.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-.tbl th { text-align: left; font: 15px var(--f-show); padding: 10px 8px 10px 0; vertical-align: top; white-space: nowrap; }
-.tbl td { padding: 10px 0; border-top: 1px solid var(--hair); vertical-align: top; color: var(--ink-2); }
-.tbl td.num { font: 600 18px var(--f-ui); color: var(--ink); padding-right: 12px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+.tbl th { text-align: left; font: 15px var(--f-show); padding: 12px 8px 12px 0; vertical-align: top; white-space: nowrap; }
+.tbl td { padding: 12px 0; border-top: 1px solid var(--hair); vertical-align: top; color: var(--ink-2); }
+.tbl td.num { font: 400 21px/1.3 var(--f-show); font-variant-numeric: tabular-nums; color: var(--ink); padding-right: 12px; }
 .tbl tr:first-child td, .tbl tr:first-child th { border-top: 0; }
 .tbl th { border-top: 1px solid var(--hair); }
 .src { padding-left: 1.1em; }

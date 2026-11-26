@@ -63,10 +63,10 @@ const days = computed(() => (p.daysAfter == null ? '' : p.daysAfter <= 0 ? 'åˆ»ä
 }
 .slip-text { margin: 0 0 10px; font: 17px/1.75 var(--f-show); text-align: left; word-break: break-word; }
 .slip-text .lead { font-size: 13px; color: #54452F; letter-spacing: .06em; margin-right: 2px; }
-.slip-foot { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11.5px; line-height: 1; color: #54452F; }
+.slip-foot { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; line-height: 1; color: #54452F; }
 .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1px rgb(43 36 25 / .22); }
 .sep { opacity: .55; }
-.del, .rep { margin-left: auto; padding: 0 2px; border: 0; background: none; color: #54452F; font-size: 11.5px; text-decoration: underline; text-decoration-color: rgb(84 69 47 / .55); text-underline-offset: 2px; }
+.del, .rep { margin-left: auto; padding: 0 2px; border: 0; background: none; color: #54452F; font-size: 12px; text-decoration: underline; text-decoration-color: rgb(84 69 47 / .55); text-underline-offset: 2px; }
 .rep { opacity: .8; }
 @keyframes slip-drop { from { opacity: 0; transform: translateY(-6px) rotate(var(--rot)); } to { opacity: 1; transform: rotate(var(--rot)); } }
 @media (prefers-reduced-motion: reduce) { .paper-slip { animation: none; } }

@@ -102,7 +102,7 @@ onBeforeUnmount(() => clearInterval(timer));
 .slip { position: relative; margin: 18px 0 0; padding: 14px 16px 16px; border: 1px solid var(--line); border-top: 3px double var(--line); border-radius: 3px; background: var(--wash); }
 .slip header { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--hair); }
 .slip header .show { font-size: 18px; letter-spacing: .16em; }
-.slip header span:last-child { font-size: 11px; letter-spacing: .1em; color: var(--ink-2); }
+.slip header span:last-child { font-size: 12px; letter-spacing: .1em; color: var(--ink-2); }
 .slip dl { margin: 0; padding-right: 64px; }
 .slip dl div { display: grid; grid-template-columns: 3em 1fr; align-items: baseline; padding: 7px 0 6px; border-bottom: 1px dotted var(--line); }
 .slip dt { font-size: 12px; color: var(--ink-2); letter-spacing: .08em; }

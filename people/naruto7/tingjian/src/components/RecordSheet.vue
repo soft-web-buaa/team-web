@@ -84,8 +84,11 @@ function drop() {
 </template>
 
 <style scoped>
-.rec-sheet { position: fixed; z-index: 30; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 170px); overflow-y: auto;
-  background: var(--paper); color: var(--ink); border-radius: 6px; padding: 24px 26px; box-shadow: 0 1px 0 var(--hair), 0 40px 80px -24px rgb(0 0 0 / .5); }
+.rec-sheet { position: fixed; z-index: 30; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 170px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--line) 75%, transparent) transparent;
+  background-color: var(--paper); background-image: var(--grain); color: var(--ink); border-radius: 6px; padding: 24px 26px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 7%, transparent), inset 0 1px 0 color-mix(in srgb, var(--paper) 55%, #fff), 0 1px 1px rgb(0 0 0 / .06), 0 40px 80px -24px rgb(0 0 0 / .5); }
+.rec-sheet::-webkit-scrollbar { width: 8px; }
+.rec-sheet::-webkit-scrollbar-track { background: transparent; }
+.rec-sheet::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: color-mix(in srgb, var(--line) 70%, transparent) padding-box; }
 .rec-wave { width: 100%; height: 40px; display: block; margin: 0 0 16px; }
 .rec-wave path { fill: var(--ink); }
 .places { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; }

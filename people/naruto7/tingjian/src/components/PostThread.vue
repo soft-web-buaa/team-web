@@ -101,9 +101,9 @@ function relayNext() {
 <style scoped>
 .thread { margin-top: 4px; }
 .chain { list-style: none; display: flex; gap: 6px; padding: 12px 0 14px; margin: 10px 0 0; overflow-x: auto; border-top: 1px solid var(--hair); }
-.chain li { flex: none; display: grid; justify-items: center; gap: 4px; width: 76px; font-size: 11px; color: var(--ink-2); text-align: center; position: relative; }
+.chain li { flex: none; display: grid; justify-items: center; gap: 4px; width: 76px; font-size: 12px; color: var(--ink-2); text-align: center; position: relative; }
 .chain li:not(.next)::after { content: ''; position: absolute; right: -6px; top: 34px; width: 6px; height: 1px; background: var(--line); }
-.chain b { font: 600 11px var(--f-ui); color: var(--ink); }
+.chain b { font: 600 12px var(--f-ui); color: var(--ink); }
 .chain li.here b { background: var(--scope); color: #2A2104; padding: 1px 6px; border-radius: 999px; }
 .chain .cd { border: 0; background: none; padding: 0; }
 .chain .next { justify-content: center; align-self: center; width: auto; }
@@ -116,13 +116,16 @@ function relayNext() {
 .t { font: 15px/1.7 var(--f-show); margin: 4px 0 0; }
 .snd { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; border: 1px solid var(--hair); border-radius: 999px; background: var(--wash); padding: 3px 10px 3px 4px; font-size: 12px; }
 .acts { display: flex; gap: 2px; margin: 6px 0 0 -8px; }
-.act { height: 26px; padding: 0 8px; border-radius: 999px; border: 0; background: none; font-size: 12px; color: var(--ink-2); }
+.act { height: 26px; padding: 0 8px; border-radius: 999px; border: 0; background: none; font-size: 12px; color: var(--ink-2); transition: transform .16s var(--ease), background-color .16s, color .16s; }
+.act:hover { background: var(--wash); color: var(--ink); }
+.act:active { transform: scale(.98); }
 .act.on { background: var(--ink); color: var(--paper); }
 .act.small { height: 22px; padding: 0 6px; }
-.kids { list-style: none; margin: 8px 0 0; padding: 8px 12px; border-radius: 3px; background: var(--wash); font-size: 13px; line-height: 1.7; }
+.kids { list-style: none; margin: 8px 0 0; padding: 8px 12px; border-radius: 4px; background: var(--wash); font-size: 13px; line-height: 1.7; }
 .kids li + li { margin-top: 4px; }
 .say { position: sticky; bottom: -120px; margin: 16px -28px -120px; padding: 12px 28px 120px; background: var(--paper); border-top: 1px solid var(--hair); }
 .area { height: auto; padding: 8px 12px; resize: vertical; }
 .attach { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-@media (max-width: 760px) { .say { margin: 16px -18px -150px; padding: 12px 18px 150px; } }
+.say { border-top-color: color-mix(in srgb, var(--hair) 80%, transparent); box-shadow: 0 -10px 24px -22px rgb(0 0 0 / .35); }
+@media (max-width: 760px) { .say { margin: 16px -20px -150px; padding: 12px 20px 150px; } .act, .act.small { height: 44px; padding: 0 10px; } }
 </style>

@@ -101,7 +101,7 @@ function pickGrain() {
 .wood { margin: 8px 0 0; }
 .wood svg { display: block; max-width: 100%; height: auto; touch-action: manipulation; }
 .face line { stroke: var(--line); stroke-width: 1; }
-.face text { font: 10px var(--f-ui); fill: var(--ink-2); }
+.face text { font: 12px var(--f-ui); fill: var(--ink-2); letter-spacing: .04em; }
 .early { fill: var(--wash); stroke: var(--hair); stroke-width: .6; }
 .late { fill: var(--hair); }
 .hot .early, .hot .late { stroke: var(--ink); stroke-width: .8; }

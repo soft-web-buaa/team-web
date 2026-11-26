@@ -131,11 +131,13 @@ const people = computed(() => new Set(items.value.filter((x) => x.t).map((x) => 
 .head .h2 { margin: 2px 0 6px; }
 .acts { flex-wrap: wrap; gap: 6px; align-items: center; }
 .add { margin: 12px 0 0; padding: 12px; border-radius: 4px; background: var(--wash); border: 1px solid var(--hair); }
-.pick { display: flex; gap: 10px; align-items: center; width: 100%; padding: 6px 4px; border: 0; border-top: 1px solid var(--hair); background: none; text-align: left; font-size: 14px; }
+.pick { display: flex; gap: 10px; align-items: center; width: 100%; padding: 6px 6px; margin: 0 -6px; border: 0; border-top: 1px solid var(--hair); background: none; text-align: left; font-size: 14px; transition: background-color .16s; }
+.pick:hover { background: color-mix(in srgb, var(--paper) 55%, transparent); }
 .pick i { display: block; font-style: normal; font-size: 12px; color: var(--ink-2); }
 .tracks { list-style: none; padding: 0; margin: 0; }
 .tracks li { position: relative; border-top: 1px solid var(--hair); }
-.tr { display: grid; grid-template-columns: 18px auto 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 8px 0; border: 0; background: none; text-align: left; }
+.tr { display: grid; grid-template-columns: 18px auto 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 8px 6px; margin: 0 -6px; border: 0; background: none; text-align: left; transition: background-color .16s; }
+.tr:hover { background: var(--wash); }
 .tr .n { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .tr .t { display: block; font: 16px/1.35 var(--f-show); }
 .tr .m { display: block; font-size: 12px; color: var(--ink-2); }

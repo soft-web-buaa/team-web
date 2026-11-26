@@ -90,7 +90,7 @@ function cancel() { ui.compose = null; emit('cancel'); }
 </template>
 
 <style scoped>
-.compose { margin: 14px 0 4px; padding: 16px; border-radius: 4px; background: var(--wash); border: 1px solid var(--hair); }
+.compose { margin: 14px 0 4px; padding: 16px; border-radius: 5px; background-color: var(--wash); background-image: var(--grain); border: 1px solid var(--hair); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--paper) 40%, transparent); }
 .area { height: auto; min-height: 96px; padding: 10px 12px; resize: vertical; font: 16px/1.7 var(--f-show); }
 .count { text-align: right; margin: 2px 0 8px; }
 .row-l { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }

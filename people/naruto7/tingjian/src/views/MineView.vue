@@ -180,12 +180,12 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
 
 <style scoped>
 .kseal { margin: -3px 0 0 8px; }
-.slot { display: grid; justify-items: center; gap: 10px; margin: 30px 0 10px; }
-.slot span { width: 120px; height: 120px; border-radius: 50%; border: 1.5px dashed var(--line); background: repeating-radial-gradient(circle, transparent 0 7px, var(--hair) 7px 8px); }
+.slot { display: grid; justify-items: center; gap: 12px; margin: 28px 0 8px; }
+.slot span { width: 120px; height: 120px; border-radius: 50%; border: 1.5px dashed var(--line); background: repeating-radial-gradient(circle, transparent 0 7px, var(--hair) 7px 8px); box-shadow: inset 0 0 0 6px var(--paper), 0 14px 30px -22px rgb(0 0 0 / .45); }
 /* 唱片架预览：几只套子从木箱口露出上沿 */
 .peek { position: relative; display: flex; align-items: flex-end; gap: 6px; height: 118px; margin: 22px 0 14px; padding: 0 3px; }
-.peek::after { content: ''; position: absolute; left: -3px; right: -3px; bottom: 0; height: 26px; border-radius: 2px; background: linear-gradient(#8B6A4A, #6E5238); box-shadow: inset 0 2px 0 rgb(255 255 255 / .12); }
-.ps { position: relative; z-index: 1; flex: 1; height: 102px; border-radius: 2px; overflow: hidden; box-shadow: 0 8px 14px -8px rgb(0 0 0 / .55); }
+.peek::after { content: ''; position: absolute; left: -3px; right: -3px; bottom: 0; height: 26px; border-radius: 3px; background: linear-gradient(#8B6A4A, #6E5238); box-shadow: inset 0 2px 0 rgb(255 255 255 / .16), inset 0 -2px 4px rgb(0 0 0 / .18), 0 10px 20px -12px rgb(0 0 0 / .4); }
+.ps { position: relative; z-index: 1; flex: 1; height: 102px; border-radius: 3px; overflow: hidden; box-shadow: 0 10px 18px -10px rgb(0 0 0 / .5), 0 1px 0 rgb(255 255 255 / .18); }
 .ps:nth-child(2n) { height: 96px; }
 .ps img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; filter: saturate(.8) contrast(1.05); }
 .ps .ymine { position: absolute; left: 4px; bottom: 4px; font: 10px var(--f-ui); font-style: normal; padding: 1px 4px; border-radius: 1px; background: #E6BE3A; color: var(--ink); }
@@ -194,7 +194,7 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
 .acts { display: flex; justify-content: flex-end; gap: 10px; margin: -6px 0 6px; }
 .later-line { margin: -4px 0 6px 56px; }
 .later-line button { display: block; width: 100%; padding: 2px 0; border: 0; background: none; text-align: left; font: 15px/1.5 var(--f-show); color: var(--ink); }
-.later-line b { margin-right: 6px; font: 600 11px/1 var(--f-ui); letter-spacing: .08em; color: var(--ink-2); vertical-align: 1px; }
+.later-line b { margin-right: 6px; font: 600 12px/1 var(--f-ui); letter-spacing: .08em; color: var(--ink-2); vertical-align: 1px; }
 .later-hint { margin: -2px 0 6px 56px; font-size: 12px; }
 .later-hint button { padding: 0; border: 0; background: none; font-size: 12px; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .inbox { list-style: none; padding: 0; margin: 12px 0 0; }
@@ -202,7 +202,8 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
 .inbox li { position: relative; }
 .inbox li.fresh::before { content: ''; position: absolute; left: -14px; top: 18px; width: 7px; height: 7px; border-radius: 50%; background: #C8261A; }
 .inbox li:not(.fresh) .msg { opacity: .72; }
-.msg { display: grid; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--hair); background: none; padding: 10px 0; gap: 2px; }
+.msg { display: grid; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--hair); background: none; padding: 10px 8px; margin: 0 -8px; gap: 2px; border-radius: 0 0 4px 4px; transition: background-color .16s; }
+.msg:hover { background: var(--wash); }
 .msg .k { font-size: 12px; color: var(--ink-2); }
 .msg .q { font: 17px/1.5 var(--f-show); }
 .msg .m { font-size: 12px; color: var(--ink-2); }
