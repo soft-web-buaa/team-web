@@ -4,7 +4,7 @@
 //   1. 地点所在的那栋楼单独成一个网格（hero），点进地点时它能被从模型里提起来，落在一只纸台座上（DESIGN.md §4）。
 //   3. 画布与页面解耦：画布由外面传进来，画质、可见性由 stage.js 管。
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -15,6 +15,7 @@ import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltSh
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import { TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { buildLandmarks, paintStreets } from './landmarks.js';
+import { TEX, loadCampusTex } from './campusTex.js';
 import { FUNC_CARD, ERA, ROOF_PAPER, POOL_STONE, STYLE, tintOf, facadeOf, offsetRing, ringArea, obbOf, SCENERY } from '../kesheng/web/plan3d/model.js';
 
 export const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量）
@@ -195,6 +196,8 @@ function windowize(mat, { detail = false } = {}) {
     sh.uniforms.uLit = U.uLit;
     sh.uniforms.uWin = mat.userData.win;
     sh.uniforms.uSnow = snowU;
+    sh.uniforms.uWallT = TEX.wall; sh.uniforms.uRoofT = TEX.roof;
+    sh.uniforms.uWallOn = TEX.wallOn; sh.uniforms.uRoofOn = TEX.roofOn;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aFac; varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac;');
@@ -202,6 +205,7 @@ function windowize(mat, { detail = false } = {}) {
       .replace('#include <common>', `#include <common>
         ${detail ? '#define KS_DETAIL\n        uniform float uDetail;' : ''}
         varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; uniform float uNight, uLit, uWin, uSnow;
+        uniform sampler2D uWallT, uRoofT; uniform float uWallOn, uRoofOn;
         float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         float box1(float x, float a, float b, float aa) { return smoothstep(a - aa, a + aa, x) * (1.0 - smoothstep(b - aa, b + aa, x)); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -211,6 +215,39 @@ function windowize(mat, { detail = false } = {}) {
           float fib = wHash(floor(wp)) * 0.5 + wHash(floor(wp * 3.1 + 7.0)) * 0.5;
           diffuseColor.rgb *= 0.97 + 0.06 * fib;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.94, 0.95), uSnow * smoothstep(0.6, 0.9, vGN.y));
+          // 墙与屋面的材质：一张灰度图集，按楼型挑一路（R 砖 / G 粉刷 / B 混凝土），只调明暗和粗糙度，色相不动。
+          // 远看糊了（fwidth 大了）就淡出，不出摩尔纹；近处（uDetail）再拿它的梯度当凹凸，窗下那道砖缝就有影了
+          if (uWallOn > 0.5 || uRoofOn > 0.5) {
+            float style = floor(vFac.z + 0.5);
+            float sideW = 1.0 - smoothstep(0.3, 0.5, abs(vGN.y));
+            float upW = smoothstep(0.55, 0.85, vGN.y);
+            if (sideW > 0.01 && uWallOn > 0.5) {
+              vec2 tw = normalize(vec2(-vGN.z, vGN.x) + 1e-5);
+              vec2 uvw = vec2(dot(vLoc.xz, tw), vLoc.y) * (1.0 / 3.2);
+              float e = max(fwidth(uvw.x), fwidth(uvw.y));
+              vec4 tx = texture2D(uWallT, uvw);
+              vec4 txl = texture2D(uWallT, uvw * 0.085 + 0.31);        // 大片的雨痕、返潮：三十几米一块
+              float ch = (style > 0.5 && style < 1.5) ? 0.0 : ((style > 1.5 && style < 2.5) ? 2.0 : mix(1.0, 2.0, step(0.58, fract(vFac.w * 13.7))));
+              float v = ch < 0.5 ? tx.r : (ch < 1.5 ? tx.g : tx.b);
+              float vl = ch < 0.5 ? txl.r : (ch < 1.5 ? txl.g : txl.b);
+              float keep = sideW * (1.0 - smoothstep(0.2, 0.5, e));
+              diffuseColor.rgb *= 1.0 + ((v - 0.5) * 0.34 + (vl - 0.5) * 0.14) * keep;   // 11-26 晚：原来 0.6/0.4，绿墙被染成迷彩，收到只见颗粒、不见脏
+              roughnessFactor = clamp(roughnessFactor + (0.5 - v) * 0.16 * keep, 0.1, 1.0);
+              #ifdef KS_DETAIL
+              if (uDetail > 0.001) normal = normalize(normal - vec3(dFdx(v), dFdy(v), 0.0) * 22.0 * uDetail * keep * (1.0 - smoothstep(0.004, 0.012, e)));
+              #endif
+            } else if (upW > 0.01 && uRoofOn > 0.5) {
+              vec2 uvr = vLoc.xz * (1.0 / 2.4);
+              float e = max(fwidth(uvr.x), fwidth(uvr.y));
+              float rv = texture2D(uRoofT, uvr).r;
+              float rmac = texture2D(uRoofT, vLoc.xz * (1.0 / 23.0) + 0.21).r;   // 大片的污渍、补过的防水层
+              float keep = upW * (1.0 - smoothstep(0.2, 0.5, e));
+              diffuseColor.rgb *= 1.0 + ((rv - 0.5) * 0.38 + (rmac - 0.5) * 0.26) * keep;
+              roughnessFactor = clamp(roughnessFactor + (0.56 - rv) * 0.3 * keep, 0.1, 1.0);
+            }
+          }
+          // 楼脚一圈接触阴影：最底下两三米压暗，楼看着才是坐在了地上，不是浮着
+          diffuseColor.rgb *= mix(0.68, 1.0, smoothstep(0.0, 2.8, vLoc.y));
           float style = floor(vFac.z + 0.5);
           float side = 1.0 - smoothstep(0.3, 0.5, abs(vGN.y));
           if (style < 3.5 && side > 0.01) {
@@ -254,16 +291,72 @@ function windowize(mat, { detail = false } = {}) {
               ink *= 1.0 - 0.6 * frame * uDetail;
             }
             #endif
-            vec3 glass = vec3(0.30, 0.37, 0.45);
-            diffuseColor.rgb = mix(diffuseColor.rgb, glass, ink * 0.62 * (1.0 - uNight * 0.5));
-            diffuseColor.rgb *= 1.0 - line * side * fade * 0.16 - (1.0 - fade) * 0.06 * side;
             vec3 cell = vec3(floor(cs), floor(cy), floor(dot(vLoc.xz, normalize(vGN.xz + 1e-5)) * 0.5));
+            // 玻璃：靠上那截映着天光（越往上越亮），每扇窗深浅还不太一样——有的拉着帘，有的敞着；粗糙度调低，软箱才反得上
+            vec3 glass = mix(vec3(0.26, 0.33, 0.41), vec3(0.47, 0.53, 0.61), clamp(0.1 + 0.55 * (f.y - wb.z) / max(0.01, wb.w - wb.z), 0.0, 1.0));
+            glass *= 0.9 + 0.2 * wHash(cell + 5.3);
+            diffuseColor.rgb = mix(diffuseColor.rgb, glass, ink * 0.66 * (1.0 - uNight * 0.55));
+            roughnessFactor = mix(roughnessFactor, 0.34, ink * 0.7);
+            metalnessFactor = mix(metalnessFactor, 0.1, ink * 0.5);
+            diffuseColor.rgb *= 1.0 - line * side * fade * 0.16 - (1.0 - fade) * 0.06 * side;
             float lit = step(wHash(cell + vFac.w), uLit) * win;
             totalEmissiveRadiance += vec3(1.0, 0.74, 0.42) * lit * uNight * uWin * (2.0 + 2.4 * wHash(cell + 3.1));
           }
         }`);
   };
   mat.customProgramCacheKey = () => (detail ? 'ks-card-v2-d' : 'ks-card-v2');
+}
+
+// —— 地面：路、铺地、草、球场。同一张灰度图集（R 沥青 / G 铺地砖 / B 草），各取一路，
+//      再按十分之一的比例采一次当大尺度的斑驳（一处磨损、一片深草）。同样远看淡出，只管明暗和粗糙度。
+function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0 } = {}) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uSurfT = TEX.ground; sh.uniforms.uSurfOn = TEX.groundOn;
+    sh.uniforms.uChan = { value: chan }; sh.uniforms.uScl = { value: scale };
+    sh.uniforms.uAmt = { value: amt }; sh.uniforms.uRgh = { value: rgh }; sh.uniforms.uStripe = { value: stripe };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSLoc;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSLoc = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vSLoc; uniform sampler2D uSurfT;
+        uniform float uSurfOn, uChan, uScl, uAmt, uRgh, uStripe;
+        float surfCh(vec4 c) { return uChan < 0.5 ? c.r : (uChan < 1.5 ? c.g : c.b); }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (uSurfOn > 0.5) {
+          vec2 uv = vSLoc.xz * uScl;
+          float e = max(fwidth(uv.x), fwidth(uv.y));
+          float keep = 1.0 - smoothstep(0.22, 0.5, e);
+          float v = surfCh(texture2D(uSurfT, uv));
+          float d = (v - 0.5) * uAmt * keep;
+          if (keep > 0.02) d += (surfCh(texture2D(uSurfT, uv * 0.115 + 0.37)) - 0.5) * uAmt * 0.85 * keep;
+          diffuseColor.rgb *= 1.0 + d;
+          roughnessFactor = clamp(roughnessFactor + (0.5 - v) * uRgh * keep, 0.2, 1.0);
+          if (uStripe > 0.5) {   // 球场割草条纹：一道一道反着倒
+            float s = smoothstep(-0.06, 0.06, fract(vSLoc.x / 8.0 + vSLoc.z / 13.0) - 0.5);
+            diffuseColor.rgb *= 1.0 + 0.1 * (s - 0.5) * keep;
+          }
+        }`);
+  };
+  mat.customProgramCacheKey = () => 'ks-surf-v1';
+  return mat;
+}
+
+/** 水面：两道交叉的细波纹把法线弄皱一点，影棚的软箱就碎成一片一片的反光；不引入时间，特写里也不会「动」得不自然。 */
+function waterize(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWLoc;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWLoc = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWLoc;')
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize(normal + vec3(
+          sin(vWLoc.x * 0.55 + vWLoc.z * 0.21) * 0.16 + sin(vWLoc.x * 1.7 - vWLoc.z * 0.9) * 0.06, 0.0,
+          cos(vWLoc.z * 0.63 - vWLoc.x * 0.27) * 0.16 + cos(vWLoc.z * 1.3 + vWLoc.x * 1.1) * 0.06));`);
+  };
+  mat.customProgramCacheKey = () => 'ks-water-v1';
+  return mat;
 }
 
 // —— 影棚：三盏长条软箱（世界坐标，米）。黑胶上的镜面反射、各向异性高光，和楼、金属件的环境反射，都来自同这三盏 ——
@@ -1135,6 +1228,43 @@ function pavingTexture() {
   return t;
 }
 
+let pedTex = null, pedAO = null;
+/** 地点楼底下那只纸台座的贴图：纸浆的细颗粒 + 一圈很淡的放射状不匀（中间略亮），别让它是一块死白。 */
+function sharedPedTex() {
+  if (pedTex) return pedTex;
+  pedTex = pedestalTex();
+  return pedTex;
+}
+/** 楼脚那圈柔和的接触影：中间深、往外淡，贴在地点楼的纸台座上。十六栋楼共用一张。 */
+function sharedPedAO() {
+  if (pedAO) return pedAO;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 6, 128, 128, 126);
+  gr.addColorStop(0, 'rgba(52,44,34,0.46)');
+  gr.addColorStop(0.34, 'rgba(52,44,34,0.3)');
+  gr.addColorStop(0.6, 'rgba(52,44,34,0.09)');
+  gr.addColorStop(0.78, 'rgba(52,44,34,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  pedAO = new THREE.CanvasTexture(c);
+  pedAO.colorSpace = THREE.SRGBColorSpace;
+  return pedAO;
+}
+function pedestalTex() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d'), img = g.createImageData(256, 256), d = img.data;
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const i = (y * 256 + x) * 4, r = Math.hypot(x - 128, y - 128) / 181;
+    const v = 236 + (((x * 7349 + y * 9151) % 97) / 97) * 12 - r * r * 22;      // 细颗粒 + 边缘略暗
+    d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, v)); d[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
 // 树冠：十月下旬的北京——大多还绿着（深浅三种），银杏开始泛黄
 const CROWN = [['#4E7A42', 0.3], ['#5F8C48', 0.26], ['#3F6A3E', 0.2], ['#7E9A4A', 0.1], ['#C6A23C', 0.14]].map(([c, w]) => [new THREE.Color(c), w]);
 function crownColor(i) {
@@ -1175,7 +1305,25 @@ function buildCampus() {
   const benchMat = std({ color: '#8C6E52', roughness: 0.85 });
   const kitMat = std({ color: '#ECEDEA', roughness: 0.5, metalness: 0.2 });
   const parkDone = new Set();
-  const crownGeo = new THREE.IcosahedronGeometry(1, 1);
+  // 树冠：一颗球揉皱成几团（顶点按噪声推出去一点），顶亮底暗写进顶点色——远看是一团树的体积，不是一只绿球
+  const crownGeo = (() => {
+    const raw = new THREE.IcosahedronGeometry(1, 2);
+    raw.deleteAttribute('normal'); raw.deleteAttribute('uv');          // 先合并顶点，法线才是光滑的（要的是软的一团，不是切面）
+    const g = mergeVertices(raw);
+    const p = g.attributes.position, col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const n = Math.sin(x * 3.1 + y * 2.3) * Math.cos(z * 2.7 - y * 1.9) * 0.5 + Math.sin(x * 6.7 - z * 5.1) * 0.26;
+      const k = 0.85 + 0.24 * n;
+      p.setXYZ(i, x * k, y * k, z * k);
+      const up = Math.min(1, Math.max(0, (y + 1) * 0.5));
+      const s = 0.62 + 0.46 * Math.pow(up, 1.15) + 0.06 * n;         // 下沿略暗：冠底不接光，但不该黑成一块
+      col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = Math.max(0.45, s);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    return g;
+  })();
   const trunkGeo = new THREE.CylinderGeometry(0.35, 0.45, 1, 6);
   trunkGeo.translate(0, 0.5, 0);
   const postGeo = new THREE.CylinderGeometry(0.22, 0.3, 7.5, 6);
@@ -1197,16 +1345,16 @@ function buildCampus() {
       tints.push({ mat: mt, on: new THREE.Color(color), dim: new THREE.Color(dim), sel: sel && new THREE.Color(sel) });
       return mt;
     };
-    const tileMat = mat(SCENERY['秋'].tile, { roughness: 0.95 }, '#5C636D', '#B9B6AC');
-    const roadMat = mat(SCENERY['秋'].road, { roughness: 0.95 }, '#8A9199');
-    const greenMat = mat(SCENERY['秋'].green, {}, '#6C7775');
+    const tileMat = surfaceTex(mat(SCENERY['秋'].tile, { roughness: 0.95 }, '#5C636D', '#B9B6AC'), 1, 1 / 5.2, { amt: 0.46, rgh: 0.1 });
+    const roadMat = surfaceTex(mat(SCENERY['秋'].road, { roughness: 0.95 }, '#8A9199'), 0, 1 / 7, { amt: 0.36, rgh: 0.12 });
+    const greenMat = surfaceTex(mat(SCENERY['秋'].green, {}, '#6C7775'), 2, 1 / 3.4, { amt: 0.6, rgh: 0.08 });
     seasonal.push({ tints, tileMat, roadMat, greenMat });
-    const pitchMat = mat('#5E9A5A', {}, '#5B6968');
-    const trackMat = mat('#B85C45', {}, '#6B6466');
+    const pitchMat = surfaceTex(mat('#5E9A5A', {}, '#5B6968'), 2, 1 / 3.4, { amt: 0.5, rgh: 0.08, stripe: 1 });
+    const trackMat = surfaceTex(mat('#B85C45', {}, '#6B6466'), 0, 1 / 5, { amt: 0.28, rgh: 0.1 });
     seasonal.at(-1).pitchMat = pitchMat; seasonal.at(-1).trackMat = trackMat;
     const bldMat = mat('#FFFFFF', { roughness: 0.78, vertexColors: true }, '#A3A9B1');
     windowize(bldMat);
-    const treeMat = mat('#FFFFFF', { roughness: 0.95 }, '#7F8890');
+    const treeMat = mat('#FFFFFF', { roughness: 0.88, vertexColors: true }, '#7F8890');
     const edgeMat = new THREE.LineBasicMaterial({ color: COL.ink, transparent: true, opacity: 0.32 });
     const lineMat = new THREE.LineBasicMaterial({ color: COL.paper, transparent: true, opacity: 0.85 });
     seasonal.at(-1).lineMat = lineMat;   // 画线不受光：stage.js 每帧按天光压暗，免得夜里一圈白线亮着
@@ -1235,7 +1383,7 @@ function buildCampus() {
     ground(z.green, TILE_TOP + 0.03, greenMat);
     ground(z.track, TILE_TOP + 0.045, trackMat);
     ground(z.pitch, TILE_TOP + 0.05, pitchMat);
-    ground(z.water, TILE_TOP + 0.05, mat('#4F7FA0', { metalness: 0.35, roughness: 0.2 }, '#4E5966'));
+    ground(z.water, TILE_TOP + 0.05, waterize(mat('#44749A', { metalness: 0.3, roughness: 0.12 }, '#4E5966')));
     // 场地画线：跑道分道线、球场边线
     if (z.lines.length) {
       const seg = [];
@@ -1331,9 +1479,11 @@ function buildCampus() {
       for (let i = 0; i < nT; i++) {
         const x = m(z.trees[i * 3]), y = -m(z.trees[i * 3 + 1]), r = m(z.trees[i * 3 + 2]);
         const th = 2.4 + r * 0.5;
-        mtx.compose(ps.set(x, th + r * 1.05, y), qt.identity(), sc.set(r, r * 1.22, r));
-        crowns.setMatrixAt(i, mtx);
         const seed = z.trees[i * 3] * 31 + z.trees[i * 3 + 1];
+        const q1 = ((seed * 0.61803) % 1 + 1) % 1, q2 = ((seed * 0.41421) % 1 + 1) % 1;
+        // 每棵树转个角度、胖瘦也差一点：同一颗冠球才不会站成一排复制品
+        mtx.compose(ps.set(x, th + r * 1.05, y), qt.setFromAxisAngle(UPY, q1 * Math.PI * 2), sc.set(r * (0.9 + q2 * 0.2), r * 1.18, r * (0.9 + q1 * 0.2)));
+        crowns.setMatrixAt(i, mtx);
         tint.copy(crownColor(seed)).multiplyScalar(0.9 + ((seed * 7919) % 97) / 97 * 0.2);
         crowns.setColorAt(i, tint);
         treeSeeds.push(seed);
@@ -1410,11 +1560,14 @@ function buildCampus() {
       // 台座（2026-11-26 改小改暗：原来一大块亮纸盘抢了楼的戏）：一张薄的灰卡纸托，比楼的外接圆大一圈，底下一道细的示波黄
       const R = Math.hypot(size.x, size.z) * 0.5 + 4;
       const pedestal = new THREE.Group();
-      const ped = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 2.4, 96), new THREE.MeshStandardMaterial({ color: '#B9B6AE', roughness: 0.95 }));
+      const ped = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 2.4, 96), new THREE.MeshStandardMaterial({ color: '#C6C2B8', roughness: 0.95, map: sharedPedTex() }));
       ped.position.y = -1.25; ped.castShadow = false; ped.receiveShadow = true;
       const edge = new THREE.Mesh(new THREE.TorusGeometry(R, 0.16, 6, 128), new THREE.MeshBasicMaterial({ color: COL.scope, toneMapped: false }));
       edge.rotation.x = Math.PI / 2; edge.position.y = -2.4;
-      pedestal.add(ped, edge);
+      // 楼脚那一圈柔和的落影：影子贴图（2048 铺满半座城）照不出这么近的一圈，补一张卡片
+      const ao = new THREE.Mesh(new THREE.CircleGeometry(R * 0.97, 48), new THREE.MeshBasicMaterial({ map: sharedPedAO(), transparent: true, depthWrite: false }));
+      ao.rotation.x = -Math.PI / 2; ao.position.y = -0.02;
+      pedestal.add(ped, edge, ao);
       pedestal.visible = false;
       pivot.add(pedestal);
       const mats = new Set();
@@ -1623,6 +1776,7 @@ export async function build(canvas, campusData, { tier: tn = 'mid', pause = asyn
   buildPlatter();
   await pause();
   buildCampus();
+  loadCampusTex(import.meta.env.BASE_URL, renderer.capabilities.getMaxAnisotropy());   // 不等它：到了自动换上去
   await pause();
   // 露天展机、校门（模型文件很小，在屏风后面加载；加载失败就不摆，不影响别的）
   const inRing = (x, y, v) => { let c = false; for (let i = 0, j = v.length - 2; i < v.length; j = i, i += 2) { const xi = v[i] / 10, yi = v[i + 1] / 10, xj = v[j] / 10, yj = v[j + 1] / 10; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };

@@ -107,20 +107,12 @@ export async function buildLandmarks({ base, zoneOf, plate, pickables, place, cl
   await Promise.all(jobs);
 }
 
-/** 盘心标签上画四条路和路名（在 buildLabel 的画布上，坐标已平移到中心，k = 像素 / 米）。 */
+/** 盘心标签上印四条路的路名（在 buildLabel 的画布上，坐标已平移到中心，k = 像素 / 米）。 */
 export function paintStreets(g, k, font) {
   g.save();
   for (const s of STREETS) {
+    // 只印路名，不画路线：四条线连起来像一个方框压在唱片上（2026-11-26 组长反馈），路名牌够认出方位
     const [ax, ay] = s.a, [bx, by] = s.b;
-    g.strokeStyle = 'rgba(211,215,218,0.22)';
-    g.lineWidth = 9 * k;
-    g.lineCap = 'round';
-    g.beginPath(); g.moveTo(ax * k, -ay * k); g.lineTo(bx * k, -by * k); g.stroke();
-    g.strokeStyle = 'rgba(211,215,218,0.4)';
-    g.lineWidth = 0.8 * k;
-    g.setLineDash([6 * k, 6 * k]);
-    g.beginPath(); g.moveTo(ax * k, -ay * k); g.lineTo(bx * k, -by * k); g.stroke();
-    g.setLineDash([]);
     const vertical = Math.abs(bx - ax) < 1;
     const mx = ((ax + bx) / 2) * k, my = (-(ay + by) / 2) * k;
     g.save();
