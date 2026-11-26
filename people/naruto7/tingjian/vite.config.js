@@ -25,7 +25,8 @@ export default defineConfig({
   base: './',
   plugins: [vue(), localApi()],
   // three.js 单独成一块：它不常变，浏览器缓存住以后，改页面只要重新下小的那一块
-  build: { target: 'es2022', chunkSizeWarningLimit: 900, rolldownOptions: { output: { advancedChunks: { groups: [{ name: 'three', test: /node_modules[\/]three/ }, { name: 'vue', test: /node_modules[\/](@vue|vue|vue-router)/ }] } } } },
+  // spark 是按需加载的单独一块（2.8 MB），只有清单里登记了 splat 的地点才会下载，别让它触发体积警告
+  build: { target: 'es2022', chunkSizeWarningLimit: 3000, rolldownOptions: { output: { advancedChunks: { groups: [{ name: 'three', test: /node_modules[\/]three/ }, { name: 'vue', test: /node_modules[\/](@vue|vue|vue-router)/ }, { name: 'spark', test: /node_modules[\/]@sparkjsdev[\/]spark/ }] } } } },
   server: { port: 5273, host: '127.0.0.1' },
   preview: { port: 5274, host: '127.0.0.1' },
 });

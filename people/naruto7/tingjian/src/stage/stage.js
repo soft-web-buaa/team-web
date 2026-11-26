@@ -13,6 +13,7 @@ import { clock, toHex, tokensAt } from '../lib/clock.js';
 import * as audio from '../lib/audio.js';
 import { paintGround, paintMedal, medalSpec } from './ground.js';
 import { createDataFx } from './datafx.js';
+import { attachSplat, detachSplat, stepSplat, splatState } from './splat.js';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let G = null;                 // scene.js 返回的句柄
@@ -141,6 +142,18 @@ export function shows() {
 // ====================================================================================
 // 模式
 // ====================================================================================
+// —— 重点楼的 splat 特写：清单里有这个地点就挂真点云，没有就什么都不做（细节在 splat.js）——
+let splatAt = null;
+function syncSplat() {
+  if (!built) return;
+  const pid = S.mode === 'place' && S.place ? S.place : null;
+  if (pid === splatAt) return;
+  splatAt = pid;
+  const h = pid ? G.heroObj.get(pid) : null;
+  if (h) attachSplat(pid, h.pivot, { renderer: G.renderer, scene: G.scene, pedestal: h.pedestal });
+  else detachSplat();
+}
+
 /** 换板块。mode：home / place / community / time / mine。place 模式要给 pid。 */
 export function setMode(mode, { pid = null } = {}) {
   if (!built) { S.mode = mode; S.place = pid; return; }
@@ -155,6 +168,7 @@ export function setMode(mode, { pid = null } = {}) {
   G.controls_minPolar = mode === 'time' ? 0.02 : 0.32;
   controls.minPolarAngle = G.controls_minPolar;
   if (!revealed) return;
+  syncSplat();
 
   if (mode === 'place') {
     const az = poseNow().az;
@@ -185,6 +199,7 @@ const stateView = () => ({ mode: S.mode, place: S.place, zone: S.zone });
 export function reveal({ quick = false } = {}) {
   if (!built) { pendingReveal = { quick }; return; }
   revealed = true;
+  syncSplat();
   riseT0 = performance.now();
   const target = S.mode === 'place' && S.place ? () => heroPose(S.place) : POSES[S.mode] || POSES.home;
   if (quick || !full('intro')) {
@@ -917,6 +932,7 @@ function frame(now) {
   if (Math.abs(nightK - nightGoal) < 0.002) nightK = nightGoal;
   G.fx.step(dt, { camera: G.camera, height: canvas.clientHeight, pixelRatio: G.renderer.getPixelRatio(), reduced });
   stepShot(now);
+  stepSplat(dt);
   controls.update();
   const camD = G.camera.position.distanceTo(controls.target);
   const nearGoal = Math.min(20, Math.max(0.25, camD * 0.02));
@@ -1146,6 +1162,7 @@ export async function init(canvasNode, labelsNode, campus) {
     pinScreen: (pid) => { const o = G.pinObj.get(pid); const v = o.group.position.clone().setY(o.group.position.y + o.head.position.y - 2).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     heroScreen: (pid) => { const h = G.heroObj.get(pid); const v = h.pivot.getWorldPosition(new THREE.Vector3()).setY(TILE_TOP + h.size.y * 0.5).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }),
+    get splat() { return splatState(); },
     look: (x, z, d, polar, az) => play([{ to: { t: V(x, TILE_TOP + 4, z), d, polar, az }, dur: 1, ease: 'out' }]) };   // 截图走查用：看某一处
   return true;
 }
