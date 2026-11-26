@@ -130,7 +130,11 @@ await sleep(1200);
 
 // —— 3c. 唱片架：翻、抽出来、放 ——
 console.log('— 3c. 唱片架');
-await p.evaluate(() => { location.hash = '#/shelf'; });
+await p.evaluate(() => { location.hash = '#/mine'; });
+await until(p, () => [...document.querySelectorAll('[role=tab]')].some((x) => x.textContent.includes('唱片架')), null, 20000);
+await p.evaluate(() => [...document.querySelectorAll('[role=tab]')].find((x) => x.textContent.includes('唱片架')).click());
+await sleep(300);
+await p.evaluate(() => [...document.querySelectorAll('button')].find((x) => x.textContent.includes('翻我的唱片架')).click());
 await until(p, () => document.querySelectorAll('.shelf .sleeve').length === 16, null, 20000);
 t('唱片架：16 个地方各一只套子', (await p.$$('.shelf .sleeve')).length === 16);
 await p.keyboard.press('ArrowRight'); await p.keyboard.press('ArrowRight');

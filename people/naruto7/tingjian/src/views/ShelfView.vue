@@ -5,7 +5,7 @@
 // 照片铺一层这个钟点的天色（双色调），整排套子跟着钟点变色，和全站同一条规则。
 // 舞台在这一页不画（模式是 screen，镜头退进刻槽里）：唱片架盖满屏幕，没必要在后面多画一台唱机。
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { L, atPlace, isPublic, play, title, whenText, tierWord, semesterLabel } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
 import { clock } from '../lib/clock.js';
@@ -14,17 +14,20 @@ import * as stage from '../stage/stage.js';
 import { ui } from '../lib/ui.js';
 
 const router = useRouter();
+const route = useRoute();
+const fromMine = route.query.from === 'mine';   // 从「我的」的唱片架页签进来：套子按我刻过的张数排
 const BASE = import.meta.env.BASE_URL;
 const sleeves = computed(() => {
   void L.version;
-  return L.places.map((p) => {
+  const list = L.places.map((p) => {
     const all = atPlace(p.id).filter((e) => isPublic(e) || e.mine);
     const voices = all.filter((e) => e.tier !== 'archival').slice().reverse();
     const past = all.filter((e) => e.tier === 'archival');
     const sems = voices.map((e) => e.semester).filter(Boolean).sort();
     const newest = voices[0] || past[0] || null;
-    return { p, voices, past, newest, n: voices.length, real: voices.filter((e) => e.tier === 'real').length, from: sems[0], to: sems.at(-1) };
+    return { p, voices, past, newest, n: voices.length, real: voices.filter((e) => e.tier === 'real').length, from: sems[0], to: sems.at(-1), mine: atPlace(p.id).filter((e) => e.mine).length };
   });
+  return fromMine ? list.slice().sort((a, b) => b.mine - a.mine) : list;
 });
 const i = ref(0), open = ref(false);
 const cur = computed(() => sleeves.value[i.value]);
@@ -57,6 +60,7 @@ function pose0(d) {
   return { transform: d ? `translate3d(0, ${-q * 26}px, ${-q * 30}px) rotateX(${9 + q * 1.2}deg)` : 'translate3d(0, -40px, 30px)', opacity: q > 8 ? 0 : 1, zIndex: 40 - q, filter: d ? `brightness(${1 - q * 0.06})` : 'none' };
 }
 function pick(k) { if (k === i.value) { open.value = !open.value; return; } open.value = false; go(k); }
+function back() { router.push(fromMine ? '/mine' : '/'); }
 
 // 翻：滚轮（攒够一格才翻，免得触控板一扫翻过头）、方向键、拖
 let acc = 0, dragX = null;
@@ -65,7 +69,7 @@ function onKey(ev) {
   if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { open.value = false; go(i.value + 1); ev.preventDefault(); }
   else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { open.value = false; go(i.value - 1); ev.preventDefault(); }
   else if (ev.key === 'Enter' || ev.key === ' ') { if (ev.target.tagName !== 'BUTTON') { open.value = !open.value; ev.preventDefault(); } }
-  else if (ev.key === 'Escape') { if (open.value) open.value = false; else router.push('/'); }
+  else if (ev.key === 'Escape') { if (open.value) open.value = false; else back(); }
 }
 function onDown(ev) { dragX = ev.clientX; }
 function onUp(ev) { if (dragX == null) return; const dx = ev.clientX - dragX; dragX = null; if (Math.abs(dx) > 50 && !open.value) go(i.value + (dx < 0 ? 1 : -1)); }
@@ -87,10 +91,10 @@ function visit(s) { router.push(`/place/${s.p.id}`); }
     <header>
       <div>
         <p class="kicker">唱片架 · {{ N }} 个地方</p>
-        <h1 class="h1">每个地方一张唱片</h1>
-        <p class="fine">滚轮、方向键或左右拖着翻；点正对着你的那一张，把唱片抽出来。</p>
+        <h1 class="h1">{{ fromMine ? '我的唱片架' : '每个地方一张唱片' }}</h1>
+        <p class="fine">{{ fromMine ? '你刻过的地方排在前面，黄标写着你在那里刻了几张；滚轮、方向键或左右拖着翻。' : '滚轮、方向键或左右拖着翻；点正对着你的那一张，把唱片抽出来。' }}</p>
       </div>
-      <button type="button" class="btn small ghost" @click="router.push('/')">回到留声机</button>
+      <button type="button" class="btn small ghost" @click="back">{{ fromMine ? '回到我的' : '回到留声机' }}</button>
     </header>
 
     <div class="crate" :class="{ open }">
@@ -98,6 +102,7 @@ function visit(s) { router.push(`/place/${s.p.id}`); }
         <button v-for="(s, k) in sleeves" :key="s.p.id" type="button" class="sleeve" :class="{ cur: k === i }" :style="pose(k)" :aria-label="`${s.p.name}，${s.n} 张`" :aria-current="k === i ? 'true' : undefined" @click="pick(k)">
           <span class="photo"><img :src="front(s).src" :alt="''" loading="lazy" draggable="false"><i class="tone"></i></span>
           <span class="tag">{{ front(s).tag }}</span>
+          <span v-if="fromMine && s.mine" class="mine-tag">我 {{ s.mine }} 张</span>
           <span class="strip">
             <b class="show">{{ s.p.name }}</b>
             <em>{{ s.n }} 张<template v-if="s.real"> · 真实 {{ s.real }}</template><template v-if="s.past.length"> · 史料 {{ s.past.length }}</template></em>
@@ -156,6 +161,8 @@ header .h1 { margin-bottom: 6px; }
 .sleeve .strip b { font-size: 22px; letter-spacing: .06em; }
 .sleeve .strip em { font: 12px var(--f-ui); font-style: normal; color: #5A6274; }
 .sleeve .spine { position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--tint); opacity: .9; font-size: 0; }
+/* 「我的」进来时：刻过的套子条上贴一枚示波黄小签 */
+.sleeve .mine-tag { position: absolute; right: 12px; bottom: calc(22% + 8px); z-index: 2; font: 11px var(--f-ui); padding: 2px 6px; border-radius: 1px; background: #E6BE3A; color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .25); }
 .sleeve.cur { box-shadow: 0 0 0 1px rgb(0 0 0 / .05), 0 40px 70px -26px rgb(0 0 0 / .6); }
 .sleeve.cur:focus-visible { outline: 3px solid var(--scope); outline-offset: 3px; }
 .box { position: absolute; left: -46px; right: -46px; bottom: -70px; height: 130px; transform: translateZ(80px); transition: opacity .4s, transform .6s var(--ease); border-radius: 3px; background: linear-gradient(#8B6A4A, #6E5238); box-shadow: inset 0 2px 0 rgb(255 255 255 / .12), 0 30px 60px -30px rgb(0 0 0 / .6); display: grid; place-items: end center; padding-bottom: 18px; pointer-events: none; z-index: 60; }

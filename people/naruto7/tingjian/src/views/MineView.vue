@@ -13,7 +13,7 @@ import { S, probe, pushSig, leave } from '../lib/seal.js';
 import { A, refreshAlbums } from '../lib/albums.js';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
-import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say } from '../lib/library.js';
+import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say, atPlace } from '../lib/library.js';
 
 const router = useRouter();
 const tab = ref('discs');
@@ -34,6 +34,13 @@ function openMsg(x) {
 }
 const places = computed(() => new Set(mine.value.map((e) => e.placeId)).size);
 const sems = computed(() => new Set(mine.value.map((e) => e.semester)).size);
+// 唱片架：十六个地方各一张唱片，预览取我刻得最多的前六处（没刻过的也排上，撑满一排）
+const sleeveBase = import.meta.env.BASE_URL;
+const shelfPeek = computed(() => {
+  void L.version;
+  return L.places.map((p) => ({ p, n: atPlace(p.id).filter((e) => e.mine).length })).sort((a, b) => b.n - a.n).slice(0, 6);
+});
+function openShelf() { router.push('/shelf?from=mine'); }
 const sig = ref({ grade: L.identity?.grade || '', dept: L.identity?.dept || '', name: L.identity?.name || '' });
 const editing = ref(false);
 function saveSig() { setSignature(sig.value); pushSig(sig.value); editing.value = false; say(`落款改好了：以后刻的盘用新落款，已经刻的不变。${S.account ? '换设备时跟着学号过去。' : ''}`); }
@@ -69,7 +76,7 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
     <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}<template v-if="mine.length && !S.account && S.open"> 这些盘现在认的是这台设备；在<button type="button" class="link" @click="tab = 'card'">刻声卡</button>上用学号盖个章，换了手机也认得回来。</template></p>
 
     <div class="row" role="tablist" aria-label="我的">
-      <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['albums', `共建 ${together || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
+      <button v-for="t in [['discs', '我刻的'], ['shelf', '唱片架'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['albums', `共建 ${together || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
     </div>
 
     <section v-if="tab === 'discs'">
@@ -84,6 +91,17 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
           </div>
         </li>
       </ol>
+    </section>
+
+    <section v-else-if="tab === 'shelf'">
+      <div class="peek" aria-hidden="true">
+        <span v-for="s in shelfPeek" :key="s.p.id" class="ps">
+          <img :src="`${sleeveBase}sleeves/${s.p.id}.jpg`" alt="" loading="lazy">
+          <i v-if="s.n" class="ymine">我 {{ s.n }} 张</i>
+        </span>
+      </div>
+      <p class="fine">十六个地方，每处一张唱片，都排在木箱里。你刻过的地方插着示波黄的签，翻的时候排在前面。</p>
+      <button type="button" class="btn small" style="margin-top: 12px" @click="openShelf">翻我的唱片架</button>
     </section>
 
     <section v-else-if="tab === 'favs'">
@@ -155,6 +173,13 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
 .kseal { margin: -3px 0 0 8px; }
 .slot { display: grid; justify-items: center; gap: 10px; margin: 30px 0 10px; }
 .slot span { width: 120px; height: 120px; border-radius: 50%; border: 1.5px dashed var(--line); background: repeating-radial-gradient(circle, transparent 0 7px, var(--hair) 7px 8px); }
+/* 唱片架预览：几只套子从木箱口露出上沿 */
+.peek { position: relative; display: flex; align-items: flex-end; gap: 6px; height: 118px; margin: 22px 0 14px; padding: 0 3px; }
+.peek::after { content: ''; position: absolute; left: -3px; right: -3px; bottom: 0; height: 26px; border-radius: 2px; background: linear-gradient(#8B6A4A, #6E5238); box-shadow: inset 0 2px 0 rgb(255 255 255 / .12); }
+.ps { position: relative; z-index: 1; flex: 1; height: 102px; border-radius: 2px; overflow: hidden; box-shadow: 0 8px 14px -8px rgb(0 0 0 / .55); }
+.ps:nth-child(2n) { height: 96px; }
+.ps img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 16%; filter: saturate(.8) contrast(1.05); }
+.ps .ymine { position: absolute; left: 4px; bottom: 4px; font: 10px var(--f-ui); font-style: normal; padding: 1px 4px; border-radius: 1px; background: #E6BE3A; color: var(--ink); }
 .mine-row { position: relative; }
 .mine-row :deep(li) { list-style: none; }
 .acts { display: flex; justify-content: flex-end; gap: 10px; margin: -6px 0 6px; }
