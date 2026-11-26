@@ -307,22 +307,81 @@ function windowize(mat, { detail = false } = {}) {
   mat.customProgramCacheKey = () => (detail ? 'ks-card-v2-d' : 'ks-card-v2');
 }
 
+// —— 地面的接触影：楼脚、树下的一圈柔和变暗。把楼底轮廓和树冠画进一张 1024 的图，模糊几遍，当 AO 贴在地面材质上（世界坐标采样）。
+//      总览时楼和地的分界就靠它：没有它，楼像是浮在一张米色纸上。
+const GD = { tex: { value: null }, ext: { value: new THREE.Vector3(0, 0, 1) } };
+function boxBlur(a, N, r) {
+  const b = new Float32Array(N * N), w = 2 * r + 1;
+  for (let y = 0; y < N; y++) {                 // 横向滑动求和
+    let sum = 0;
+    for (let x = -r; x <= r; x++) sum += a[y * N + Math.min(N - 1, Math.max(0, x))];
+    for (let x = 0; x < N; x++) { b[y * N + x] = sum / w; sum += a[y * N + Math.min(N - 1, x + r + 1)] - a[y * N + Math.max(0, x - r)]; }
+  }
+  for (let x = 0; x < N; x++) {                 // 纵向
+    let sum = 0;
+    for (let y = -r; y <= r; y++) sum += b[Math.min(N - 1, Math.max(0, y)) * N + x];
+    for (let y = 0; y < N; y++) { a[y * N + x] = sum / w; sum += b[Math.min(N - 1, y + r + 1) * N + x] - b[Math.max(0, y - r) * N + x]; }
+  }
+}
+function buildGroundDetail() {
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const b of campus.buildings) for (const ring of b.r) for (let i = 0; i < ring.length; i += 2) {
+    const x = m(ring[i]), z = -m(ring[i + 1]);
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  x0 -= 14; z0 -= 14;
+  const size = Math.max(x1 + 14 - x0, z1 + 14 - z0), N = 1024, px = N / size;
+  const paint = (draw) => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, N, N); g.fillStyle = '#fff';
+    draw(g);
+    const d = g.getImageData(0, 0, N, N).data, a = new Float32Array(N * N);
+    for (let i = 0; i < a.length; i++) a[i] = d[i * 4] / 255;
+    return a;
+  };
+  const bld = paint((g) => {
+    for (const b of campus.buildings) {
+      g.beginPath();
+      for (const ring of b.r) { for (let i = 0; i < ring.length; i += 2) { const X = (m(ring[i]) - x0) * px, Z = (-m(ring[i + 1]) - z0) * px; if (i) g.lineTo(X, Z); else g.moveTo(X, Z); } g.closePath(); }
+      g.fill('evenodd');
+    }
+  });
+  const tre = paint((g) => {
+    for (const z of campus.zones) for (let i = 0; i < z.trees.length; i += 3) { g.beginPath(); g.arc((m(z.trees[i]) - x0) * px, (-m(z.trees[i + 1]) - z0) * px, Math.max(1, m(z.trees[i + 2]) * 0.9 * px), 0, 6.2832); g.fill(); }
+  });
+  const wide = Float32Array.from(bld), tight = Float32Array.from(bld);
+  for (let k = 0; k < 3; k++) { boxBlur(wide, N, 3); boxBlur(tight, N, 1); boxBlur(tre, N, 2); }
+  const out = new Uint8Array(N * N * 4);
+  for (let i = 0; i < N * N; i++) {
+    const ao = Math.max(0.5, 1 - 0.5 * wide[i] - 0.32 * tight[i] - 0.3 * tre[i]);
+    out[i * 4] = out[i * 4 + 1] = out[i * 4 + 2] = Math.round(ao * 255); out[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(out, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = true;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+  GD.tex.value = tex; GD.ext.value.set(x0, z0, 1 / size);
+}
+
 // —— 地面：路、铺地、草、球场。同一张灰度图集（R 沥青 / G 铺地砖 / B 草），各取一路，
 //      再按十分之一的比例采一次当大尺度的斑驳（一处磨损、一片深草）。同样远看淡出，只管明暗和粗糙度。
-function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0 } = {}) {
+function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 0 } = {}) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uSurfT = TEX.ground; sh.uniforms.uSurfOn = TEX.groundOn;
     sh.uniforms.uChan = { value: chan }; sh.uniforms.uScl = { value: scale };
     sh.uniforms.uAmt = { value: amt }; sh.uniforms.uRgh = { value: rgh }; sh.uniforms.uStripe = { value: stripe };
+    sh.uniforms.uGD = GD.tex; sh.uniforms.uGDe = GD.ext; sh.uniforms.uAOk = { value: ao };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vSLoc;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSLoc = position;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        varying vec3 vSLoc; uniform sampler2D uSurfT;
-        uniform float uSurfOn, uChan, uScl, uAmt, uRgh, uStripe;
+        varying vec3 vSLoc; uniform sampler2D uSurfT, uGD; uniform vec3 uGDe;
+        uniform float uSurfOn, uChan, uScl, uAmt, uRgh, uStripe, uAOk;
         float surfCh(vec4 c) { return uChan < 0.5 ? c.r : (uChan < 1.5 ? c.g : c.b); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (uAOk > 0.001) diffuseColor.rgb *= mix(1.0, texture2D(uGD, (vSLoc.xz - uGDe.xy) * uGDe.z).r, uAOk);   // 楼脚、树下的接触影
         if (uSurfOn > 0.5) {
           vec2 uv = vSLoc.xz * uScl;
           float e = max(fwidth(uv.x), fwidth(uv.y));
@@ -338,7 +397,7 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0 } = {}
           }
         }`);
   };
-  mat.customProgramCacheKey = () => 'ks-surf-v1';
+  mat.customProgramCacheKey = () => 'ks-surf-v2';
   return mat;
 }
 
@@ -913,6 +972,15 @@ function hipRoof(o, y0) {
 }
 const NONE_FAC = (seed) => [1, 1, STYLE.none, seed];
 /** 一栋楼的全部卡片。返回几何的数组（同一区块里合并成一个网格）。 */
+// 屋面的颜色：真实的屋顶不会家家一张奶油纸。平屋顶多是浅灰的防水层，也有深灰的、旧的、偏暖的；坡屋顶（五十年代那批）是灰瓦。
+// 按楼名取哈希，同一栋楼永远是同一种；比例大致是 浅灰 40 / 灰 28 / 深灰 14 / 原来的奶油 12 / 偏暖 6
+const ROOF_TONES = [['#CFCBC1', 0.4], ['#B6B4AE', 0.28], ['#9C9B98', 0.14], ['#DEDAD0', 0.12], ['#B7A494', 0.06]];
+function roofHex(key, hipped) {
+  if (hipped) return '#9A9690';
+  let u = (tintOf(key + '瓦').dl + 0.04) / 0.08;
+  for (const [hex, w] of ROOF_TONES) { if (u < w) return hex; u -= w; }
+  return ROOF_TONES[0][0];
+}
 function cardBuilding(b, zi, { detail = false } = {}) {
   const out = [];
   const pts = ringM(b.r[0]), holes = b.r.slice(1).map(ringM);
@@ -921,7 +989,7 @@ function cardBuilding(b, zi, { detail = false } = {}) {
   const era = b.era && ERA[b.era];
   const key = b.n || `${zi}:${b.o[0]}:${b.o[1]}`;
   const wall = paperOf(pool ? POOL_STONE : era ? era.wall : FUNC_CARD[b.f ?? 0], key);
-  const roof = paperOf(ROOF_PAPER, key + '屋');
+  const roof = paperOf(roofHex(key, b.rf === 'hipped'), key + '屋');
   const fc = facadeOf(b, H);
   // 地点楼：名字以「馆」结尾的不全是体育馆（图书馆、博物馆、音乐厅都有窗）。特写时按公开照片给一种立面：
   // 图书馆是普通窗格，博物馆、音乐厅是横向带窗（照片上是成片的玻璃）。体育馆、游泳馆、看台另做，不在这里
@@ -1274,6 +1342,7 @@ function crownColor(i) {
 }
 
 function buildCampus() {
+  buildGroundDetail();
   const base = new THREE.Mesh(extrude(campus.campus, BASE_TOP), new THREE.MeshStandardMaterial({ color: '#8C867B', roughness: 0.9 }));   // 底板：灰板纸
   base.position.y = 0.4;
   base.castShadow = true;
@@ -1345,12 +1414,12 @@ function buildCampus() {
       tints.push({ mat: mt, on: new THREE.Color(color), dim: new THREE.Color(dim), sel: sel && new THREE.Color(sel) });
       return mt;
     };
-    const tileMat = surfaceTex(mat(SCENERY['秋'].tile, { roughness: 0.95 }, '#5C636D', '#B9B6AC'), 1, 1 / 5.2, { amt: 0.46, rgh: 0.1 });
-    const roadMat = surfaceTex(mat(SCENERY['秋'].road, { roughness: 0.95 }, '#8A9199'), 0, 1 / 7, { amt: 0.36, rgh: 0.12 });
-    const greenMat = surfaceTex(mat(SCENERY['秋'].green, {}, '#6C7775'), 2, 1 / 3.4, { amt: 0.6, rgh: 0.08 });
+    const tileMat = surfaceTex(mat(SCENERY['秋'].tile, { roughness: 0.95 }, '#5C636D', '#B9B6AC'), 1, 1 / 5.2, { amt: 0.46, rgh: 0.1, ao: 1 });
+    const roadMat = surfaceTex(mat(SCENERY['秋'].road, { roughness: 0.95 }, '#8A9199'), 0, 1 / 7, { amt: 0.36, rgh: 0.12, ao: 0.85 });
+    const greenMat = surfaceTex(mat(SCENERY['秋'].green, {}, '#6C7775'), 2, 1 / 3.4, { amt: 0.6, rgh: 0.08, ao: 0.8 });
     seasonal.push({ tints, tileMat, roadMat, greenMat });
-    const pitchMat = surfaceTex(mat('#5E9A5A', {}, '#5B6968'), 2, 1 / 3.4, { amt: 0.5, rgh: 0.08, stripe: 1 });
-    const trackMat = surfaceTex(mat('#B85C45', {}, '#6B6466'), 0, 1 / 5, { amt: 0.28, rgh: 0.1 });
+    const pitchMat = surfaceTex(mat('#5E9A5A', {}, '#5B6968'), 2, 1 / 3.4, { amt: 0.5, rgh: 0.08, stripe: 1, ao: 0.5 });
+    const trackMat = surfaceTex(mat('#B85C45', {}, '#6B6466'), 0, 1 / 5, { amt: 0.28, rgh: 0.1, ao: 0.6 });
     seasonal.at(-1).pitchMat = pitchMat; seasonal.at(-1).trackMat = trackMat;
     const bldMat = mat('#FFFFFF', { roughness: 0.78, vertexColors: true }, '#A3A9B1');
     windowize(bldMat);
