@@ -209,16 +209,24 @@ export class GalaxyPainter {
       const dim = v.focusYear != null && v.focusYear !== o.year ? 0.25 : 1;
       const rr = o.r * R * (0.15 + 0.85 * ease(life * 1.6 - 0.1));
       const off = this.modeK * this.spin * Math.pow(0.35 / Math.max(0.1, o.r), 1.5);
-      g.lineWidth = (v.focusYear === o.year ? 1.4 : 0.9) * this.k;
+      g.lineWidth = (v.focusYear === o.year ? 2.2 : 1.5) * this.k;
+      const fade = 0.85 + 0.15 * (1 - o.r);   // 越外圈越淡一点，但外圈也看得见
       for (let k = 0; k < SEG; k++) {
         const a0 = (k / SEG) * TAU, a1 = ((k + 0.78) / SEG) * TAU;
         const d = o.empty ? 0 : o.dens[Math.floor((k / SEG) * 72)];
-        const shimmer = 0.55 + 0.45 * Math.sin(a0 * 3 - this.t * 0.35 + i * 1.7);
-        let a = o.empty ? (k % 3 ? 0 : 0.2) : (0.07 + 0.32 * Math.sqrt(d)) * shimmer;
+        const shimmer = 0.8 + 0.2 * Math.sin(a0 * 3 - this.t * 0.35 + i * 1.7);
+        let a = o.empty ? (k % 3 ? 0 : 0.3) : (0.3 + 0.28 * Math.sqrt(d)) * fade * shimmer;
         a *= dim * Math.min(1, life * 1.4);
         if (a < 0.006) continue;
-        g.strokeStyle = `rgba(190,195,255,${a})`;
+        g.strokeStyle = `rgba(200,206,255,${a})`;
         g.beginPath(); g.arc(cx, cy, rr, a0 - Math.PI / 2 + off, a1 - Math.PI / 2 + off); g.stroke();
+      }
+      // 刻度：每 30 度一小段稍亮的短刻，让一圈圈轨道有节奏
+      for (let t = 0; t < 12; t++) {
+        const aa = (t / 12) * TAU - Math.PI / 2 + off;
+        const at = (o.empty ? 0.2 : 0.42) * dim * Math.min(1, life * 1.4);
+        g.strokeStyle = `rgba(214,220,255,${at})`;
+        g.beginPath(); g.arc(cx, cy, rr, aa, aa + 0.02); g.stroke();
       }
     });
     // 星尘
