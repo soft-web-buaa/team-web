@@ -277,7 +277,7 @@ export function setEchoActive(i) { S.echoActive = i; }
 const MAXD = 14, PIN_STEP = 2.2;
 // 数据地图里校园的素纸色。白天的太阳很强（场景亮度会超过 1，最后的色调映射再压回白）：纸色要压得够暗，
 // 照亮之后才刚好是浅纸色；不然半透明的墨盖上去，也会被色调映射压回白，什么都看不见（2026-11-25 实测）
-const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C'), DATA_NIGHT = new THREE.Color('#10131F');
+const DATA_LIGHT = new THREE.Color('#8B8F93'), DATA_DARK = new THREE.Color('#242B3C'), DATA_NIGHT = new THREE.Color('#18202F');
 const INKC = new THREE.Color(COL.ink), AGED = new THREE.Color('#A9B1BE'), SCOPEC = new THREE.Color(COL.scope), FADED = new THREE.Color('#7A828E');
 function paintPins() {
   for (const [pid, o] of G.pinObj) {
@@ -875,7 +875,9 @@ function frame(now) {
     // 数据地图：校园褪成一张素纸（亮时浅、暗时深），地面上的图才压得住
     const paleC = S.data && S.data.form === 'lights' ? DATA_NIGHT : toks().dark ? DATA_DARK : DATA_LIGHT;
     for (const t of o.tints) t.mat.color.lerp(data ? paleC : dim && !sel ? t.dim : t.on, k);
-    o.bldMat.userData.win.value += ((data && FX_FORMS.has(S.data.form) ? 0 : dim && !sel ? 0.25 : 1) - o.bldMat.userData.win.value) * k;
+    // 夜景给楼留一点点窗灯（其余数据画法照旧关掉）：楼的轮廓和体块才看得出
+    const winGoal = data && FX_FORMS.has(S.data.form) ? (S.data.form === 'lights' && S.night ? 0.06 : 0) : dim && !sel ? 0.25 : 1;
+    o.bldMat.userData.win.value += (winGoal - o.bldMat.userData.win.value) * k;
   });
   // 地点楼：提起来、垫上纸台座；离开时落回原位
   G.heroObj.forEach((h, pid) => {

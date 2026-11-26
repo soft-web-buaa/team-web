@@ -181,13 +181,14 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
       void main() {
         vec3 c; float b = field(position.xz, 62.0, c);
         // 底下一层稀稀的暗灯（看得出路网），越热闹灯越密越亮
-        float on = step(aSeed, 0.16 + 0.84 * b);
-        float tw = 0.85 + 0.15 * sin(uT * (2.0 + aSeed * 3.0) + aSeed * 40.0);
-        vA = on * (0.45 + 0.9 * b) * tw;
-        vec3 sodium = vec3(0.86, 0.56, 0.30);
-        vCol = mix(sodium * 0.8, ramp(0.35 + 0.65 * b, c), smoothstep(0.05, 0.6, b)) * (uDark > 0.5 ? 1.0 + 1.6 * b * b : 1.0);
+        float on = step(aSeed, 0.28 + 0.72 * b);
+        float tw = 0.9 + 0.1 * sin(uT * (2.0 + aSeed * 3.0) + aSeed * 40.0);
+        // 没点亮的那些也留一层很淡的底光：路网和楼的轮廓能隐约看出，不是一片黑
+        vA = (0.13 * (0.5 + 0.5 * b) + on * (0.5 + 1.0 * b)) * tw;
+        vec3 sodium = vec3(0.92, 0.62, 0.34);
+        vCol = mix(sodium * 0.8, ramp(0.35 + 0.65 * b, c), smoothstep(0.05, 0.6, b)) * (uDark > 0.5 ? 1.05 + 1.9 * b * b : 1.0);
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = clamp((3.2 + 6.0 * b) * uScale / -mv.z, 1.2, uMaxPx);
+        gl_PointSize = clamp((4.4 + 7.0 * b) * uScale / -mv.z, 1.5, uMaxPx);
         gl_Position = projectionMatrix * mv;
       }`);
     const pts = new THREE.Points(g, mat);
