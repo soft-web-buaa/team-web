@@ -53,7 +53,9 @@ function fitDist(radius) {
   return radius / (Math.tan((G.camera.fov * Math.PI) / 360) * Math.max(0.2, k));
 }
 const POSES = {
-  home: () => ({ t: V(60, -60, 60), d: Math.max(3000, fitDist((RP + 250) * 1.08)), polar: 0.8, az: -0.3 }),
+  // 首页（组长 2026-11-26：唱机小、镜头远，四周一大片空的纯色和它对着干）：镜头压近，盘心的校园撑满左边那块，
+  // 唱机的底座和唱臂出画，画面里看不到「一台唱机悬在空里」的边；剩下的背景只是边角上的一点
+  home: () => ({ t: V(40, 0, 30), d: fitDist(RIN * 1.16), polar: 0.7, az: -0.36 }),
   community: () => {
     const f = S.data && S.data.form;
     if (f === 'lights') return { t: V(0, 0, 40), d: Math.max(2500, fitDist(RIN * 1.1)), polar: 0.42, az: -0.18 };       // 夜景：像卫星，偏俯看
@@ -73,8 +75,11 @@ function heroPose(pid, az = null) {
   const wp = new THREE.Vector3();
   h.pivot.getWorldPosition(wp);
   const r = Math.max(h.size.x, h.size.z) * 0.62 + h.size.y * 0.8 + 14;   // 楼连同台座占画面一大半（2026-11-26 拉近：细节要看得见）
-  return { t: V(wp.x, TILE_TOP + z.lift + LIFT(h) * 0.7 + h.size.y * 0.35, wp.z), d: Math.max(220, fitDist(r)), polar: 1.1, az: az ?? poseNow().az };   // 放低一点：多看立面、少看屋顶
+  return { t: V(wp.x, TILE_TOP + z.lift + LIFT(h) * 0.7 + h.size.y * 0.35, wp.z), d: Math.max(220, fitDist(r)), polar: 1.1, az: heroAz(h) };   // 放低一点：多看立面、少看屋顶
 }
+// 进楼的机位固定（组长 2026-11-26：楼不要转，选一个效果好的角度）：从东南方向看四分之三面，正面（朝南、长的那一面）占大半，
+// 东山墙收在右边；南北窄长的楼（长边朝东）改从东偏南看。世界坐标 +z 是南
+const heroAz = (h) => (h.size.z > h.size.x * 1.25 ? Math.PI / 2 - 0.55 : 0.55);
 const LIFT = (h) => 36 + h.size.y * 0.35;
 function grooveClose() {
   const r = (RIN + ROUT) / 2, psi = G.ARM.psi + 0.35;
@@ -363,6 +368,7 @@ export async function load(e, { autoplay = true, label = '' } = {}) {
   const snd = await audio.soundOf(e);
   const { pcm, fs } = snd;
   const tex = snd.tex || (snd.tex = cutWhole(pcm, fs).tex);
+  lastPlay = 0;
   current = { e, pcm, fs, dur: pcm.length / fs, seconds: Math.min(e.seconds || MAX_SEC, MAX_SEC), env: snd.env || (snd.env = envelope(pcm, fs)), tex };
   if (built) {
     G.grooveTex.image.data.set(tex);
@@ -401,6 +407,8 @@ export async function toggle() {
   if (!current) return;
   await audio.ensureCtx();
   if (pendingBuffer) { audio.post({ buffer: current.pcm, sampleRate: current.fs }); pendingBuffer = false; }
+  // 放完停在末尾的那张：再按就从头放
+  if (!motorOn && position() >= current.seconds - 0.05) { audio.post({ seek: 0, rate: 0 }); Object.assign(audio.report, { pos: 0, rate: 0, t: audio.context().currentTime }); lastPlay = 0; }
   setMotor(!motorOn);
 }
 export async function seek(t) {
@@ -410,6 +418,7 @@ export async function seek(t) {
   const x = Math.max(0, Math.min(current.seconds, t));
   audio.post({ seek: x / current.dur, rate: 1 });
   Object.assign(audio.report, { pos: x * current.fs, rate: 1, t: audio.context().currentTime });
+  lastPlay = x;
   seekT = performance.now();
   setMotor(true);
 }
@@ -879,14 +888,14 @@ function frame(now) {
     for (const t of o.tints) t.mat.color.lerp(data ? paleC : dim && !sel ? t.dim : t.on, k);
     o.bldMat.userData.win.value += ((data && FX_FORMS.has(S.data.form) ? 0 : dim && !sel ? 0.25 : 1) - o.bldMat.userData.win.value) * k;
   });
-  // 地点楼：提起来、慢慢转、垫上纸台座；离开时落回原位
+  // 地点楼：提起来、垫上纸台座；离开时落回原位
   G.heroObj.forEach((h, pid) => {
     const on = S.mode === 'place' && S.place === pid;
     const goal = on ? LIFT(h) : 0;
     h.lift += (goal - h.lift) * (reduced ? 1 : 1 - Math.exp(-dt / (on ? 0.32 : 0.22)));
     if (Math.abs(goal - h.lift) < 0.05) h.lift = goal;
     h.pivot.position.y = h.lift;
-    if (on && !reduced) h.spin += dt * 0.16; else h.spin += (Math.round(h.spin / TAU) * TAU - h.spin) * (reduced ? 1 : 0.08);
+    h.spin += (Math.round(h.spin / TAU) * TAU - h.spin) * (reduced ? 1 : 0.08);   // 不再自转；旧的转角收回到正
     h.pivot.rotation.y = h.spin;
     for (const mt of h.mats) if (mt.userData.detail) mt.userData.detail.value = Math.min(1, h.lift / LIFT(h));
     h.pedestal.visible = h.lift > 0.6;
@@ -948,6 +957,9 @@ function frame(now) {
   const u = G.platterMat.uniforms;
   if (current && !cut) {
     play = position();
+    // 放一遍就停（组长 2026-11-26）：唱针走到这一段的末尾，电机断电，盘靠惯性停在后面的空槽里；绕回开头也算放完
+    if (motorOn && !grab && (play >= current.seconds || play < lastPlay - current.dur * 0.5)) setMotor(false, true);
+    lastPlay = play;
     spin = ((TAU * play) / TURN) % TAU;
     u.uPlay.value = play;
     u.uTrail.value = audio.context() && (Math.abs(audio.report.rate) > 0.02 || grab) ? 1 : 0;
@@ -1021,7 +1033,7 @@ function frame(now) {
   if (anyLift) heroPass();
   watchFrames(now);
 }
-let tilt = 0.5, focusR = 0.5, armShadow = 0, armRShadow = 0;
+let tilt = 0.5, focusR = 0.5, armShadow = 0, armRShadow = 0, lastPlay = 0;
 
 // —— 特写（2026-11-26：组员与组长说进楼放大后楼看着糙）——
 // 被提起的那栋楼单独画一遍：画进一块 4× 多重采样的缓冲（原来直接画到屏幕上，没有抗锯齿，边是锯齿），再贴回画面。
@@ -1144,6 +1156,7 @@ export async function init(canvasNode, labelsNode, campus) {
   wirePointer();
   built = true;
   paintPins();
+  if (S.data) setData(S.data);   // 直接从数据地图的网址进站：搭好之前来的那一次要补上
   syncEchoMarks();
   if (current) {
     G.grooveTex.image.data.set(current.tex); G.grooveTex.needsUpdate = true;

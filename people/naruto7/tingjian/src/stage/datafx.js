@@ -32,6 +32,11 @@ const FIELD = /* glsl */ `
     col = c / ws;
     return 1.0 - exp(-1.5 * s);
   }
+  // 按顶点属性里的编号取第 i 处：用常量下标的循环取，不直接 uW[i]（ANGLE 走 D3D11 时，按属性算出来的下标取 uniform 数组取不到值，星云整团不见）
+  void site(int i, out vec2 p, out float w, out vec3 c) {
+    p = vec2(0.0); w = 0.0; c = vec3(1.0);
+    for (int k = 0; k < 16; k++) if (k == i) { p = uP[k]; w = uW[k]; c = uC[k]; }
+  }
   vec3 ramp(float t, vec3 moodC) {
     t = clamp(t, 0.0, 1.0);
     vec3 a = t < 0.5 ? mix(uR0, uR1, t * 2.0) : mix(uR1, uR2, t * 2.0 - 1.0);
@@ -106,32 +111,35 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
     const mat = pointsMat(U, /* glsl */ `
       attribute vec3 aA; attribute float aSeed; uniform float uH[16]; uniform float uMaxPx;
       varying vec3 vCol; varying float vA;
+      float roofOf(int i) { float h = 0.0; for (int k = 0; k < 16; k++) if (k == i) h = uH[k]; return h; }
       void main() {
         int i = int(aA.x + 0.5); float rank = aA.y; bool flow = aA.z > 0.5;
         vec3 off = position; vec3 col; float w; vec3 p;
+        vec2 Pi; vec3 Ci; float Wi; site(i, Pi, Wi, Ci); float Hi = roofOf(i);
         if (!flow) {
-          w = uW[i];
+          w = Wi;
           float R = 22.0 + 64.0 * sqrt(w);
           // 绕自己那一处慢慢转：越靠里转得越快（像一团星云）
           float rr = length(off.xz), ang = uT * (0.06 + 0.05 * aSeed) / (0.5 + rr * 0.35);
           vec2 xz = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * off.xz;
-          p = vec3(uP[i].x + xz.x * R, uH[i] + 26.0 + R * (0.42 + 0.3 * off.y), uP[i].y + xz.y * R);
+          p = vec3(Pi.x + xz.x * R, Hi + 26.0 + R * (0.42 + 0.3 * off.y), Pi.y + xz.y * R);
           p.y += sin(uT * 0.5 + aSeed * 6.28) * 2.0;
           float core = exp(-rr * rr * 0.6);
           vA = smoothstep(rank, rank + 0.06, w) * (0.35 + 0.65 * core) * (0.45 + 0.55 * w);
-          col = ramp(w * (0.55 + 0.6 * core), uC[i]);
+          col = ramp(w * (0.55 + 0.6 * core), Ci);
           if (uDark > 0.5) col *= 1.0 + 1.5 * core * w;          // 芯里亮过泛光的门槛，夜里会晕开
         } else {
           int j = int(off.z + 0.5);
-          w = min(uW[i], uW[j]);
+          vec2 Pj; vec3 Cj; float Wj; site(j, Pj, Wj, Cj); float Hj = roofOf(j);
+          w = min(Wi, Wj);
           float t = fract(aSeed + uT * (0.012 + 0.02 * rank));
-          vec2 a = uP[i], b = uP[j]; vec2 d = b - a; vec2 nrm = normalize(vec2(-d.y, d.x) + 1e-5);
+          vec2 a = Pi, b = Pj; vec2 d = b - a; vec2 nrm = normalize(vec2(-d.y, d.x) + 1e-5);
           float bow = sin(t * 3.14159);
           vec2 xz = mix(a, b, t) + nrm * (off.x * 18.0 + bow * 14.0 * (aSeed - 0.5));
-          float y = mix(uH[i], uH[j], t) + 30.0 + bow * (18.0 + 30.0 * w) + off.y * 8.0;
+          float y = mix(Hi, Hj, t) + 30.0 + bow * (18.0 + 30.0 * w) + off.y * 8.0;
           p = vec3(xz.x, y, xz.y);
           vA = smoothstep(rank, rank + 0.1, w * 1.4) * 0.55 * bow;
-          col = ramp(w * 0.6, mix(uC[i], uC[j], t));
+          col = ramp(w * 0.6, mix(Ci, Cj, t));
         }
         vCol = col;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
