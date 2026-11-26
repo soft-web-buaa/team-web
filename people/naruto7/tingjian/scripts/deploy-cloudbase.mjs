@@ -32,7 +32,7 @@ const copy = (from, to) => { fs.mkdirSync(path.dirname(path.join(fnDir, to)), { 
 copy('server/api.mjs', 'server/api.mjs');
 copy('server/store-cloudbase.mjs', 'server/store-cloudbase.mjs');
 for (const f of ['contract.js', 'jpeg-clean.js', 'calendar.js']) copy(`src/kesheng/web/${f}`, `src/kesheng/web/${f}`);
-for (const f of fs.readdirSync(path.join(root, 'src/lib')).filter((f) => ['when.js', 'topics.js'].includes(f))) copy(`src/lib/${f}`, `src/lib/${f}`);
+for (const f of fs.readdirSync(path.join(root, 'src/lib')).filter((f) => ['when.js', 'topics.js', 'albums-preset.js'].includes(f))) copy(`src/lib/${f}`, `src/lib/${f}`);
 copy('public/data/calendar.json', 'calendar.json');
 // 函数根目录的 package.json 没有 type（index.js 是 CommonJS 入口）；src/ 里是 ES 模块的 .js，要单独标出来
 fs.writeFileSync(path.join(fnDir, 'src/package.json'), JSON.stringify({ type: 'module' }));
