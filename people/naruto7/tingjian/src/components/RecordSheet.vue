@@ -7,6 +7,7 @@ import { L, publish, say, play, signature, setSignature } from '../lib/library.j
 import { wavePath } from '../lib/wave.js';
 import * as stage from '../stage/stage.js';
 import { landingLine } from '../kesheng/web/rings.js';
+import { pushSig } from '../lib/seal.js';
 
 const router = useRouter();
 const placeId = ref(ui.recPlace || '');
@@ -27,7 +28,7 @@ async function send() {
   if (vis.value === 'capsule' && !until.value) { err.value = '选一个开封的日子。'; return; }
   busy.value = true;
   try {
-    if (sig.value.grade || sig.value.dept || sig.value.name) setSignature(sig.value);
+    if (sig.value.grade || sig.value.dept || sig.value.name) { setSignature(sig.value); pushSig(sig.value); }
     const take = ui.take;
     const e = await publish(take, { placeId: placeId.value, note: note.value, visibility: vis.value === 'private' ? 'private' : 'public', capsuleUntil: vis.value === 'capsule' ? new Date(`${until.value}T08:00:00+08:00`).toISOString() : null });
     ui.take = null;
@@ -72,7 +73,7 @@ function drop() {
         <label class="field"><span>学院</span><input v-model="sig.dept" class="input" maxlength="24" placeholder="宇航学院"></label>
         <label class="field"><span>名字</span><input v-model="sig.name" class="input" maxlength="16" placeholder="可以是昵称"></label>
       </div>
-      <p class="fine">三项都可以不填。不收学号、不收手机号，链接和号码会被拦下。</p>
+      <p class="fine">三项都可以不填。盘上不写学号、手机号，链接和号码会被拦下。</p>
     </details>
     <p class="err" role="alert">{{ err }}</p>
     <div class="row">

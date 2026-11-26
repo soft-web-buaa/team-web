@@ -11,12 +11,21 @@ import CloudBase from '@cloudbase/manager-node';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const env = Object.fromEntries((fs.existsSync(path.join(root, '.env')) ? fs.readFileSync(path.join(root, '.env'), 'utf8') : '').split(/\r?\n/).filter((l) => /^\w+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]));
 const miss = ['TCB_ENV_ID', 'TCB_SECRET_ID', 'TCB_SECRET_KEY'].filter((k) => !env[k]);
+// 学号登记的 HMAC 密钥：第一次部署时生成一份写回 .env（之后不能再变，变了已登记的学号就认不出来了）
+if (!miss.length && !env.KS_AUTH_SECRET) {
+  env.KS_AUTH_SECRET = (await import('node:crypto')).randomBytes(32).toString('hex');
+  fs.appendFileSync(path.join(root, '.env'), `
+# 学号登记的 HMAC 密钥（部署脚本生成，别改、别丢）
+KS_AUTH_SECRET=${env.KS_AUTH_SECRET}
+`);
+  console.log('生成了 KS_AUTH_SECRET，写进了 .env。');
+}
 if (miss.length) { console.error(`.env 里缺 ${miss.join('、')}。见 .env.example。`); process.exit(1); }
 if (!fs.existsSync(path.join(root, 'dist/index.html'))) { console.error('先 npm run build。'); process.exit(1); }
-const hide = (s) => String(s).split(env.TCB_SECRET_ID).join('［隐］').split(env.TCB_SECRET_KEY).join('［隐］');
+const hide = (s) => [env.TCB_SECRET_ID, env.TCB_SECRET_KEY, env.KS_SMTP_PASS, env.KS_AUTH_SECRET].filter(Boolean).reduce((t, x) => t.split(x).join('［隐］'), String(s));
 const only = process.argv.slice(2);              // 可以只部署一部分：fn / db / route / web
 const want = (k) => !only.length || only.includes(k);
-export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays', 'albums', 'tracks', 'files'];
+export const COLLECTIONS = ['discs', 'echoes', 'photos', 'heard', 'favs', 'reports', 'posts', 'replies', 'reacts', 'topics', 'relays', 'albums', 'tracks', 'files', 'accounts', 'logins', 'sessions'];
 
 const app = new CloudBase({ secretId: env.TCB_SECRET_ID, secretKey: env.TCB_SECRET_KEY, envId: env.TCB_ENV_ID });
 const step = async (name, fn) => {
@@ -31,14 +40,16 @@ const fnDir = path.join(root, 'cloudfunctions/api');
 const copy = (from, to) => { fs.mkdirSync(path.dirname(path.join(fnDir, to)), { recursive: true }); fs.copyFileSync(path.join(root, from), path.join(fnDir, to)); };
 copy('server/api.mjs', 'server/api.mjs');
 copy('server/store-cloudbase.mjs', 'server/store-cloudbase.mjs');
+copy('server/auth.mjs', 'server/auth.mjs');
+copy('server/mail.mjs', 'server/mail.mjs');
 for (const f of ['contract.js', 'jpeg-clean.js', 'calendar.js']) copy(`src/kesheng/web/${f}`, `src/kesheng/web/${f}`);
 for (const f of fs.readdirSync(path.join(root, 'src/lib')).filter((f) => ['when.js', 'topics.js', 'albums-preset.js'].includes(f))) copy(`src/lib/${f}`, `src/lib/${f}`);
 copy('public/data/calendar.json', 'calendar.json');
 // 函数根目录的 package.json 没有 type（index.js 是 CommonJS 入口）；src/ 里是 ES 模块的 .js，要单独标出来
 fs.writeFileSync(path.join(fnDir, 'src/package.json'), JSON.stringify({ type: 'module' }));
-fs.writeFileSync(path.join(fnDir, 'package.json'), JSON.stringify({ name: 'tingjian-api', private: true, main: 'index.js', dependencies: { '@cloudbase/node-sdk': '^4.2.1' } }, null, 2));
+fs.writeFileSync(path.join(fnDir, 'package.json'), JSON.stringify({ name: 'tingjian-api', private: true, main: 'index.js', dependencies: { '@cloudbase/node-sdk': '^4.2.1', nodemailer: '^7.0.13' } }, null, 2));
 const func = { name: 'api', runtime: 'Nodejs18.15', handler: 'index.main', timeout: 20, memorySize: 256, installDependency: true,
-  envVariables: { KS_REVIEW: env.KS_REVIEW || '1', KS_ADMIN_TOKEN: env.KS_ADMIN_TOKEN || '' }, ignore: ['node_modules', 'node_modules/**'] };
+  envVariables: { KS_REVIEW: env.KS_REVIEW || '1', KS_ADMIN_TOKEN: env.KS_ADMIN_TOKEN || '', ...Object.fromEntries(['KS_AUTH_SECRET', 'KS_SMTP_HOST', 'KS_SMTP_PORT', 'KS_SMTP_USER', 'KS_SMTP_PASS', 'KS_MAIL_FROM'].filter((k) => env[k]).map((k) => [k, env[k]])) }, ignore: ['node_modules', 'node_modules/**'] };
 if (want('fn')) {
   const exists = (await app.functions.listFunctions(100, 0)).some((f) => f.FunctionName === 'api');
   if (!exists) await step('新建云函数 api', () => app.functions.createFunction({ func, functionRootPath: path.join(root, 'cloudfunctions'), force: true }).then(() => ''));

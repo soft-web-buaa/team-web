@@ -7,6 +7,9 @@ import DiscRow from '../components/DiscRow.vue';
 import RingWood from '../components/RingWood.vue';
 import PostCard from '../components/PostCard.vue';
 import AlbumShelf from '../components/AlbumShelf.vue';
+import CardSlip from '../components/CardSlip.vue';
+import SealMark from '../components/SealMark.vue';
+import { S, probe, pushSig, leave } from '../lib/seal.js';
 import { A, refreshAlbums } from '../lib/albums.js';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
@@ -33,7 +36,10 @@ const places = computed(() => new Set(mine.value.map((e) => e.placeId)).size);
 const sems = computed(() => new Set(mine.value.map((e) => e.semester)).size);
 const sig = ref({ grade: L.identity?.grade || '', dept: L.identity?.dept || '', name: L.identity?.name || '' });
 const editing = ref(false);
-function saveSig() { setSignature(sig.value); editing.value = false; say('落款改好了：以后刻的盘用新落款，已经刻的不变。'); }
+function saveSig() { setSignature(sig.value); pushSig(sig.value); editing.value = false; say(`落款改好了：以后刻的盘用新落款，已经刻的不变。${S.account ? '换设备时跟着学号过去。' : ''}`); }
+function stamped() { sig.value = { grade: L.identity?.grade || '', dept: L.identity?.dept || '', name: L.identity?.name || '' }; initCommunity(); refreshAlbums(); }
+const leaving = ref(false);
+function out() { if (!leaving.value) { leaving.value = true; return; } leave(); }
 function download() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(exportCard());
@@ -52,15 +58,15 @@ async function del(e) {
   confirmId.value = null;
   if (await deleteDisc(e)) say('删掉了。云上的声音、钉在上面的话一并删了。');
 }
-onMounted(() => { refresh(); initCommunity(); refreshAlbums(); });
+onMounted(() => { refresh(); initCommunity(); refreshAlbums(); probe(); });
 if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.value = 'albums';
 </script>
 
 <template>
   <Paper label="我的">
-    <p class="kicker">我 · {{ L.identity && signature(L.identity) !== '未落款' ? signature(L.identity) : '还没落款' }}</p>
+    <p class="kicker">我 · {{ L.identity && signature(L.identity) !== '未落款' ? signature(L.identity) : '还没落款' }}<SealMark v-if="S.account" class="kseal" :size="17" /></p>
     <h1 class="h1">{{ mine.length ? `${mine.length} 张，${places} 个地方，${sems} 个学期` : '还没有刻过' }}</h1>
-    <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}</p>
+    <p class="lede">{{ mine.length ? '左边的校园里，黄色的盘是你的。' : '按住下面那颗钮，十秒就够。地点、一句话、落款都可以刻完再补。' }}<template v-if="mine.length && !S.account && S.open"> 这些盘现在认的是这台设备；在<button type="button" class="link" @click="tab = 'card'">刻声卡</button>上用学号盖个章，换了手机也认得回来。</template></p>
 
     <div class="row" role="tablist" aria-label="我的">
       <button v-for="t in [['discs', '我刻的'], ['favs', `收藏 ${favs.length || ''}`], ['posts', `我的帖子 ${myPosts.length || ''}`], ['albums', `共建 ${together || ''}`], ['inbox', unread() ? `回应我的 · ${unread()} 新` : `回应我的 ${inboxAll.length || ''}`], ['card', '刻声卡']]" :key="t[0]" type="button" role="tab" class="chip" :class="{ on: tab === t[0] }" :aria-selected="tab === t[0]" @click="tab = t[0]">{{ t[1] }}</button>
@@ -114,6 +120,7 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
     </section>
 
     <section v-else class="card">
+      <CardSlip @stamped="stamped" />
       <p class="h3">落款</p>
       <template v-if="!editing">
         <p class="show" style="font-size: 20px; margin: 0 0 8px">{{ L.identity ? signature(L.identity) : '未落款' }}</p>
@@ -125,19 +132,27 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
         <label class="field"><span>名字（可以是昵称）</span><input v-model="sig.name" class="input" maxlength="16"></label>
         <div class="row"><button type="submit" class="btn small">好了</button><button type="button" class="btn small ghost" @click="editing = false">算了</button></div>
       </form>
-      <p class="h3">刻声卡</p>
-      <p class="fine">没有注册、没有密码。这台设备上有一张刻声卡，卡号只在这台设备上，云上只存它算出来的一串摘要，用来认出「这些盘是你的」。换设备时导出、在新设备上导入。卡丢了，盘还在，只是认不回来。</p>
-      <div class="row">
-        <button type="button" class="btn small ghost" :disabled="!L.identity" @click="download">导出刻声卡</button>
-        <label class="btn small ghost">导入刻声卡<input type="file" accept=".json,application/json" class="sr-only" @change="pickCard"></label>
-      </div>
+      <template v-if="S.account">
+        <p class="h3">这台设备</p>
+        <p class="fine">盖过章的卡，换设备时用学号再盖一次就认得回来，不用导出。退出之后，这台设备换一张空卡，不再认得你的盘；盘都还在你的学号名下。</p>
+        <button type="button" class="btn small ghost" @click="out">{{ leaving ? '再点一次，退出这台设备' : '退出这台设备' }}</button>
+      </template>
+      <template v-else>
+        <p class="h3">不盖章也行</p>
+        <p class="fine">不盖章就没有注册、没有密码。卡号只在这台设备上，云上只存它算出来的一串摘要，用来认出「这些盘是你的」。换设备时导出、在新设备上导入。卡丢了，盘还在，只是认不回来。</p>
+        <div class="row">
+          <button type="button" class="btn small ghost" :disabled="!L.identity" @click="download">导出刻声卡</button>
+          <label class="btn small ghost">导入刻声卡<input type="file" accept=".json,application/json" class="sr-only" @change="pickCard"></label>
+        </div>
+      </template>
       <p class="h3">放在哪里</p>
-      <p class="fine">云上：你刻的盘（声音和元数据）、钉的话、照片、收藏。这台设备上：刻声卡、还没发出去的、你隐藏的那几条。照片的拍摄地点在你的设备上就去掉了，服务端再剥一遍。只给自己的盘也存在云上，换设备还在，只有你听得到；删掉就是真删。</p>
+      <p class="fine">云上：你刻的盘（声音和元数据）、钉的话、照片、收藏。盖了章的话，还有学号算出来的一串摘要（认人用）和打了码的学号（给你自己看）；学号原文、验证码都不存。这台设备上：刻声卡、还没发出去的、你隐藏的那几条。照片的拍摄地点在你的设备上就去掉了，服务端再剥一遍。只给自己的盘也存在云上，换设备还在，只有你听得到；删掉就是真删。</p>
     </section>
   </Paper>
 </template>
 
 <style scoped>
+.kseal { margin: -3px 0 0 8px; }
 .slot { display: grid; justify-items: center; gap: 10px; margin: 30px 0 10px; }
 .slot span { width: 120px; height: 120px; border-radius: 50%; border: 1.5px dashed var(--line); background: repeating-radial-gradient(circle, transparent 0 7px, var(--hair) 7px 8px); }
 .mine-row { position: relative; }

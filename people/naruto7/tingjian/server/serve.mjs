@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createApi } from './api.mjs';
 import { fileStore } from './store-file.mjs';
 import { nodeHandler } from './http.mjs';
+import { localLogin } from './mail.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const a = process.argv.slice(2);
@@ -15,7 +16,7 @@ const val = (f, d) => (a.includes(f) ? a[a.indexOf(f) + 1] : d);
 const port = Number(val('--port', 8790)), host = val('--host', '127.0.0.1');
 const dataDir = path.resolve(root, val('--data', '.data'));
 const calendar = JSON.parse(fs.readFileSync(path.join(root, 'public/data/calendar.json'), 'utf8'));
-const api = createApi({ store: fileStore(dataDir), review: a.includes('--review') || process.env.KS_REVIEW === '1', adminToken: process.env.KS_ADMIN_TOKEN || '', calendar });
+const api = createApi({ store: fileStore(dataDir), review: a.includes('--review') || process.env.KS_REVIEW === '1', adminToken: process.env.KS_ADMIN_TOKEN || '', calendar, login: await localLogin(dataDir) });
 const apiHandler = nodeHandler(api);
 const dist = path.join(root, 'dist');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };

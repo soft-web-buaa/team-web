@@ -1,9 +1,10 @@
 // 听见校园 · CloudBase HTTP 云函数：把 HTTP 访问服务的 event 交给 server/api.mjs 的 handle（和本机同一份代码，只换存储）。
 // 部署：npm run deploy:cloudbase（脚本把 server/、src/ 里要用的文件拷进来，再用 tcb 上传）。
 // 云函数里不放密钥：@cloudbase/node-sdk 用当前环境的身份。审核口令从云函数的环境变量 KS_ADMIN_TOKEN 读。
+// 学号登记：KS_AUTH_SECRET（HMAC 密钥）和 KS_SMTP_*（寄信）也是环境变量，由部署脚本从 .env 带上来；缺一样就不开登记。
 import fs from 'node:fs';
 
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, x-ks-key, x-ks-admin', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS' };
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, authorization, x-ks-key, x-ks-admin', 'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS' };
 
 /** HTTP 访问服务的 event → api.handle → 集成响应。单独导出，本机能拿文件存储测它（scripts/check-api.mjs）。 */
 export function toHttp(api) {
@@ -28,9 +29,11 @@ export function toHttp(api) {
 let run = null;
 export async function main(event) {
   if (!run) {
-    const [{ createApi }, { cloudbaseStore }] = await Promise.all([import('./server/api.mjs'), import('./server/store-cloudbase.mjs')]);
+    const [{ createApi }, { cloudbaseStore }, { smtpMailer }] = await Promise.all([import('./server/api.mjs'), import('./server/store-cloudbase.mjs'), import('./server/mail.mjs')]);
     const calendar = JSON.parse(fs.readFileSync(new URL('./calendar.json', import.meta.url), 'utf8'));
-    run = toHttp(createApi({ store: cloudbaseStore(), review: process.env.KS_REVIEW !== '0', adminToken: process.env.KS_ADMIN_TOKEN || '', calendar }));
+    const mailer = process.env.KS_AUTH_SECRET ? await smtpMailer() : null;
+    const login = mailer ? { secret: process.env.KS_AUTH_SECRET, mailer } : null;
+    run = toHttp(createApi({ store: cloudbaseStore(), review: process.env.KS_REVIEW !== '0', adminToken: process.env.KS_ADMIN_TOKEN || '', calendar, login }));
   }
   return run(event);
 }

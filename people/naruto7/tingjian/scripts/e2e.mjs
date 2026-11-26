@@ -317,6 +317,44 @@ await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find(
 await sleep(500);
 t('A 的「共建」：列着我建的那张', (await text(p, '.paper .shelf')).includes('走查用的合辑'));
 
+// —— 7c. 学号盖章 ——
+console.log('— 7c. 学号盖章');
+await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('刻声卡')).click());
+await until(p, () => document.querySelector('.slip .slot') && !document.querySelector('.slip .slot').disabled, null, 15000);
+t('刻声卡：卡上有盖章处，没有弹窗', !!(await p.$('.slip .slot')) && !(await p.$('[role=dialog].login')));
+await p.click('.slip .slot');
+await p.type('.stamp .sid input', '21371234');
+await p.click('.stamp button[type=submit]');
+await until(p, () => (document.querySelector('.stamp .code') || {}).value?.length === 6, null, 15000);
+t('寄验证码：写着寄到打了码的北航邮箱', (await text(p, '.stamp')).includes('21****34@buaa.edu.cn'));
+await p.click('.stamp button[type=submit]');
+await until(p, () => !!document.querySelector('.slip .mark'), null, 15000);
+t('盖章：卡上出现「北航」小印，学号打了码', (await text(p, '.slip')).includes('21****34') && !!(await p.$('.paper .kicker .seal-mark')));
+const tokA = await p.evaluate(() => JSON.parse(localStorage.getItem('tj-seal-v1')).token);
+t('盖章：之后的请求带令牌', (await p.evaluate(async (tk) => (await fetch('/api/auth/me', { headers: { authorization: `Bearer ${tk}` } })).status, tokA)) === 200);
+await p.screenshot({ path: path.join(out, 'mine-card.png') });
+const B3 = await browser.createBrowserContext();
+const s3 = await open(B3, '?h=19#/mine');
+await sleep(2500);
+await s3.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('刻声卡')).click());
+await until(s3, () => document.querySelector('.slip .slot') && !document.querySelector('.slip .slot').disabled, null, 15000);
+await s3.click('.slip .slot');
+await s3.type('.stamp .sid input', '21371234');
+await s3.click('.stamp button[type=submit]');
+await until(s3, () => (document.querySelector('.stamp .code') || {}).value?.length === 6, null, 15000);
+await s3.click('.stamp button[type=submit]');
+await until(s3, () => !!document.querySelector('.slip .mark'), null, 15000);
+await s3.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('共建')).click());
+await until(s3, () => (document.querySelector('.paper .shelf') || {}).textContent?.includes('走查用的合辑'), null, 15000);
+t('另一台设备用同一个学号盖章：A 建的合辑认得回来', (await text(s3, '.paper .shelf')).includes('走查用的合辑'));
+await s3.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('刻声卡')).click());
+await sleep(300);
+const outBtn = () => s3.evaluate(() => [...document.querySelectorAll('.paper .btn')].find((b) => b.textContent.includes('退出这台设备')).click());
+await outBtn(); await sleep(150); await outBtn();
+await sleep(3500);
+t('退出这台设备：卡上回到盖章处，A 那台不受影响', !!(await s3.$('.slip .slot')) && (await p.evaluate(async (tk) => (await fetch('/api/auth/me', { headers: { authorization: `Bearer ${tk}` } })).status, tokA)) === 200);
+await s3.close();
+
 // —— 8. 手机宽度 ——
 console.log('— 8. 手机宽度');
 const m = p;

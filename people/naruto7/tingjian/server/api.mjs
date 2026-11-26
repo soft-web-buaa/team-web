@@ -2,8 +2,10 @@
 // 本机开发、离线演示用 server/serve.mjs 起；线上是 CloudBase 的 HTTP 云函数 cloudfunctions/api（同一份 handle）。
 // 写入一律在这里重做校验：前端的检查可以被绕过（DESIGN.md §6）。
 //
-// 接口（JSON；身份 = 请求头 x-ks-key，刻声卡算出的 16 位作者键，不是登录）：
-//   GET    /api/health
+// 接口（JSON；身份 = 请求头 x-ks-key，刻声卡算出的 16 位作者键；用学号盖过章的卡改带 Authorization: Bearer 令牌，见 auth.mjs）：
+//   GET    /api/health                        带 login：学号登记开没开
+//   POST   /api/auth/code  /api/auth/verify    学号登记：寄验证码、验码换令牌
+//   GET    /api/auth/me    POST /api/auth/logout    PUT /api/auth/sig（落款跟着账号走）
 //   GET    /api/discs                         公开的声片（不含别人的心事盘、没到期的时间胶囊），带同听数、回声数
 //   GET    /api/discs/:id/audio               这张的声音（WAV）
 //   POST   /api/discs                         刻一张：{ id, placeId, note, author, visibility, capsuleUntil, at, audio(base64 WAV) }
@@ -31,12 +33,14 @@ import { inspectJpeg, cleanJpeg } from '../src/kesheng/web/jpeg-clean.js';
 import { hourOf, slotOfHour, semesterOf } from '../src/lib/when.js';
 import { PRESET_TOPICS, MOOD_IDS, POST, DEMO_POST_RE, SOUND_ID_RE } from '../src/lib/topics.js';
 import { PRESET_ALBUMS, ALBUM, ALBUM_ID_RE, TRACK_ID_RE } from '../src/lib/albums-preset.js';
+import { createAuth } from './auth.mjs';
+import crypto from 'node:crypto';
 
 const KEY_RE = /^[0-9a-f]{16}$/;
 const ID = { disc: /^ds-[a-z0-9-]{6,40}$/, echo: /^ec-[a-z0-9-]{6,40}$/, photo: /^ph-[a-z0-9-]{6,40}$/ };
 const PLACES = new Set(Array.from({ length: 16 }, (_, i) => `XY${String(i + 1).padStart(2, '0')}`));
 export const DISC = { maxSec: 10.5, minSec: 0.8, maxBytes: 1100 * 1024, noteMax: 40, perMin: 3, perDay: 30, capsuleMaxDays: 400 };
-const err = (status, message) => ({ status, json: { ok: false, error: message } });
+const err = (status, message, code) => ({ status, json: { ok: false, error: message, ...(code ? { code } : {}) } });
 const ok = (json, status = 200) => ({ status, json: { ok: true, ...json } });
 const b64 = (s) => (typeof s === 'string' && s.length < 3_000_000 && /^[A-Za-z0-9+/=]+$/.test(s) ? Buffer.from(s, 'base64') : null);
 
@@ -68,7 +72,9 @@ export function inspectWav(buf) {
   return { ok: false, error: 'WAV 里没有声音数据。' };
 }
 
-export function createApi({ store, now = () => Date.now(), review = false, adminToken = '', calendar = null } = {}) {
+export function createApi({ store, now = () => Date.now(), review = false, adminToken = '', calendar = null, login = null } = {}) {
+  // login = { secret, mailer, devCodes }；不给就是没开学号登记（寄码返回 503，其余照旧）
+  const auth = createAuth({ store, now, secret: (login && login.secret) || crypto.randomBytes(32).toString('hex'), mailer: login && login.mailer, devCodes: !!(login && login.devCodes) });
   const hits = new Map();   // 限频：同一个实例里有效（云函数多实例时各算各的，课程规模够用；写在 README 的已知缺口里）
   function allow(action, key, n, windowMs) {
     const k = `${action}:${key}`, t = now();
@@ -123,11 +129,33 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
   }
 
   async function handle({ method, path, query = {}, headers = {}, body = null }) {
-    const key = String(headers['x-ks-key'] || query.k || '').toLowerCase();
-    const authed = KEY_RE.test(key);
-    let m;
+    const bearer = String(headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    const deviceKey = String(headers['x-ks-key'] || query.k || '').toLowerCase();
+    let m, sess = null;
     try {
-      if (method === 'GET' && path === '/api/health') return ok({ review, store: store.kind, at: iso() });
+      if (method === 'GET' && path === '/api/health') return ok({ review, store: store.kind, login: !!(login && login.mailer), at: iso() });
+      if (bearer && !(sess = await auth.session(bearer))) return err(401, '章过期了：到「我的 · 刻声卡」用学号再盖一次。', 'session');
+      const key = sess ? sess.key : deviceKey;
+      const authed = KEY_RE.test(key);
+
+      // —— 学号登记 ——
+      if (path.startsWith('/api/auth/')) {
+        const b = body || {};
+        let r;
+        if (method === 'POST' && path === '/api/auth/code') {
+          const ip = String(headers['x-forwarded-for'] || headers['x-real-ip'] || '').split(',')[0].trim();
+          r = await auth.sendCode(b.sid, ip);
+        } else if (method === 'POST' && path === '/api/auth/verify') r = await auth.verify(b.sid, b.code, deviceKey);
+        else if (method === 'GET' && path === '/api/auth/me') r = sess ? { account: await auth.account(sess) } : { fail: { status: 401, error: '还没盖章。' } };
+        else if (method === 'POST' && path === '/api/auth/logout') { if (sess) await auth.logout(bearer); r = {}; }
+        else if (method === 'PUT' && path === '/api/auth/sig') {
+          if (!sess) return err(401, '还没盖章。');
+          const a = cleanAuthor(b, key);
+          if (a.error) return err(400, a.error);
+          r = { account: await auth.setSig(sess, a.author ? author(a.author) : null) };
+        } else return err(404, '没有这个接口。');
+        return r.fail ? { status: r.fail.status, json: { ok: false, ...r.fail } } : ok(r);
+      }
 
       // —— 读 ——
       if (method === 'GET' && path === '/api/discs') {
@@ -217,6 +245,8 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
 
       // —— 写：一律要有作者键 ——
       if (method !== 'GET' && !authed) return err(401, '缺少作者键。');
+      // 盖过章的卡：作者键认的是一个学号，光有键不够，要带令牌（退出登录、换设备之后，旧设备上的键写不进去）
+      if (method !== 'GET' && !sess && await auth.keyOwner(key)) return err(401, '这张卡盖过章：到「我的 · 刻声卡」用学号再盖一次就能接着写。', 'sealed');
 
       if (method === 'POST' && path === '/api/discs') {
         const b = body || {};

@@ -170,6 +170,56 @@ const evA = await fnMain({ httpMethod: 'GET', path: '/api/discs/ds-test-0020/aud
 t('云函数：声音以 base64 返回', evA.statusCode === 200 && evA.isBase64Encoded && Buffer.from(evA.body, 'base64').toString('ascii', 0, 4) === 'RIFF');
 t('云函数：跨域预检', (await fnMain({ httpMethod: 'OPTIONS', path: '/discs' })).statusCode === 204);
 
+t('云函数：跨域预检放行 authorization', /authorization/.test((await fnMain({ httpMethod: 'OPTIONS', path: '/auth/me' })).headers['access-control-allow-headers']));
+
+// 学号登记：寄码、验码、令牌、认领匿名留下的、盖过章的键不带令牌写不进
+const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tj-auth-'));
+const sent = [];
+const lapi = createApi({ store: fileStore(dir2), now: () => T, login: { secret: 's'.repeat(32), mailer: { kind: 'test', send: async (m) => { sent.push(m); } } } });
+const lc = (method, p, body = null, headers = {}) => lapi.handle({ method, path: p, query: {}, body, headers });
+const codeOf = () => sent.at(-1).text.match(/验证码：(\d{6})/)[1];
+const E = 'e'.repeat(16), F = 'f'.repeat(16);
+t('登记：health 报 login', (await lc('GET', '/api/health')).json.login === true && (await call('GET', '/api/health')).json.login === false);
+t('登记：没开的环境寄码 503', (await call('POST', '/api/auth/code', { sid: '21371234' })).status === 503);
+t('登记：学号样子不对 400', (await lc('POST', '/api/auth/code', { sid: '12ab' })).status === 400);
+await lc('POST', '/api/discs', { id: 'ds-auth-0001', placeId: 'XY01', audio: wav(2) }, { 'x-ks-key': E });
+const c1 = await lc('POST', '/api/auth/code', { sid: ' 21371234@BUAA.edu.cn ' });
+t('登记：寄到 学号@buaa.edu.cn，回给页面的是打码的', c1.status === 200 && sent.at(-1).to === '21371234@buaa.edu.cn' && c1.json.to === '21****34@buaa.edu.cn' && !('devCode' in c1.json));
+t('登记：六十秒内不重寄', (await lc('POST', '/api/auth/code', { sid: '21371234' })).status === 429);
+const good = codeOf();
+const bad = good === '000000' ? '111111' : '000000';
+t('登记：错码 400 并报剩几次', /还能再试 4 次/.test((await lc('POST', '/api/auth/verify', { sid: '21371234', code: bad })).json.error));
+const v1 = await lc('POST', '/api/auth/verify', { sid: '21371234', code: good }, { 'x-ks-key': E });
+t('登记：验对了发令牌，作者键沿用这台设备的', v1.status === 200 && /^[A-Za-z0-9_-]{32}$/.test(v1.json.token) && v1.json.key === E && v1.json.account.sid === '21****34');
+t('登记：一码一用', (await lc('POST', '/api/auth/verify', { sid: '21371234', code: good })).status === 400);
+const tok = { authorization: `Bearer ${v1.json.token}` };
+t('登记：带令牌认得出我的盘', (await lc('GET', '/api/discs', null, tok)).json.discs.find((d) => d.id === 'ds-auth-0001').mine === true);
+t('登记：盖过章的键不带令牌写不进', (await lc('POST', '/api/discs', { id: 'ds-auth-0002', placeId: 'XY01', audio: wav(2) }, { 'x-ks-key': E })).json.code === 'sealed');
+t('登记：带令牌写得进', (await lc('POST', '/api/discs', { id: 'ds-auth-0002', placeId: 'XY01', audio: wav(2) }, tok)).status === 201);
+t('登记：落款跟着账号走', (await lc('PUT', '/api/auth/sig', { grade: '2021级', name: '阿川' }, tok)).json.account.sig.name === '阿川' && (await lc('GET', '/api/auth/me', null, tok)).json.account.sig.grade === '2021级');
+// 第二台设备：匿名先刻一张、收藏一张，再用同一个学号登记，两样都并过来
+await lc('POST', '/api/discs', { id: 'ds-auth-0003', placeId: 'XY02', audio: wav(2) }, { 'x-ks-key': F });
+await lc('PUT', '/api/me/favs/ds-auth-0001', null, { 'x-ks-key': F });
+T += 61_000;
+await lc('POST', '/api/auth/code', { sid: '21371234' });
+const v2 = await lc('POST', '/api/auth/verify', { sid: '21371234', code: codeOf() }, { 'x-ks-key': F });
+const tok2 = { authorization: `Bearer ${v2.json.token}` };
+const me2 = (await lc('GET', '/api/me', null, tok2)).json;
+t('登记：第二台设备拿到同一个作者键，匿名的并过来', v2.json.key === E && v2.json.merged === 2 && me2.discs.some((d) => d.id === 'ds-auth-0003') && me2.favs.includes('ds-auth-0001'));
+t('登记：退出后令牌作废', (await lc('POST', '/api/auth/logout', null, tok2)).status === 200 && (await lc('GET', '/api/auth/me', null, tok2)).json.code === 'session');
+t('登记：另一台的令牌不受影响', (await lc('GET', '/api/auth/me', null, tok)).status === 200);
+t('登记：假令牌 401', (await lc('GET', '/api/discs', null, { authorization: 'Bearer ' + 'x'.repeat(32) })).status === 401);
+T += 61_000;
+await lc('POST', '/api/auth/code', { sid: 'SY2106123' });
+for (let i = 0; i < 5; i++) await lc('POST', '/api/auth/verify', { sid: 'sy2106123', code: '999999' === codeOf() ? '888888' : '999999' });
+t('登记：错满五次，对的码也不收了', (await lc('POST', '/api/auth/verify', { sid: 'sy2106123', code: codeOf() })).status === 429);
+const v3 = await (async () => { T += 61_000; await lc('POST', '/api/auth/code', { sid: 'sy2106123' }); return lc('POST', '/api/auth/verify', { sid: 'sy2106123', code: codeOf() }, { 'x-ks-key': E }); })();
+t('登记：别人的键（已盖章）不会被认走，新账号另起一个键', v3.status === 200 && v3.json.key !== E && /^[0-9a-f]{16}$/.test(v3.json.key) && v3.json.merged === 0);
+await new Promise((r) => setTimeout(r, 150));   // 文件存储合并写，等它落盘
+const raw = fs.readdirSync(dir2).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(dir2, f), 'utf8')).join('\n');
+t('登记：库里不存学号原文、不存验证码原文、不存令牌原文', !raw.includes('21371234') && !raw.includes('2106123') && !raw.includes(v1.json.token) && !raw.includes(good));
+fs.rmSync(dir2, { recursive: true, force: true });
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`接口自检：${pass} 项通过，${fail} 项不通过`);
 process.exit(fail ? 1 : 0);
