@@ -206,6 +206,33 @@ const ec = await p.evaluate(async (id) => (await (await fetch(`/api/discs/${id}/
 t('钉一句话：云上有', ec.length === 1 && ec[0].text === '这一秒是第一个音');
 await p.screenshot({ path: path.join(out, 'a-place.png') });
 
+// —— 6b. 后来：刻下以后，在盘旁边补一句（原声不动）——
+console.log('— 6b. 后来');
+await p.evaluate(() => [...document.querySelectorAll('.laters .btn')].find((b) => b.textContent.includes('写一句后来'))?.click());
+await p.waitForSelector('.later-form textarea', { timeout: 15000 }).catch(() => {});
+await p.type('.later-form textarea', '现在才听出来，那天走廊里有人在笑。');
+await p.click('.later-form button[type=submit]');
+await p.waitForSelector('.paper-slip', { timeout: 20000 }).catch(() => {});
+await sleep(1500);
+const laterApi = await p.evaluate(async (id) => (await (await fetch(`/api/discs/${id}/echoes`)).json()).echoes.filter((x) => x.later), discId);
+t('后来：云上有这一条，带距刻下几天', laterApi.length === 1 && laterApi[0].daysAfter === 0);
+t('后来：纸签出现在这张盘旁边，原声的标题没动', (await text(p, '.paper-slip')).includes('现在才听出来') && (await text(p, '.paper .now-title')).includes('排练前调音'));
+await p.screenshot({ path: path.join(out, 'a-later.png') });
+await go(p, '?h=19#/mine');
+await sleep(2500);
+t('我的：我刻的那行下面露出最新的后来', (await text(p, '.mine-row')).includes('现在才听出来'));
+await p.screenshot({ path: path.join(out, 'a-later-mine.png') });
+await go(p, '?h=19#/time');
+await p.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('一学年'))?.click());
+await sleep(1500);
+t('年轮：说明里写了「星外多一圈」', (await text(p, '.paper')).includes('星外多一圈'));
+await go(p, `?h=19#/place/XY04?play=${discId}`);
+await p.waitForSelector('.paper-slip .del', { timeout: 20000 }).catch(() => {});
+await p.evaluate(() => document.querySelector('.paper-slip .del')?.click());
+await sleep(2000);
+const laterLeft = await p.evaluate(async (id) => (await (await fetch(`/api/discs/${id}/echoes`)).json()).echoes.filter((x) => x.later), discId);
+t('后来：作者删掉，云上没了', laterLeft.length === 0);
+
 // —— 7. 另一个人（独立的浏览器环境）看得到 ——
 console.log('— 7. 另一个人（独立的浏览器环境）看得到');
 await p.goto('about:blank');          // 软件渲染同时开两块三维画布会卡住：A 先让出来

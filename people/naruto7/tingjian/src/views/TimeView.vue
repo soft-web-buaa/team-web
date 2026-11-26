@@ -122,6 +122,7 @@ onBeforeUnmount(() => { stopTour(); stage.focusSemester(null); stage.setSink(fal
     <section v-else-if="scale === 'year'" class="sec">
       <p class="lede" style="margin-top: 16px">一条轨道是一个学年，最里一圈最早，像树的年轮；一颗星是一张盘，角度是它录下的钟点，颜色是那个钟点的天色。被听得多、被回应得多的星更大更亮；我的星是金色的。</p>
       <p class="fine">声音多了，挤在一起的星会化成星尘，轨道就成了一条星云带；滚轮拉近，星一颗颗分出来。悬停看是哪一张，点一下放。</p>
+      <p class="fine">星外多一圈，是刻的人后来又写了一句。</p>
       <p class="h3">放在哪</p>
       <div class="row" role="radiogroup" aria-label="星系放在哪">
         <button v-for="x in PLACES" :key="x[0]" type="button" role="radio" class="chip" :class="{ on: place === x[0] }" :aria-checked="place === x[0]" @click="place = x[0]">{{ x[1] }}</button>

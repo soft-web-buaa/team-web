@@ -48,7 +48,8 @@ export function galaxyLayout(items, { r0 = 0.2, r1 = 0.93 } = {}) {
       const age = e.at ? Math.max(0, (now - Date.parse(e.at)) / (365 * 864e5)) : 0;
       const imp = 1 + (e.heard || 0) + 2 * (e.echoN || 0) + (e.tier === 'real' ? 3 : 0) + (e.mine ? 8 : 0) + h1 * 0.5;
       o.dens[Math.floor(((a / TAU) % 1 + 1) % 1 * 72) % 72]++;
-      stars.push({ e, oi: i, a, rr, imp, ph: h3 * TAU, sp: 0.6 + h2 * 1.6, col: e.mine ? GOLD : hourTint(e.hour), mine: !!e.mine, age, star: true, idx: 0 });
+      stars.push({ e, oi: i, a, rr, imp, ph: h3 * TAU, sp: 0.6 + h2 * 1.6, col: e.mine ? GOLD : hourTint(e.hour), mine: !!e.mine, age, star: true, idx: 0,
+        later: Math.max(0, Math.min(9, e.laterN || 0)) });   // 刻下以后又补了几句「后来」，星外就多几圈
     }
   });
   for (const o of orbits) { let m = 1e-6; for (const v of o.dens) m = Math.max(m, v); for (let k = 0; k < 72; k++) o.dens[k] /= m; }
@@ -257,6 +258,17 @@ export class GalaxyPainter {
       const size = (13 + 15 * Math.sqrt(Math.min(s.imp, 24) / 24)) * (s.mine ? 1.45 : 1) * Math.pow(this.zoomNow, 0.35) * (this.hover === s ? 1.5 : 1) * this.k;
       g.globalAlpha = Math.min(1, bright * q * dim);
       g.drawImage(sprite(s.col), x - size / 2, y - size / 2, size, size);
+      // 「后来」：外面的细同心环，一圈一句，像树的年轮。颜色和这颗星一样，越外越淡。
+      if (s.later) {
+        const [cr, cg, cb] = s.col;
+        g.globalAlpha = 1;
+        for (let i = 0; i < s.later; i++) {
+          const a = Math.min(0.6, (0.5 - 0.25 * (s.later === 1 ? 0 : i / (s.later - 1))) * bright * q * dim);
+          g.strokeStyle = `rgba(${cr},${cg},${cb},${Math.max(0, a).toFixed(3)})`;
+          g.lineWidth = Math.max(0.8, 1 * this.k);
+          g.beginPath(); g.arc(x, y, size * 0.16 + (3 + 2 * i) * this.k, 0, TAU); g.stroke();
+        }
+      }
       if (s.e.id === pl) playing = [x, y];
     }
     g.globalAlpha = 1;

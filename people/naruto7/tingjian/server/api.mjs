@@ -11,9 +11,9 @@
 //   POST   /api/discs                         刻一张：{ id, placeId, note, author, visibility, capsuleUntil, at, audio(base64 WAV) }
 //   DELETE /api/discs/:id                     只有作者能删；回声、同听一并删
 //   POST   /api/discs/:id/heard               我也听过（再点一次取消）
-//   GET    /api/discs/:id/echoes              一张声片上的回声
-//   POST   /api/echoes                        钉一句话（可带 photoId）
-//   DELETE /api/echoes/:id                    只有作者能删，照片一并删
+//   GET    /api/discs/:id/echoes              一张声片上的回声（含「后来」，带 later: true）
+//   POST   /api/echoes                        钉一句话（可带 photoId）；后来也走这里，带 { later: true }
+//   DELETE /api/echoes/:id                    只有作者能删，照片一并删（「后来」也走这里：只有刻这张盘的人能写、能删）
 //   POST   /api/echoes/:id/report             举报；不同的人满 3 次先收起
 //   GET    /api/feed                          全站最近的回声（社区的回声流）
 //   POST   /api/photos                        上传一张照片（缩略 + 大图，base64 JPEG），要带同意；先审后显
@@ -28,7 +28,7 @@
 //   DELETE /api/albums/:id  /api/tracks/:id   建的人删合辑；放的人或建的人拿出一段
 //   GET    /api/admin/pending                 审核：待审照片（请求头 x-ks-admin = 环境变量 KS_ADMIN_TOKEN）
 //   POST   /api/admin/photos/:id              { status: 'ok' | 'pending' | 'removed' }
-import { ECHO_MAX, NAME_MAX, CONSENT_VERSION, PHOTO, LIMITS, validateLine, validateField, cleanField } from '../src/kesheng/web/contract.js';
+import { ECHO_MAX, LATER_MAX, NAME_MAX, CONSENT_VERSION, PHOTO, LIMITS, validateLine, validateField, cleanField } from '../src/kesheng/web/contract.js';
 import { inspectJpeg, cleanJpeg } from '../src/kesheng/web/jpeg-clean.js';
 import { hourOf, slotOfHour, semesterOf } from '../src/lib/when.js';
 import { PRESET_TOPICS, MOOD_IDS, POST, DEMO_POST_RE, SOUND_ID_RE } from '../src/lib/topics.js';
@@ -40,6 +40,8 @@ const KEY_RE = /^[0-9a-f]{16}$/;
 const ID = { disc: /^ds-[a-z0-9-]{6,40}$/, echo: /^ec-[a-z0-9-]{6,40}$/, photo: /^ph-[a-z0-9-]{6,40}$/ };
 const PLACES = new Set(Array.from({ length: 16 }, (_, i) => `XY${String(i + 1).padStart(2, '0')}`));
 export const DISC = { maxSec: 10.5, minSec: 0.8, maxBytes: 1100 * 1024, noteMax: 40, perMin: 3, perDay: 30, capsuleMaxDays: 400 };
+// 「后来」：刻下很久以后，作者在盘旁边补的一句。原声不改，一条条叠上去，一张盘最多 5 条。
+export const LATER = { max: LATER_MAX, perDisc: 5, perMin: 3 };
 const err = (status, message, code) => ({ status, json: { ok: false, error: message, ...(code ? { code } : {}) } });
 const ok = (json, status = 200) => ({ status, json: { ok: true, ...json } });
 const b64 = (s) => (typeof s === 'string' && s.length < 3_000_000 && /^[A-Za-z0-9+/=]+$/.test(s) ? Buffer.from(s, 'base64') : null);
@@ -109,7 +111,8 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
     return p && (p.status === 'ok' || p.key === key) ? { id: p.id, state: p.status, placeId: p.placeId } : null;
   }
   async function echoView(e, key) {
-    return { id: e.id, discId: e.discId, t: e.t, text: e.text, at: e.at, author: author(e.author), mine: e.key === key, photo: await photoView(e.photoId, key), held: e.status === 'held' || undefined };
+    return { id: e.id, discId: e.discId, t: e.t, text: e.text, at: e.at, author: author(e.author), mine: e.key === key, photo: await photoView(e.photoId, key), held: e.status === 'held' || undefined,
+      later: e.later || undefined, daysAfter: e.later ? (e.daysAfter ?? null) : undefined };
   }
   function checkPhoto(buf, maxBytes, maxSide, label) {
     if (!buf || !buf.length) return `${label}缺失或不是 base64。`;
@@ -122,10 +125,13 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
   }
   async function counts() {
     const heard = await store.list('heard'), echoes = await store.list('echoes');
-    const h = new Map(), e = new Map();
+    const h = new Map(), e = new Map(), l = new Map();
     for (const x of heard) h.set(x.discId, (h.get(x.discId) || 0) + 1);
-    for (const x of echoes) if (x.status === 'ok') e.set(x.discId, (e.get(x.discId) || 0) + 1);
-    return { h, e, heard };
+    for (const x of echoes) {
+      if (x.later) { l.set(x.discId, (l.get(x.discId) || 0) + 1); continue; }
+      if (x.status === 'ok') e.set(x.discId, (e.get(x.discId) || 0) + 1);
+    }
+    return { h, e, l, heard };
   }
 
   async function handle({ method, path, query = {}, headers = {}, body = null }) {
@@ -160,10 +166,10 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       // —— 读 ——
       if (method === 'GET' && path === '/api/discs') {
         const all = await store.list('discs');
-        const { h, e, heard } = await counts();
+        const { h, e, l, heard } = await counts();
         const mineHeard = new Set(heard.filter((x) => x.key === key).map((x) => x.discId));
         const list = all.filter((d) => discVisible(d, key)).sort((a, b) => a.at.localeCompare(b.at));
-        return ok({ discs: list.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0, heardByMe: mineHeard.has(d.id) })) });
+        return ok({ discs: list.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0, laterN: l.get(d.id) || 0, heardByMe: mineHeard.has(d.id) })) });
       }
       if (method === 'GET' && (m = path.match(/^\/api\/discs\/(ds-[a-z0-9-]{6,40})\/audio$/))) {
         const d = await store.get('discs', m[1]);
@@ -174,11 +180,14 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
       }
       if (method === 'GET' && (m = path.match(/^\/api\/discs\/([^/]{1,64})\/echoes$/))) {
         const id = decodeURIComponent(m[1]);
-        const list = (await store.list('echoes', { discId: id })).filter((x) => visibleEcho(x, key)).sort((a, b) => a.t - b.t);
+        const d = await store.get('discs', id);
+        const canSee = !d || discVisible(d, key);   // 「后来」和这张盘同进同出：心事盘、没到期的胶囊，别人看不到
+        const list = (await store.list('echoes', { discId: id })).filter((x) => visibleEcho(x, key) && (!x.later || canSee))
+          .sort((a, b) => (a.later || b.later ? (Number(!!a.later) - Number(!!b.later)) || String(a.at).localeCompare(String(b.at)) : a.t - b.t));
         return ok({ echoes: await Promise.all(list.map((x) => echoView(x, key))) });
       }
       if (method === 'GET' && path === '/api/feed') {
-        const list = (await store.list('echoes')).filter((x) => x.status === 'ok').sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
+        const list = (await store.list('echoes')).filter((x) => x.status === 'ok' && !x.later).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 40);
         return ok({ echoes: await Promise.all(list.map((x) => echoView(x, key))) });
       }
       if (method === 'GET' && (m = path.match(/^\/api\/places\/([A-Za-z0-9_-]{1,32})\/photos$/))) {
@@ -216,9 +225,12 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
           const mine = (await store.list('discs', { key })).filter((d) => d.status !== 'removed').sort((a, b) => a.at.localeCompare(b.at));
           const favs = (await store.list('favs', { key })).map((f) => f.discId);
           const myIds = new Set(mine.map((d) => d.id));
-          const { h, e, heard } = await counts();
-          const inbox = [];
-          for (const x of await store.list('echoes')) if (myIds.has(x.discId) && x.key !== key && x.status === 'ok') inbox.push({ kind: 'echo', discId: x.discId, at: x.at, text: x.text, t: x.t, author: author(x.author) });
+          const { h, e, l, heard } = await counts();
+          const inbox = [], later = {};
+          for (const x of await store.list('echoes')) {
+            if (myIds.has(x.discId) && x.later) (later[x.discId] = later[x.discId] || []).push(await echoView(x, key));   // 我写的「后来」，回到「我的」就不用一条条问
+            if (myIds.has(x.discId) && x.key !== key && x.status === 'ok') inbox.push({ kind: 'echo', discId: x.discId, at: x.at, text: x.text, t: x.t, author: author(x.author) });
+          }
           for (const x of heard) if (myIds.has(x.discId) && x.key !== key) inbox.push({ kind: 'heard', discId: x.discId, at: x.at });
           // 社区里回应我的：回我帖子的、回我那一层的、给我共鸣或我也是的
           const myPosts = new Set((await store.list('posts', { key })).map((p) => p.id));
@@ -233,7 +245,8 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
           const myAlbums = new Map((await store.list('albums', { key })).filter((a) => a.status !== 'removed').map((a) => [a.id, a.name]));
           if (myAlbums.size) for (const x of await store.list('tracks')) if (x.key !== key && x.status === 'ok' && myAlbums.has(x.albumId)) inbox.push({ kind: 'track', albumId: x.albumId, albumName: myAlbums.get(x.albumId), discId: x.soundId, at: x.at, author: author(x.author) });
           inbox.sort((a, b) => b.at.localeCompare(a.at));
-          return ok({ discs: mine.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0 })), favs, inbox: inbox.slice(0, 60) });
+          for (const id of Object.keys(later)) later[id].sort((a, b) => a.at.localeCompare(b.at));
+          return ok({ discs: mine.map((d) => discView(d, key, { heard: h.get(d.id) || 0, echoes: e.get(d.id) || 0, laterN: l.get(d.id) || 0 })), favs, later, inbox: inbox.slice(0, 60) });
         }
         if ((m = path.match(/^\/api\/me\/favs\/([^/]{1,64})$/))) {
           const id = `${key}_${decodeURIComponent(m[1])}`;
@@ -310,6 +323,24 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         const prev = await store.get('echoes', b.id);
         if (prev) return prev.key === key ? ok({ echo: await echoView(prev, key), again: true }) : err(409, '这个编号已被用过。');
         if (typeof b.discId !== 'string' || !/^[a-z0-9-]{3,64}$/.test(b.discId)) return err(400, '声片编号不对。');
+        // 「后来」：不钉在某一秒，是作者很久以后在盘旁边补的一句。和回声存一个集合，校验、举报、随盘真删都复用。
+        if (b.later === true) {
+          const d = await store.get('discs', b.discId);
+          if (!d || d.status === 'removed') return err(404, '没有这张声片。');
+          if (d.key !== key) return err(403, '只有刻它的人能写后来。');
+          const bad = validateLine(b.text, LATER.max);
+          if (bad) return err(400, bad);
+          const have = (await store.list('echoes', { discId: d.id })).filter((x) => x.later);
+          if (have.length >= LATER.perDisc) return err(400, `这张盘已经写了 ${LATER.perDisc} 条后来，再放不下了。`);
+          if (!allow('later-min', key, LATER.perMin, 60_000)) return err(429, '一分钟里写得太多了，过一会儿再来。');
+          const a = cleanAuthor(b.author, key);
+          if (a.error) return err(400, a.error);
+          const at = iso();
+          const daysAfter = Math.max(0, Math.floor((Date.parse(at) - Date.parse(d.at)) / 86400000));
+          const e = { id: b.id, discId: d.id, later: true, text: String(b.text).trim(), author: a.author, key, at, daysAfter, status: 'ok' };
+          await store.put('echoes', e);
+          return ok({ echo: await echoView(e, key) }, 201);
+        }
         const dur = Math.min(10, Math.max(0.5, Number(b.dur) || 10));
         const t = Number(b.t);
         if (!Number.isFinite(t) || t < 0 || t > dur + 0.05) return err(400, '这一秒不在声片的长度里。');

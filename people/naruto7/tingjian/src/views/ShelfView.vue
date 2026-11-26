@@ -6,7 +6,7 @@
 // 舞台在这一页不画（模式是 screen，镜头退进刻槽里）：唱片架盖满屏幕，没必要在后面多画一台唱机。
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { L, atPlace, isPublic, play, title, whenText, tierWord, semesterLabel } from '../lib/library.js';
+import { L, atPlace, isPublic, play, title, whenText, tierWord, semesterLabel, laterCountOf } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
 import { clock } from '../lib/clock.js';
 import { hourColor } from '../lib/wave.js';
@@ -130,7 +130,7 @@ function visit(s) { router.push(`/place/${s.p.id}`); }
                 <button type="button" :class="{ on: playingHere && playingHere.id === e.id }" @click="playOne(e)">
                   <span class="no">{{ String(n + 1).padStart(2, '0') }}</span>
                   <span class="t show">{{ title(e) }}</span>
-                  <span class="w">{{ whenText(e) }} · {{ tierWord(e) }}</span>
+                  <span class="w">{{ whenText(e) }} · {{ tierWord(e) }}<span v-if="laterCountOf(e)" class="later-tag">后来 {{ laterCountOf(e) }}</span></span>
                 </button>
               </li>
             </ol>
@@ -189,6 +189,7 @@ header .h1 { margin-bottom: 6px; }
 .tracks .no { grid-row: 1 / 3; font: 12px var(--f-ui); color: var(--ink-2); padding-top: 2px; font-variant-numeric: tabular-nums; }
 .tracks .t { font-size: 15px; }
 .tracks .w { font-size: 12px; color: var(--ink-2); }
+.tracks .later-tag { margin-left: 8px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-size: 11px; letter-spacing: .04em; color: var(--ink); white-space: nowrap; }
 .tracks button.on .t { color: var(--ink); box-shadow: inset 0 -2px 0 var(--scope); width: fit-content; }
 .disc-enter-active, .disc-leave-active { transition: opacity .35s; }
 .disc-enter-from, .disc-leave-to { opacity: 0; }

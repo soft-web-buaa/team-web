@@ -5,7 +5,7 @@ import { reactive, markRaw } from 'vue';
 import { tierOf, counts, tallyText } from '../kesheng/web/tier.js';
 import { semesterLabel, semesterSeq, currentSemester, SLOT_WORD } from '../kesheng/web/semester.js';
 import { signature, loadIdentity, saveIdentity, snapshot, cardFile, importIdentity } from '../kesheng/web/identity.js';
-import { validateLine, ECHO_MAX, CONSENT_VERSION } from '../kesheng/web/contract.js';
+import { validateLine, ECHO_MAX, LATER_MAX, CONSENT_VERSION } from '../kesheng/web/contract.js';
 import * as cloud from './cloud.js';
 import * as outbox from './outbox.js';
 import { bj, slotOfHour, semesterOf, dayKey } from './when.js';
@@ -24,7 +24,8 @@ export const L = reactive({
   online: null,               // null 还没试过 / true / false
   feed: [],                   // 社区的回声流（云上）
   me: { discs: [], favs: [], inbox: [] },
-  echoes: {},                 // discId → 云上的回声
+  echoes: {},                 // discId → 云上的回声（钉在某一秒的）
+  later: {},                  // discId → 「后来」纸签（作者很久以后补的话，不钉在某一秒）
   pending: [],                // 发件箱里还没发出去的（盘、话）
   hidden: [],                 // 对我隐藏的回声
   playing: null,              // 正在放的那张
@@ -103,7 +104,10 @@ export async function refresh() {
   if (f.ok) L.feed = f.json.echoes;
   if (cloud.keyNow() || loadIdentity()) {
     const m = await cloud.request('GET', '/me');
-    if (m.ok) L.me = { discs: m.json.discs, favs: m.json.favs, inbox: m.json.inbox };
+    if (m.ok) {
+      L.me = { discs: m.json.discs, favs: m.json.favs, inbox: m.json.inbox };
+      for (const [id, list] of Object.entries(m.json.later || {})) setLater(id, list);   // 我的盘上的后来，顺手缓存一份
+    }
   }
   flush();
   L.version++;
@@ -118,6 +122,7 @@ function upsertReal(d) {
   const p = L.placeById.get(d.placeId);
   const fields = { tier: 'real', placeId: d.placeId, place: p ? p.name : '', zoneId: p ? p.z : null, at: d.at, hour: d.hour, slot: d.slot, semester: d.semester, week: d.week, seconds: d.seconds, db: d.db ?? null,
     note: d.note, author: d.author && (d.author.grade || d.author.dept || d.author.name) ? d.author : null, mine: d.mine, heard: d.heard || 0, heardByMe: !!d.heardByMe, echoN: d.echoes || 0,
+    laterN: L.later[d.id] ? L.later[d.id].length : (d.laterN || 0),
     visibility: d.visibility, capsuleUntil: d.capsuleUntil, locked: d.locked, url: cloud.audioUrl(d.id), day: dayKey(d.at), local: false };
   if (e) Object.assign(e, fields);
   else { e = reactive({ id: d.id, ...fields }); byId.set(d.id, e); L.entries = sortAt([...L.entries, e]); }
@@ -230,10 +235,25 @@ export function echoesOf(id) {
   const queued = L.pending.filter((p) => p.kind === 'echo' && p.echo.discId === id && !have.has(p.id)).map((p) => ({ ...p.echo, mine: true, local: p.state === 'rejected' ? 'rejected' : 'pending', error: p.error }));
   return [...seedEchoes.filter((x) => x.discId === id), ...cloudList, ...queued].filter((x) => !L.hidden.includes(x.id)).sort((a, b) => a.t - b.t);
 }
+/** 一张盘的「后来」放进缓存：最新的在前；顺手把这张盘上的条数记到条目上，星系画几圈、唱片架写「后来 n」都看它。 */
+function setLater(id, list) {
+  L.later[id] = list.slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  const e = byId.get(id);
+  if (e) e.laterN = L.later[id].length;
+}
+/** 一张盘上的后来，最新的一条在前。没有加载过就是空的（不编数据）；我自己收起来的也不显示。 */
+export const laterOf = (id) => (id && L.later[id] ? L.later[id].filter((x) => !L.hidden.includes(x.id)) : []);
+/** 这张盘上有几条后来：缓存里有就数缓存，没有就用列表带回来的数。 */
+export const laterCountOf = (e) => (e ? (L.later[e.id] ? laterOf(e.id).length : (e.laterN || 0)) : 0);
 export async function loadEchoes(id) {
   if (!id) return;
   const r = await cloud.request('GET', `/discs/${encodeURIComponent(id)}/echoes`);
-  if (r.ok) { L.echoes[id] = r.json.echoes; L.online = true; } else if (r.offline) L.online = false;
+  if (r.ok) {
+    const all = r.json.echoes || [];
+    L.echoes[id] = all.filter((x) => !x.later);
+    setLater(id, all.filter((x) => x.later));
+    L.online = true;
+  } else if (r.offline) L.online = false;
   syncEchoes();
 }
 export function syncEchoes() { stage.setEchoes(L.playing ? echoesOf(L.playing.id).map((x) => ({ t: x.t, mine: !!x.mine })) : []); }
@@ -272,6 +292,32 @@ export async function dropEcho(x) {
     say(x.demo ? '这条示例收起来了。' : '举报了，这一条对你隐藏。三个人举报会先收起。');
   }
   syncEchoes();
+}
+
+/**
+ * 写一句「后来」：只有刻这张盘的人能写，一张盘最多 5 条，一条最多 80 字。原声不动，纸签一张张叠上去。
+ * 不走发件箱：后来是有意回头补的，连不上就明说，免得以为贴上了。
+ */
+export async function addLater(e, text) {
+  if (!e || !e.id) throw new Error('先挑一张盘。');
+  if (!e.mine) throw new Error('只有刻这张盘的人能写后来。');
+  if (laterOf(e.id).length >= 5) throw new Error('这张盘的后来写满了 5 条，再放不下了。');
+  const bad = validateLine(text, LATER_MAX);
+  if (bad) throw new Error(bad);
+  const id = rid('ec');
+  const r = await cloud.request('POST', '/echoes', { id, discId: e.id, later: true, text: String(text).trim(), author: authorOf(ensureMe()) }, { create: true });
+  if (!r.ok) throw new Error(r.error || '没贴上，连上网络再试。');
+  setLater(e.id, [...(L.later[e.id] || []), r.json.echo]);
+  L.version++;
+  return r.json.echo;
+}
+/** 删掉自己的一条后来。 */
+export async function removeLater(id) {
+  const r = await cloud.request('DELETE', `/echoes/${encodeURIComponent(id)}`);
+  if (!r.ok) { say(r.error || '没删掉，连上网络再试。'); return false; }
+  for (const k of Object.keys(L.later)) setLater(k, L.later[k].filter((x) => x.id !== id));
+  L.version++;
+  return true;
 }
 
 // ====================================================================================

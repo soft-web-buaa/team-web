@@ -13,7 +13,7 @@ import { S, probe, pushSig, leave } from '../lib/seal.js';
 import { A, refreshAlbums } from '../lib/albums.js';
 import { useRouter } from 'vue-router';
 import { C, init as initCommunity } from '../lib/community.js';
-import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say, atPlace } from '../lib/library.js';
+import { L, unread, markRead, entryById, play, signature, setSignature, exportCard, importCard, deleteDisc, refresh, title, say, atPlace, laterOf } from '../lib/library.js';
 
 const router = useRouter();
 const tab = ref('discs');
@@ -32,6 +32,11 @@ function openMsg(x) {
   if (x.postId) router.push({ path: '/community', query: { post: x.postId } });
   else play(x.e, { seek: x.kind === 'echo' ? Math.max(0, x.t - 0.4) : null });
 }
+// 「后来」：我刻的盘下面露出最新的一条；还没有、又刻了一阵的，轻轻提醒一句（不动原文，只多一张纸签）
+const daysSince = (e) => (e.at ? Math.max(0, Math.floor((Date.now() - Date.parse(e.at)) / 864e5)) : 0);
+const newestLater = (e) => { void L.version; return laterOf(e.id)[0] || null; };
+const clipText = (s) => (String(s).length > 24 ? `${String(s).slice(0, 24)}…` : String(s));
+function openLater(e) { router.push(`/place/${e.placeId}?play=${encodeURIComponent(e.id)}`); }
 const places = computed(() => new Set(mine.value.map((e) => e.placeId)).size);
 const sems = computed(() => new Set(mine.value.map((e) => e.semester)).size);
 // 唱片架：十六个地方各一张唱片，预览取我刻得最多的前六处（没刻过的也排上，撑满一排）
@@ -85,6 +90,10 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
       <ol class="discs" style="margin-top: 12px">
         <li v-for="e in mine" :key="e.id" class="mine-row">
           <DiscRow :e="e" />
+          <div v-if="newestLater(e)" class="later-line">
+            <button type="button" @click="openLater(e)"><b>后来</b>{{ clipText(newestLater(e).text) }}</button>
+          </div>
+          <p v-else-if="!e.locked && daysSince(e) >= 7" class="later-hint"><button type="button" @click="openLater(e)">这张刻了 {{ daysSince(e) }} 天了，回头听听？</button></p>
           <div class="acts">
             <span v-if="e.error" class="err">{{ e.error }}</span>
             <button type="button" class="link fine" @click="del(e)">{{ confirmId === e.id ? '再点一次，真删' : '删掉' }}</button>
@@ -183,6 +192,11 @@ if (new URLSearchParams(location.hash.split('?')[1] || '').get('album')) tab.val
 .mine-row { position: relative; }
 .mine-row :deep(li) { list-style: none; }
 .acts { display: flex; justify-content: flex-end; gap: 10px; margin: -6px 0 6px; }
+.later-line { margin: -4px 0 6px 56px; }
+.later-line button { display: block; width: 100%; padding: 2px 0; border: 0; background: none; text-align: left; font: 15px/1.5 var(--f-show); color: var(--ink); }
+.later-line b { margin-right: 6px; font: 600 11px/1 var(--f-ui); letter-spacing: .08em; color: var(--ink-2); vertical-align: 1px; }
+.later-hint { margin: -2px 0 6px 56px; font-size: 12px; }
+.later-hint button { padding: 0; border: 0; background: none; font-size: 12px; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
 .inbox { list-style: none; padding: 0; margin: 12px 0 0; }
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 14px 0 0; }
 .inbox li { position: relative; }

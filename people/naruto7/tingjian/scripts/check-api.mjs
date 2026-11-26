@@ -72,6 +72,34 @@ for (const k of [A, C, D]) await call('POST', '/api/echoes/ec-test-0001/report',
 t('不同的三个人举报：先收起', (await call('GET', '/api/discs/ds-test-0001/echoes', null, C)).json.echoes.length === 0);
 t('作者自己还看得到被收起的', (await call('GET', '/api/discs/ds-test-0001/echoes', null, B)).json.echoes[0].held === true);
 
+// —— 后来：刻下很久以后，作者在盘旁边补的一句（和回声一个集合，带 later: true）——
+const lt1 = await call('POST', '/api/echoes', { id: 'ec-later-0001', discId: 'ds-test-0001', later: true, text: '后来我又去了一次，铃声换了。' }, A);
+t('后来：作者能写，201，带距刻下几天', lt1.status === 201 && lt1.json.echo.later === true && lt1.json.echo.daysAfter === 200 && lt1.json.echo.t === undefined);
+t('后来：不是作者，403', (await call('POST', '/api/echoes', { id: 'ec-later-0002', discId: 'ds-test-0001', later: true, text: '我也补一句' }, B)).status === 403);
+t('后来：空的 400', (await call('POST', '/api/echoes', { id: 'ec-later-0003', discId: 'ds-test-0001', later: true, text: '   ' }, A)).status === 400);
+t('后来：超过八十个字 400', (await call('POST', '/api/echoes', { id: 'ec-later-0004', discId: 'ds-test-0001', later: true, text: '声'.repeat(81) }, A)).status === 400);
+t('后来：带链接 400', (await call('POST', '/api/echoes', { id: 'ec-later-0005', discId: 'ds-test-0001', later: true, text: '看 www.x.com' }, A)).status === 400);
+t('后来：盘不存在 404', (await call('POST', '/api/echoes', { id: 'ec-later-0006', discId: 'ds-nope-0001', later: true, text: '一句' }, A)).status === 404);
+t('后来：第二、三条 201', (await call('POST', '/api/echoes', { id: 'ec-later-0007', discId: 'ds-test-0001', later: true, text: '第二句' }, A)).status === 201 && (await call('POST', '/api/echoes', { id: 'ec-later-0008', discId: 'ds-test-0001', later: true, text: '第三句' }, A)).status === 201);
+t('后来：一分钟里第四条 429', (await call('POST', '/api/echoes', { id: 'ec-later-0009', discId: 'ds-test-0001', later: true, text: '第四句' }, A)).status === 429);
+T += 61_000;
+t('后来：等一分钟，补到第五条', (await call('POST', '/api/echoes', { id: 'ec-later-0010', discId: 'ds-test-0001', later: true, text: '第四句' }, A)).status === 201 && (await call('POST', '/api/echoes', { id: 'ec-later-0011', discId: 'ds-test-0001', later: true, text: '第五句' }, A)).status === 201);
+t('后来：第六条放不下 400', (await call('POST', '/api/echoes', { id: 'ec-later-0012', discId: 'ds-test-0001', later: true, text: '第六句' }, A)).status === 400);
+t('后来：公开盘的后来，别人看得到', (await call('GET', '/api/discs/ds-test-0001/echoes', null, B)).json.echoes.filter((x) => x.later).length === 5);
+t('后来：我的里带回来自己写的', (await call('GET', '/api/me', null, A)).json.later['ds-test-0001'].length === 5);
+t('回声流里不混后来', (await call('GET', '/api/feed', null, C)).json.echoes.every((x) => !x.later));
+t('心事盘：C 刻了一张', (await call('POST', '/api/discs', { id: 'ds-test-0030', placeId: 'XY03', visibility: 'private', audio: wav(2) }, C)).status === 201);
+t('心事盘的后来：作者写得上', (await call('POST', '/api/echoes', { id: 'ec-later-0020', discId: 'ds-test-0030', later: true, text: '只有我自己看得到' }, C)).status === 201);
+t('心事盘的后来：别人看不到', (await call('GET', '/api/discs/ds-test-0030/echoes', null, B)).json.echoes.length === 0);
+t('心事盘的后来：作者看得到', (await call('GET', '/api/discs/ds-test-0030/echoes', null, C)).json.echoes.filter((x) => x.later).length === 1);
+t('后来：别人删不了', (await call('DELETE', '/api/echoes/ec-later-0020', null, B)).status === 403);
+t('后来：作者删掉自己的', (await call('DELETE', '/api/echoes/ec-later-0020', null, C)).status === 200 && (await call('GET', '/api/discs/ds-test-0030/echoes', null, C)).json.echoes.length === 0);
+t('D 刻一张公开的', (await call('POST', '/api/discs', { id: 'ds-test-0031', placeId: 'XY05', audio: wav(2) }, D)).status === 201);
+t('D 写一条后来', (await call('POST', '/api/echoes', { id: 'ec-later-0030', discId: 'ds-test-0031', later: true, text: '这句等着被举报' }, D)).status === 201);
+for (const k of [A, B, C]) await call('POST', '/api/echoes/ec-later-0030/report', {}, k);
+t('后来被三个人举报：先收起', (await call('GET', '/api/discs/ds-test-0031/echoes', null, B)).json.echoes.length === 0);
+t('后来被举报后，作者自己还看得到（标已收起）', (await call('GET', '/api/discs/ds-test-0031/echoes', null, D)).json.echoes[0].held === true);
+
 const ph = await call('POST', '/api/photos', { id: 'ph-test-0001', placeId: 'XY01', consent: { version: 1, noIdentifiable: true }, thumb: JPG.toString('base64'), full: JPG.toString('base64') }, B);
 t('照片：先审后显', ph.status === 201 && ph.json.photo.state === 'pending');
 t('没勾同意：400', (await call('POST', '/api/photos', { id: 'ph-test-0002', placeId: 'XY01', consent: {}, thumb: JPG.toString('base64'), full: JPG.toString('base64') }, B)).status === 400);
@@ -87,6 +115,7 @@ t('收藏', (await call('PUT', '/api/me/favs/concept-051', null, C)).status === 
 t('别人删不了我的盘', (await call('DELETE', '/api/discs/ds-test-0001', null, B)).status === 403);
 t('我能真删，回声一并删', (await call('DELETE', '/api/discs/ds-test-0001')).status === 200 && (await call('GET', '/api/discs/ds-test-0001/echoes', null, B)).json.echoes.length === 0);
 t('删了之后声音也取不到', (await call('GET', '/api/discs/ds-test-0001/audio', null, A)).status === 404);
+t('删盘时，后来一并删了（再删那条后来是 404）', (await call('DELETE', '/api/echoes/ec-later-0001', null, A)).status === 404);
 
 // —— 社区 ——
 const tps = (await call('GET', '/api/topics')).json.topics;

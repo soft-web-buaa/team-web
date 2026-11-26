@@ -19,6 +19,7 @@
 //       换成 CloudBase 匿名登录后，由云端的匿名 uid 代替，页面不用动。
 
 export const ECHO_MAX = 40;
+export const LATER_MAX = 80;   // 「后来」一条最多 80 字（原文不动，后来的话长一点也放得下）
 export const NAME_MAX = { grade: 12, dept: 24, name: 16 };
 export const CONSENT_VERSION = 1;
 export const PHOTO = {

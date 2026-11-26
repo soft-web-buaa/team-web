@@ -8,7 +8,8 @@ import DiscRow from '../components/DiscRow.vue';
 import RingWood from '../components/RingWood.vue';
 import EchoBand from '../components/EchoBand.vue';
 import AddToAlbum from '../components/AddToAlbum.vue';
-import { L, atPlace, placeLine, play, isPublic, toggleHeard, toggleFav, isFav, title } from '../lib/library.js';
+import PaperSlip from '../components/PaperSlip.vue';
+import { L, atPlace, placeLine, play, isPublic, toggleHeard, toggleFav, isFav, title, laterOf, addLater, removeLater, dropEcho, say } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
 
 const route = useRoute(), router = useRouter();
@@ -24,6 +25,19 @@ const photos = ref([]);
 const sleeve = computed(() => photos.value.find((p) => p.state === 'ok'));
 const playingHere = computed(() => L.playing && L.playing.placeId === pid.value ? L.playing : null);
 const neighbors = computed(() => L.places.filter((p) => p.z === place.value?.z && p.id !== pid.value));
+// 「后来」：正在放的这张盘旁边叠着的纸签（最新在上）；我的盘多一颗「写一句后来」。
+const laters = computed(() => { void L.version; return playingHere.value ? laterOf(playingHere.value.id) : []; });
+const writing = ref(false), draft = ref(''), laterErr = ref(''), sticking = ref(false);
+const canWrite = computed(() => !!playingHere.value && playingHere.value.mine && playingHere.value.tier === 'real' && !playingHere.value.local && laters.value.length < 5);
+function beginLater() { writing.value = true; draft.value = ''; laterErr.value = ''; }
+async function stick() {
+  laterErr.value = '';
+  sticking.value = true;
+  try { await addLater(playingHere.value, draft.value); writing.value = false; draft.value = ''; say('贴上了。原声没动，这条叠在旁边。'); }
+  catch (x) { laterErr.value = x.message; }
+  sticking.value = false;
+}
+async function dropLater(x) { if (await removeLater(x.id)) say('这条后来删掉了。'); }
 async function loadPhotos() {
   photos.value = [];
   const r = await request('GET', `/places/${pid.value}/photos`);
@@ -32,12 +46,22 @@ async function loadPhotos() {
 watch(pid, (v) => {
   if (!L.placeById.has(v)) { router.replace('/'); return; }
   loadPhotos();
+  // 从「我的」点「回头听听」过来：网址里带着要放的那张，直接放它
+  const want = route.query.play && all.value.find((x) => x.id === route.query.play);
+  if (want) { play(want); return; }
   // 进来就放这里最新的一张（没有就放史料），但不改正在放的、别处的那张以外的东西
   if (!L.playing || L.playing.placeId !== v) {
     const e = voices.value.find((x) => x.tier === 'real' && x.mine) || real.value[0] || voices.value[0] || past.value[0];
     if (e) play(e, { auto: false });
   }
 }, { immediate: true });
+// 云上的盘可能比页面晚一步到：等它到了再放，别让「回头听听」落空
+watch(() => [route.query.play, L.version], () => {
+  const id = route.query.play;
+  if (!id || (L.playing && L.playing.id === id)) return;
+  const e = all.value.find((x) => x.id === id);
+  if (e) play(e);
+});
 const n = (k) => all.value.filter((e) => e.tier === k).length;
 </script>
 
@@ -60,6 +84,22 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
         <button type="button" class="btn small" :class="{ on: playingHere.heardByMe }" @click="toggleHeard(playingHere)">我也听过{{ playingHere.heard ? ` · ${playingHere.heard}` : '' }}</button>
         <button type="button" class="btn small ghost" :aria-pressed="isFav(playingHere)" @click="toggleFav(playingHere)">{{ isFav(playingHere) ? '已收藏' : '收藏' }}</button>
         <AddToAlbum :e="playingHere" />
+      </div>
+      <!-- 「后来」：原声不动，作者回头听时在旁边补的话，一张张纸签叠着 -->
+      <div v-if="playingHere.tier === 'real' && (laters.length || (canWrite && !writing) || writing)" class="laters">
+        <p class="laters-head">后来<span v-if="laters.length" class="n">{{ laters.length }}/5</span></p>
+        <div class="slip-stack">
+          <PaperSlip v-for="x in laters" :key="x.id" :id="x.id" :text="x.text" :at="x.at" :days-after="x.daysAfter" :mine="x.mine" @remove="dropLater(x)" @report="dropEcho(x)" />
+        </div>
+        <button v-if="canWrite && !writing" type="button" class="btn small ghost" @click="beginLater">写一句后来</button>
+        <form v-if="writing" class="later-form" @submit.prevent="stick">
+          <label class="field"><span>后来 <span class="fine">最多 80 字</span></span>
+            <textarea v-model="draft" class="input later-input" maxlength="80" rows="3" placeholder="回头听这一段，你想说点什么？"></textarea>
+          </label>
+          <div class="later-meta"><span class="fine">原声不会改，后来会一条条叠在它旁边。</span><span class="count num">{{ draft.length }}/80</span></div>
+          <p class="err" role="alert">{{ laterErr }}</p>
+          <div class="row"><button type="submit" class="btn small" :disabled="sticking || !draft.trim()">贴上</button><button type="button" class="btn small ghost" @click="writing = false">算了</button></div>
+        </form>
       </div>
     </template>
 
@@ -108,4 +148,16 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
 .frame img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; border-radius: 2px; }
 .frame .tier { position: absolute; left: 4px; bottom: 4px; background: var(--paper); }
 .chip { text-decoration: none; }
+/* 后来：最新的一张在上，小幅错落 */
+.laters { margin: 16px 0 0; }
+.laters-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font: 600 13px/1.4 var(--f-ui); letter-spacing: .08em; color: var(--ink-2); }
+.laters-head .n { font-weight: 400; font-size: 11px; letter-spacing: .04em; opacity: .7; }
+.slip-stack { display: grid; margin: 0 0 10px; }
+.slip-stack > * + * { margin-top: -6px; }
+.slip-stack > *:nth-child(2n) { margin-left: 10px; }
+.slip-stack > *:nth-child(3n) { margin-right: 6px; }
+.later-form { margin: 10px 0 0; padding: 14px; border-radius: 4px; background: var(--wash); }
+.later-input { height: auto; min-height: 76px; padding: 10px 12px; line-height: 1.6; resize: vertical; }
+.later-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 6px 0 2px; }
+.later-meta .count { font-size: 11px; color: var(--ink-2); }
 </style>
