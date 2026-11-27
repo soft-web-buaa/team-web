@@ -37,6 +37,7 @@ import { createAuth } from './auth.mjs';
 import crypto from 'node:crypto';
 
 const KEY_RE = /^[0-9a-f]{16}$/;
+const GATHER = 'gather';   // 采集入馆的盘挂在这个键上：不是 16 位十六进制，任何设备都冒充不了
 const ID = { disc: /^ds-[a-z0-9-]{6,40}$/, echo: /^ec-[a-z0-9-]{6,40}$/, photo: /^ph-[a-z0-9-]{6,40}$/ };
 const PLACES = new Set(Array.from({ length: 16 }, (_, i) => `XY${String(i + 1).padStart(2, '0')}`));
 export const DISC = { maxSec: 10.5, minSec: 0.8, maxBytes: 1100 * 1024, noteMax: 40, perMin: 3, perDay: 30, capsuleMaxDays: 400 };
@@ -95,7 +96,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
     return {
       id: d.id, placeId: d.placeId, at: d.at, slot: d.slot, hour: d.hour, semester: d.semester, week: d.week, seconds: d.seconds, db: d.db ?? null,
       note: d.note || '', author: author(d.author), visibility: d.visibility, capsuleUntil: d.capsuleUntil || null,
-      locked: !!locked(d), mine, tier: 'real', ...extra,
+      locked: !!locked(d), mine, tier: 'real', ...(d.src ? { src: { by: d.src.by, spot: d.src.spot || '' } } : {}), ...extra,
     };
   }
   function cleanAuthor(a, key) {
@@ -215,6 +216,38 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
           await store.put('photos', { ...x, status: st });
           return ok({});
         }
+        // 采集入馆：组员在校园里录的声音。和用户刻的一样是「真实」，但时刻用录下的那一刻（可以是几天前），
+        // 不挂在谁的设备上（谁都删不了，只有口令能撤），采集人与同意写进 src，页面上署「采集」。
+        if (method === 'POST' && path === '/api/admin/discs') {
+          const b = body || {};
+          if (!ID.disc.test(String(b.id))) return err(400, '声片编号格式不对。');
+          const prev = await store.get('discs', b.id);
+          if (prev) return prev.key === GATHER ? ok({ disc: discView(prev, ''), again: true }) : err(409, '这个编号已被用过。');
+          if (!PLACES.has(b.placeId)) return err(400, '地点编号不对。');
+          const s = b.src || {};
+          const by = cleanField(s.by, NAME_MAX.name);
+          if (!by || s.consent !== true) return err(400, '采集入馆要写采集人，并确认采集人同意。');
+          const ct = Date.parse(b.at);
+          if (!Number.isFinite(ct) || ct > now() + 60_000 || ct < Date.parse('2020-01-01T00:00:00Z')) return err(400, '录下的时刻不对。');
+          const note = String(b.note || '').trim();
+          if (note) { const bad = validateLine(note, DISC.noteMax); if (bad) return err(400, `一句话：${bad}`); }
+          const audio = b64(b.audio);
+          if (!audio || audio.length > DISC.maxBytes) return err(400, '声音文件缺失或太大。');
+          const w = inspectWav(audio);
+          if (!w.ok) return err(400, w.error);
+          const at = new Date(ct).toISOString(), h = hourOf(at), sem = semesterOf(at, calendar);
+          const ref = await store.putFile(`discs/${b.id}.wav`, audio, 'audio/wav');
+          const d = { id: b.id, key: GATHER, placeId: b.placeId, at, hour: Math.round(h * 100) / 100, slot: slotOfHour(h), semester: sem.key, week: sem.week, seconds: Math.round(w.seconds * 100) / 100, db: w.db,
+            note, author: null, visibility: 'public', capsuleUntil: null, status: 'ok', audio: ref, src: { by, file: cleanField(s.file, 80), spot: cleanField(s.spot, 12), consent: true }, createdAt: iso() };
+          await store.put('discs', d);
+          return ok({ disc: discView(d, '', { heard: 0, echoes: 0 }) }, 201);
+        }
+        if (method === 'DELETE' && (m = path.match(/^\/api\/admin\/discs\/(ds-[a-z0-9-]{6,40})$/))) {
+          const d = await store.get('discs', m[1]);
+          if (!d) return err(404, '没有这张声片。');
+          await dropDisc(d);
+          return ok({});
+        }
         return err(404, '没有这个接口。');
       }
 
@@ -298,11 +331,7 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
         const d = await store.get('discs', m[1]);
         if (!d) return err(404, '没有这张声片。');
         if (d.key !== key) return err(403, '只有刻它的人能删。');
-        for (const x of await store.list('echoes', { discId: d.id })) { if (x.photoId) await dropPhoto(x.photoId); await store.del('echoes', x.id); }
-        for (const x of await store.list('heard', { discId: d.id })) await store.del('heard', x.id);
-        for (const x of await store.list('tracks', { soundId: d.id })) await store.del('tracks', x.id);
-        await store.delFile(d.audio).catch(() => {});
-        await store.del('discs', d.id);
+        await dropDisc(d);
         return ok({});
       }
       if (method === 'POST' && (m = path.match(/^\/api\/discs\/(ds-[a-z0-9-]{6,40}|concept-\d{3}|arc-[a-z0-9-]{3,40})\/heard$/))) {
@@ -723,6 +752,14 @@ export function createApi({ store, now = () => Date.now(), review = false, admin
     await store.delFile(p.thumb).catch(() => {});
     await store.delFile(p.full).catch(() => {});
     await store.del('photos', id);
+  }
+  /** 真删一张盘：回声（连照片）、我也听过、合辑里的那一段、声音文件，一起删。 */
+  async function dropDisc(d) {
+    for (const x of await store.list('echoes', { discId: d.id })) { if (x.photoId) await dropPhoto(x.photoId); await store.del('echoes', x.id); }
+    for (const x of await store.list('heard', { discId: d.id })) await store.del('heard', x.id);
+    for (const x of await store.list('tracks', { soundId: d.id })) await store.del('tracks', x.id);
+    await store.delFile(d.audio).catch(() => {});
+    await store.del('discs', d.id);
   }
   return { handle };
 }

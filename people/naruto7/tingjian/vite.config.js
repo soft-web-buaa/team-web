@@ -7,6 +7,11 @@ import { fileStore } from './server/store-file.mjs';
 import { nodeHandler } from './server/http.mjs';
 import { localLogin } from './server/mail.mjs';
 
+// 审核口令：和线上一样从 .env 读（只读这一个键，不进页面）。采集入馆 scripts/gather.mjs 要用它。
+function envFile(k) {
+  try { const l = fs.readFileSync(path.resolve('.env'), 'utf8').split(/\r?\n/).find((x) => x.startsWith(`${k}=`)); return l ? l.slice(k.length + 1).trim() : ''; } catch { return ''; }
+}
+
 // 开发与预览时自带 /api（本机文件存储，数据在 .data/）。构建出来的静态文件里没有它：线上的 /api 是 CloudBase 云函数。
 function localApi() {
   let handler = null;
@@ -14,7 +19,7 @@ function localApi() {
     const ready = (async () => {
       const calendar = JSON.parse(fs.readFileSync(path.resolve('public/data/calendar.json'), 'utf8'));
       const dataDir = path.resolve(process.env.KS_DATA || '.data');
-      handler = nodeHandler(createApi({ store: fileStore(dataDir), review: process.env.KS_REVIEW === '1', adminToken: process.env.KS_ADMIN_TOKEN || '', calendar, login: await localLogin(dataDir) }));
+      handler = nodeHandler(createApi({ store: fileStore(dataDir), review: process.env.KS_REVIEW === '1', adminToken: process.env.KS_ADMIN_TOKEN || envFile('KS_ADMIN_TOKEN'), calendar, login: await localLogin(dataDir) }));
     })();
     server.middlewares.use(async (req, res, next) => { if (!req.url.startsWith('/api/')) return next(); await ready; return handler(req, res); });
   };

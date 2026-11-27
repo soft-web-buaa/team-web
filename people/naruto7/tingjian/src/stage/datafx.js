@@ -75,6 +75,7 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
     uR0: { value: new THREE.Color() }, uR1: { value: new THREE.Color() }, uR2: { value: new THREE.Color() },
     uMood: { value: 0 }, uT: { value: 0 }, uScale: { value: 800 }, uDark: { value: 1 }, uK: { value: 0 },
     uH: { value: roof.slice() }, uBase: { value: 0 }, uAmp: { value: 0 }, uMaxPx: { value: lite ? 9 : 16 },
+    uDensity: { value: 1 }, uSize: { value: 1 }, uLift: { value: 0 },   // 社区原始地图：星少一些、小一些、飘高一些，不压住楼
   };
   const goal = new Array(N).fill(0);
   let form = null, k = 0;
@@ -108,7 +109,7 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
     g.setAttribute('aA', new THREE.Float32BufferAttribute(att, 3));
     g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
     const mat = pointsMat(U, /* glsl */ `
-      attribute vec3 aA; attribute float aSeed; uniform float uH[16]; uniform float uMaxPx;
+      attribute vec3 aA; attribute float aSeed; uniform float uH[16]; uniform float uMaxPx, uDensity, uSize, uLift;
       varying vec3 vCol; varying float vA;
       float roofOf(int i) { float h = 0.0; for (int k = 0; k < 16; k++) if (k == i) h = uH[k]; return h; }
       void main() {
@@ -121,7 +122,7 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
           // 绕自己那一处慢慢转：越靠里转得越快（像一团星云）
           float rr = length(off.xz), ang = uT * (0.06 + 0.05 * aSeed) / (0.5 + rr * 0.35);
           vec2 xz = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * off.xz;
-          p = vec3(Pi.x + xz.x * R, Hi + 26.0 + R * (0.42 + 0.3 * off.y), Pi.y + xz.y * R);
+          p = vec3(Pi.x + xz.x * R, Hi + 26.0 + uLift + R * (0.42 + 0.3 * off.y), Pi.y + xz.y * R);
           p.y += sin(uT * 0.5 + aSeed * 6.28) * 2.0;
           float core = exp(-rr * rr * 0.6);
           vA = smoothstep(rank, rank + 0.06, w) * (0.35 + 0.65 * core) * (0.45 + 0.55 * w);
@@ -135,14 +136,15 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
           vec2 a = Pi, b = Pj; vec2 d = b - a; vec2 nrm = normalize(vec2(-d.y, d.x) + 1e-5);
           float bow = sin(t * 3.14159);
           vec2 xz = mix(a, b, t) + nrm * (off.x * 18.0 + bow * 14.0 * (aSeed - 0.5));
-          float y = mix(Hi, Hj, t) + 30.0 + bow * (18.0 + 30.0 * w) + off.y * 8.0;
+          float y = mix(Hi, Hj, t) + 30.0 + uLift + bow * (18.0 + 30.0 * w) + off.y * 8.0;
           p = vec3(xz.x, y, xz.y);
           vA = smoothstep(rank, rank + 0.1, w * 1.4) * 0.55 * bow;
           col = ramp(w * 0.6, mix(Ci, Cj, t));
         }
         vCol = col;
+        if (aSeed > uDensity) vA = 0.0;                          // 疏密：只留前 uDensity 那么多颗
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = clamp((flow ? 5.0 : 6.0 + 5.0 * aSeed) * uScale / -mv.z, 1.5, uMaxPx);
+        gl_PointSize = vA <= 0.0 ? 0.0 : clamp((flow ? 5.0 : 6.0 + 5.0 * aSeed) * uSize * uScale / -mv.z, 1.5, uMaxPx * uSize);
         gl_Position = projectionMatrix * mv;
       }`);
     const pts = new THREE.Points(g, mat);
@@ -288,8 +290,12 @@ export function createDataFx({ scene, campus, TILE_TOP, EX, lite = false }) {
   group.add(nebula, lights, surface, stems, fill.grp);
 
   /** 新的目标：values Map(pid → 数)，colors Map(pid → '#hex' 或 null)。form 为 null = 收起来。 */
-  function set({ form: f, values, colors = null, metric = 'count', dark = true }) {
+  function set({ form: f, values, colors = null, metric = 'count', dark = true, plain = false }) {
     form = f;
+    // 原始地图（社区默认）：星云只是「这里有人」的气氛，不是数据图——疏一些、小一些、飘到楼顶上面
+    U.uDensity.value = plain ? (dark ? 0.42 : 0.3) : 1;
+    U.uSize.value = plain ? 0.8 : 1;
+    U.uLift.value = plain ? 34 : 0;
     const vmax = Math.max(1e-6, ...places.map((p) => values.get(p.id) || 0));
     places.forEach((p, i) => { goal[i] = Math.sqrt((values.get(p.id) || 0) / vmax); U.uC.value[i].set((colors && colors.get(p.id)) || '#ffffff'); });
     const rp = (RAMPS[metric] || RAMPS.count)[dark ? 'dark' : 'light'];

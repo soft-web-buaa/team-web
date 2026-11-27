@@ -236,7 +236,7 @@ export function setData(d) {
   if (!built) return;
   const fx = !!d && FX_FORMS.has(d.form);
   const nightAhead = S.night || clock.tokens.dark;
-  G.fx.set(fx ? { form: d.form, values: d.values, colors: d.colors, metric: d.metric, dark: nightAhead } : { form: null, values: new Map() });
+  G.fx.set(fx ? { form: d.form, values: d.values, colors: d.colors, metric: d.metric, dark: nightAhead, plain: !!d.plain } : { form: null, values: new Map() });
   const on = !!d && GROUND_FORMS.has(d.form);
   if (on) {
     const t = clock.tokens;
@@ -467,6 +467,126 @@ export function cutFeed(x) {
 export function cutEnd() { if (!cut) return null; const out = cut.cutter.finish(); cut = null; return out; }
 export const cutting = () => !!cut;
 
+// —— 那一晚：一个人一个晚上在校园里走过、录下的几处。地上一条虚线连起来（只画已经走过的那一段），
+//    一颗示波黄的光点从上一处走到这一处；每到一处，那里的签亮起来。stops = [{ pid, label }]；at = 当前走到第几处 ——
+const walk = { group: null, ribbon: null, dot: null, halo: null, marks: [], pts: [], at: -1, from: null, t0: 0, dur: 1, on: false, path: [] };
+const WALK_W = 7;   // 路线的宽（米）
+function walkPos(pid) {
+  const o = G.pinObj.get(pid);
+  return o ? new THREE.Vector3(o.group.position.x, TILE_TOP + 3, o.group.position.z) : null;
+}
+/** 一条贴地的带子：沿折线两侧各偏 w/2，uv.x 是累计长度（米），着色器里用它画虚线和流动 */
+function ribbonGeo(pts, w) {
+  const pos = [], uv = [], idx = [];
+  let acc = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz) || 1;
+    const nx = -dz / l, nz = dx / l;
+    if (i) acc += pts[i].distanceTo(pts[i - 1]);
+    pos.push(pts[i].x + nx * w / 2, pts[i].y, pts[i].z + nz * w / 2, pts[i].x - nx * w / 2, pts[i].y, pts[i].z - nz * w / 2);
+    uv.push(acc, 0, acc, 1);
+    if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+export function setWalk(stops) {
+  if (!built) return;
+  if (!walk.group) {
+    walk.group = new THREE.Group();
+    const rmat = new THREE.ShaderMaterial({
+      transparent: true, depthTest: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
+      uniforms: { uCol: { value: new THREE.Color(COL.scope) }, uT: { value: 0 }, uLen: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `varying vec2 vUv; uniform vec3 uCol; uniform float uT, uLen;
+        void main(){
+          float across = 1.0 - abs(vUv.y * 2.0 - 1.0);            // 中间实、两边虚
+          float core = smoothstep(0.35, 0.75, across);
+          float dash = step(0.42, fract((vUv.x - uT * 26.0) / 16.0)); // 往前流的虚线
+          float tail = smoothstep(0.0, 40.0, vUv.x) * (0.55 + 0.45 * smoothstep(uLen - 160.0, uLen, vUv.x)); // 起点淡入，越近走到的越亮
+          float a = (0.28 * across + 0.72 * core * dash) * tail;
+          gl_FragColor = vec4(uCol * (1.0 + 0.6 * core), a);
+        }`,
+    });
+    walk.ribbon = new THREE.Mesh(new THREE.BufferGeometry(), rmat);
+    walk.ribbon.renderOrder = 5;
+    walk.dot = new THREE.Mesh(new THREE.SphereGeometry(6, 20, 14), new THREE.MeshBasicMaterial({ color: '#FFF4CC', toneMapped: false, depthTest: false }));
+    walk.dot.renderOrder = 7;
+    walk.halo = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 64), new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false, toneMapped: false }));
+    walk.halo.rotation.x = -Math.PI / 2; walk.halo.renderOrder = 6;
+    walk.group.add(walk.ribbon, walk.dot, walk.halo);
+    G.scene.add(walk.group);
+  }
+  for (const m of walk.marks) walk.group.remove(m);
+  walk.marks = [];
+  walk.pts = (stops || []).map((x) => walkPos(x.pid)).filter(Boolean);
+  // 一处一个落脚圈：同一处录了好几段，只画一个
+  const seen = new Set();
+  for (const p of walk.pts) {
+    const k = `${Math.round(p.x)},${Math.round(p.z)}`;
+    if (seen.has(k)) continue; seen.add(k);
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.72, 1, 48), new THREE.MeshBasicMaterial({ color: COL.scope, transparent: true, opacity: 0, side: THREE.DoubleSide, depthTest: false, toneMapped: false }));
+    m.rotation.x = -Math.PI / 2; m.position.copy(p); m.renderOrder = 6; m.userData.k = k; m.userData.hit = 0;
+    walk.group.add(m); walk.marks.push(m);
+  }
+  walk.on = walk.pts.length > 0;
+  walk.at = -1; walk.from = null; walk.path = [];
+  walk.group.visible = walk.on;
+  S.walking = walk.on;
+  if (walk.on && revealed && S.mode !== 'place') {   // 镜头退到刚好装下整条路线，俯得多一点：路线才读得出来
+    const c = walk.pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(walk.pts.length);
+    const r = Math.max(160, ...walk.pts.map((p) => Math.hypot(p.x - c.x, p.z - c.z)));
+    play([{ to: { t: V(c.x, TILE_TOP, c.z), d: Math.max(700, fitDist(r * 1.35 + 60)), polar: 0.58, az: poseNow().az }, dur: 1400, ease: 'inOut' }]);
+  }
+}
+/** 走到第 i 处：光点用 dur 毫秒从上一处走过去，带子跟着长。 */
+export function walkTo(i, dur = 1600) {
+  if (!walk.on || !walk.pts[i]) return;
+  if (walk.at >= 0) walk.path.push(walk.dot.position.clone());
+  walk.from = walk.at >= 0 ? walk.dot.position.clone() : walk.pts[i].clone();
+  walk.at = i; walk.t0 = performance.now(); walk.dur = reduced ? 1 : Math.max(1, dur);
+}
+export function endWalk() {
+  const was = walk.on;
+  if (walk.group) walk.group.visible = false;
+  walk.on = false; walk.at = -1; S.walking = false;
+  if (was && revealed && S.mode !== 'place') play([{ to: POSES[S.mode] || POSES.home, dur: 1200, ease: 'inOut' }]);
+}
+function stepWalk(now) {
+  if (!walk.on || walk.at < 0) { if (walk.group) walk.group.visible = false; return; }
+  walk.group.visible = S.mode !== 'place';
+  const k = Math.min(1, (now - walk.t0) / walk.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+  const goal = walk.pts[walk.at];
+  walk.dot.position.lerpVectors(walk.from, goal, e);
+  const pts = walk.path.concat([walk.dot.position.clone()]).filter((p, i, a) => !i || p.distanceTo(a[i - 1]) > 0.5);
+  if (pts.length > 1) {
+    walk.ribbon.geometry.dispose();
+    walk.ribbon.geometry = ribbonGeo(pts, WALK_W);
+    let len = 0; for (let i = 1; i < pts.length; i++) len += pts[i].distanceTo(pts[i - 1]);
+    walk.ribbon.material.uniforms.uLen.value = len;
+    walk.ribbon.visible = true;
+  } else walk.ribbon.visible = false;
+  walk.ribbon.material.uniforms.uT.value = reduced ? 0 : now / 1000;
+  const sc = Math.max(0.7, G.camera.position.distanceTo(controls.target) / 1400);
+  walk.dot.scale.setScalar(sc);
+  const ph = reduced ? 0.5 : ((now / 1000) * 0.7) % 1;
+  walk.halo.position.copy(walk.dot.position);
+  walk.halo.scale.setScalar((9 + ph * 30) * sc);
+  walk.halo.material.opacity = 0.7 * (1 - ph);
+  // 落脚圈：走到过的亮着，正在的那一处最亮
+  const here = `${Math.round(goal.x)},${Math.round(goal.z)}`;
+  for (const m of walk.marks) {
+    if (k >= 1 && m.userData.k === here) m.userData.hit = 1;
+    const tgt = m.userData.k === here && k >= 1 ? 0.95 : m.userData.hit ? 0.45 : 0.12;
+    m.material.opacity += (tgt - m.material.opacity) * 0.12;
+    m.scale.setScalar(18 * sc);
+  }
+}
+
 // —— 回声针：钉在某一秒的话，立在盘面刻纹上那一秒的位置，跟着盘转 ——
 const echoMarks = { group: null, items: [] };
 let MARK_GEO = null;
@@ -557,6 +677,7 @@ const sunLast = new THREE.Vector3();
 const tmpC = new THREE.Color();
 // 夜观：数据地图选「夜观色」时，舞台的光与背景渐变到入夜的蓝紫（21:30），页面的纸照旧跟着钟点。离开就渐变回来
 const NIGHT_T = tokensAt(21.5);
+const MOON = new THREE.Color().setRGB(0.46, 0.58, 0.86), MOON_GROUND = new THREE.Color().setRGB(0.03, 0.045, 0.08);
 let nightK = 0, mixed = null;
 const lerpA = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 function toks() {
@@ -578,14 +699,18 @@ function stepLight(now) {
   if (G.sun.position.distanceToSquared(sunLast) > 4) { sunLast.copy(G.sun.position); shadowDirty = true; }
   G.sun.intensity = L.i;
   G.sun.color.setRGB(L.col[0] / 255, L.col[1] / 255, L.col[2] / 255, THREE.SRGBColorSpace);
+  G.sun.color.lerp(MOON, L.night * 0.4);   // 夜里这盏就是月亮：token 的紫只管纸和背景，打在楼顶上的光偏冷蓝
   const u = G.platterMat.uniforms;
   u.uSunDir.value.copy(G.sun.position).normalize();
   u.uSunCol.value.set(G.sun.color.r, G.sun.color.g, G.sun.color.b).multiplyScalar(L.i);
   const hexCol = toHex(L.col);
   const rig = rigFor(hexCol);
   u.uBoxCol.value.forEach((v, i) => v.set(rig.boxes[i][0], rig.boxes[i][1], rig.boxes[i][2]).multiplyScalar(G.STUDIO[i].i));
-  G.hemi.color.setRGB(rig.sky[0], rig.sky[1], rig.sky[2]);
-  G.hemi.groundColor.setRGB(rig.ground[0], rig.ground[1], rig.ground[2]);
+  // 月光（2026-11-27 夜景写实）：夜里的主光色偏紫（#A8A2E0），天光跟着它，整城是一层均匀的紫。
+  // 月下的天光其实是冷蓝的，暖的只有窗和路灯——入夜时把半球光的天色往冷蓝拉，地面反光也跟着冷，冷暖才分得开
+  const mk = L.night * 0.55;
+  G.hemi.color.setRGB(rig.sky[0], rig.sky[1], rig.sky[2]).lerp(MOON, mk);
+  G.hemi.groundColor.setRGB(rig.ground[0], rig.ground[1], rig.ground[2]).lerp(MOON_GROUND, mk);
   G.hemi.intensity = L.hemi;
   // 环境贴图（金属件、楼面上的软箱反射）：光色变了才重烘，最多 0.7 秒一次（PMREM 一次几十毫秒）
   if (hexCol !== envHex && now - envT > 700) {
@@ -601,7 +726,7 @@ function stepLight(now) {
   G.labelMat.emissiveIntensity = 0.55 * L.night;
   const placeDim = S.mode === 'place' ? 0.62 : 1;
   u.uBright.value = L.plat * placeDim;
-  G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.5 * L.night; });
+  G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.75 * L.night; });   // 路灯下那一圈暖光：和冷的月光对着，灯下才像有灯
   // 操场（2026-11-26 组员：整站变色时操场一直不变，突兀）：草皮、塑胶跑道的饱和色在暗光下仍然显眼，
   // 画线是不受光的白线。入夜时两种场地色往这个钟点的天光色里褪、压暗；画线跟着天光的亮度走
   const nk = L.night, sunK = Math.min(1, L.i / 2.6);
@@ -888,13 +1013,13 @@ function frame(now) {
     o.lift += ((hov ? 6 : 0) - o.lift) * (reduced ? 1 : 0.14);
     o.group.position.y = o.lift;
     const data = S.mode === 'community' && !!S.data && !S.data.plain;   // plain：社区的原始地图，校园照旧上色，只在上空加星云
-    const dim = inPlace || (S.mode === 'mine') || data;
+    const dim = inPlace || (S.mode === 'mine') || data || !!S.walking;   // 那一晚：城市压暗，路线才浮得出来
     const k = reduced ? 1 : 0.12;
     // 数据地图：校园褪成一张素纸（亮时浅、暗时深），地面上的图才压得住
     const paleC = S.data && S.data.form === 'lights' ? DATA_NIGHT : toks().dark ? DATA_DARK : DATA_LIGHT;
     for (const t of o.tints) t.mat.color.lerp(data ? paleC : dim && !sel ? t.dim : t.on, k);
     // 夜景给楼留一点点窗灯（其余数据画法照旧关掉）：楼的轮廓和体块才看得出
-    const winGoal = data && FX_FORMS.has(S.data.form) ? (S.data.form === 'lights' && S.night ? 0.06 : 0) : dim && !sel ? 0.25 : 1;
+    const winGoal = data && FX_FORMS.has(S.data.form) ? (S.data.form === 'lights' && S.night ? 0.06 : 0) : S.walking ? 0.12 : dim && !sel ? 0.25 : 1;
     o.bldMat.userData.win.value += (winGoal - o.bldMat.userData.win.value) * k;
   });
   // 地点楼：提起来、垫上纸台座；离开时落回原位
@@ -970,6 +1095,7 @@ function frame(now) {
   u.uAngle.value = spin + G.ARM.psi;
   G.rim.rotation.y = -u.uAngle.value;
   stepEchoMarks();
+  stepWalk(now);
   if (G.powerLed) G.powerLed.material.emissiveIntensity += ((motorOn || cut ? 2.4 : 0.15) - G.powerLed.material.emissiveIntensity) * 0.2;
   const lvl = live && current ? Math.min(1, current.env[Math.floor(play * 50)] * 5 || 0) : 0;
   G.contact.material.opacity = armLift < 1.5 && (live || cut) ? 0.35 + 0.65 * (cut ? 0.5 : lvl) : 0;

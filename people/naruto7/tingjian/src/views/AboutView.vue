@@ -17,12 +17,12 @@ const c = computed(() => { void L.version; return siteCounts(); });
     <p class="h3">现在有多少</p>
     <table class="tbl">
       <tbody>
-        <tr><th>真实录音</th><td class="num">{{ c.real }}</td><td>同学在某处某刻亲手刻的。只有它算人数：{{ c.people }} 位留了落款。</td></tr>
+        <tr><th>真实录音</th><td class="num">{{ c.real }}</td><td>同学在某处某刻亲手录的：{{ c.gathered }} 段是组员在球场、场馆、食堂实地采集的（署「采集」，写明采集人），其余是在页面上刻的。只有它算人数：{{ c.people }} 位参与者。</td></tr>
         <tr><th>史料</th><td class="num">{{ c.archival }}</td><td>口述北航、2008 奥运举重、北航之声、绿园实拍。标「史料」，每段写出处，不算人数。</td></tr>
         <tr><th>示意</th><td class="num">{{ c.concept }}</td><td>页面现场合成的声音，用来展示一个地方多年累积的样子。不挂落款、不编来历、不算人数。</td></tr>
       </tbody>
     </table>
-    <p class="fine">计数只有一个出口（刻声 tier.js 的 counts）。页面上任何一个数都从这里来。</p>
+    <p class="fine">计数只有一个出口（刻声 tier.js 的 counts，外加采集人）。页面上任何一个数都从这里来。</p>
 
     <p class="h3">颜色</p>
     <p class="fine">全站的颜色由一个钟点决定：此刻、你选的钟点、或者正在放的那张录下的钟点。三维里的太阳、窗灯和页面的纸、墨用的是同一个函数。正文对纸全天保持 7:1 以上的对比度。</p>

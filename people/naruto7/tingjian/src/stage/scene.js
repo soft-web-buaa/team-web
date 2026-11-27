@@ -299,8 +299,22 @@ function windowize(mat, { detail = false } = {}) {
             roughnessFactor = mix(roughnessFactor, 0.34, ink * 0.7);
             metalnessFactor = mix(metalnessFactor, 0.1, ink * 0.5);
             diffuseColor.rgb *= 1.0 - line * side * fade * 0.16 - (1.0 - fade) * 0.06 * side;
-            float lit = step(wHash(cell + vFac.w), uLit) * win;
-            totalEmissiveRadiance += vec3(1.0, 0.74, 0.42) * lit * uNight * uWin * (2.0 + 2.4 * wHash(cell + 3.1));
+            // 亮窗（2026-11-27 夜景写实）：原来每扇都是同一种橙、均匀撒开，像点阵。真的楼夜里是——
+            //  · 一层一层地亮：同一层的几间常常一起开着（自习、同一个课题组），按「层 + 四间一段」再掷一次骰子，亮的聚成一串；
+            //  · 灯不一样：宿舍（住宅样式）是暖的台灯与白炽，教学办公楼是冷白的日光灯管；每栋里再混一点另一种；
+            //  · 有的拉着帘：只透一层很淡的琥珀色。
+            float run = wHash(vec3(floor(cs / 4.0), cell.y, cell.z) + vFac.w * 3.7);
+            // 阈值按这一段的骰子在 0.4–1.6 倍 uLit 之间：run 均匀，阈值的期望仍是 uLit（uLit ≤ 0.625 时不截断），
+            // 所以整城亮窗的比例还是 clock.js 里的 lit，只是聚成了串
+            float lit = step(wHash(cell + vFac.w), uLit * (0.4 + 1.2 * run)) * win;
+            float home = step(0.1, fract(vFac.z));                       // 住人的楼（dress 时在 style 上加了 0.25）
+            float warmK = mix(0.18, 0.86, home);                          // 这栋楼的灯有多大比例是暖的
+            float warm = step(wHash(cell + 9.7), warmK);
+            float drawn = step(0.72, wHash(cell + 1.9));                  // 拉帘
+            vec3 lampC = mix(vec3(0.78, 0.88, 1.0), vec3(1.0, 0.72, 0.4), warm);
+            lampC = mix(lampC, vec3(0.95, 0.6, 0.32), drawn);
+            float lampI = (2.0 + 2.4 * wHash(cell + 3.1)) * mix(1.0, 0.32, drawn) * mix(1.0, 0.86, 1.0 - warm);
+            totalEmissiveRadiance += lampC * lit * uNight * uWin * lampI;
           }
         }`);
   };
@@ -999,7 +1013,7 @@ function cardBuilding(b, zi, { detail = false } = {}) {
   }
   const seed = Math.min(0.999, Math.max(0, tintOf(key + '窗').dw * 16 + 0.5));
   const thin = b.o[4] < 90;                         // 宽不到 9 米的小房子：不倒角、不起女儿墙
-  out.push(dress(slab(pts, 0, H, { bevel: thin ? 0 : 0.35, holes }), wall, roof, [fc.floor, fc.bay, pool ? STYLE.none : fc.style, seed]));
+  out.push(dress(slab(pts, 0, H, { bevel: thin ? 0 : 0.35, holes }), wall, roof, [fc.floor, fc.bay, (pool ? STYLE.none : fc.style) + (b.f === 1 || b.f === 4 ? 0.25 : 0), seed]));   // +0.25：住人的楼（学生公寓、家属住宅），夜里灯偏暖；着色器取整 style 用 floor(z+0.5)，不受影响
   if (pool) return out;
   // 檐口：普通楼挑 0.45 米的一道纸边；五十年代那批挑 1.5 米，暗红的出檐下面一道黄
   const eOut = era ? (b.era === 'eave' ? 1.5 : 1.0) : 0.45, eH = era ? 1.5 : 0.7;

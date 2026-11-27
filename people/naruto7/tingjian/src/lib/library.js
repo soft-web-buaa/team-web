@@ -121,7 +121,7 @@ function upsertReal(d) {
   let e = byId.get(d.id);
   const p = L.placeById.get(d.placeId);
   const fields = { tier: 'real', placeId: d.placeId, place: p ? p.name : '', zoneId: p ? p.z : null, at: d.at, hour: d.hour, slot: d.slot, semester: d.semester, week: d.week, seconds: d.seconds, db: d.db ?? null,
-    note: d.note, author: d.author && (d.author.grade || d.author.dept || d.author.name) ? d.author : null, mine: d.mine, heard: d.heard || 0, heardByMe: !!d.heardByMe, echoN: d.echoes || 0,
+    note: d.note, author: d.author && (d.author.grade || d.author.dept || d.author.name) ? d.author : null, src: d.src || null, mine: d.mine, heard: d.heard || 0, heardByMe: !!d.heardByMe, echoN: d.echoes || 0,
     laterN: L.later[d.id] ? L.later[d.id].length : (d.laterN || 0),
     visibility: d.visibility, capsuleUntil: d.capsuleUntil, locked: d.locked, url: cloud.audioUrl(d.id), day: dayKey(d.at), local: false };
   if (e) Object.assign(e, fields);
@@ -168,13 +168,47 @@ export function countByPlace(test = () => true) {
 // ====================================================================================
 export const atPlace = (pid) => L.entries.filter((e) => e.placeId === pid);
 export const isPublic = (e) => !(e.tier === 'real' && (e.visibility === 'private' || e.locked));
-export function placeLine(pid) { return tallyText(counts(atPlace(pid).filter(isPublic))) || '这里还没有声音。'; }
-export function siteCounts() { return counts(L.entries.filter(isPublic)); }
+/** 计数：刻声的口径（只有真实算人数），再把采集人算进参与者（采集入馆的盘不挂落款，署「某某 采集」）。 */
+function tally(list) {
+  const c = counts(list);
+  const by = new Set(list.filter((e) => e.tier === 'real' && e.src && e.src.by).map((e) => e.src.by));
+  c.people += by.size; c.gathered = list.filter((e) => e.tier === 'real' && e.src).length;
+  return c;
+}
+export function placeLine(pid) { return tallyText(tally(atPlace(pid).filter(isPublic))) || '这里还没有声音。'; }
+export function siteCounts() { return tally(L.entries.filter(isPublic)); }
+/** 那一晚：同一个人（同一位采集人，或我自己）在同一个晚上、两小时之内接连录下的真实声音，至少三处、跨两个地点。
+ *  按时间排好，返回 [{ who, day, from, to, items }]，最新的在前。 */
+export function evenings() {
+  const groups = new Map();
+  for (const e of L.entries) {
+    if (e.tier !== 'real' || !isPublic(e) || !e.at || e.hour == null) continue;
+    const who = e.src && e.src.by ? `${e.src.by} 采集` : e.mine ? '我' : null;
+    if (!who) continue;
+    const k = `${who}|${dayKey(e.at)}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(e);
+  }
+  const out = [];
+  for (const [k, list] of groups) {
+    list.sort((a, b) => T(a) - T(b));
+    let run = [list[0]];
+    const flushRun = () => {
+      if (run.length >= 3 && new Set(run.map((x) => x.placeId)).size >= 2) out.push({ who: k.split('|')[0], day: run[0].day, from: run[0].hour, to: run.at(-1).hour, at: run[0].at, items: run });
+    };
+    for (const e of list.slice(1)) {
+      if (T(e) - T(run.at(-1)) <= 2 * 3600000) run.push(e); else { flushRun(); run = [e]; }
+    }
+    flushRun();
+  }
+  return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
 /** 一行署名：真实盘写落款；示意不写人；史料写出处。 */
 export function byline(e) {
   if (e.tier === 'mix') return `${e.mix.length} 个人的十秒`;
   if (e.tier === 'archival') return '史料';
   if (e.tier === 'synthetic') return '示意';
+  if (e.src && e.src.by) return `${e.src.by} 采集`;
   const s = e.author ? signature(e.author) : '';
   return [s && s !== '未落款' ? s : '没落款的人', e.mine ? '我' : ''].filter(Boolean).join(' · ');
 }
