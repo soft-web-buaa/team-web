@@ -81,7 +81,7 @@ function wav(pcm) {
 const token = flag('--post') || flag('--undo') ? adminToken() : '';
 if ((flag('--post') || flag('--undo')) && !token) { console.log('没有审核口令：在 .env 填 KS_ADMIN_TOKEN，或用环境变量传。'); process.exit(1); }
 const call = async (method, p, body) => {
-  const r = await fetch(api + p, { method, headers: { 'content-type': 'application/json', 'x-ks-admin': token }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(api + p, { method, headers: { 'content-type': 'text/plain;charset=utf-8', 'x-ks-admin': token }, body: body ? JSON.stringify(body) : undefined });
   let j = {}; try { j = await r.json(); } catch { /* 空 */ }
   return { status: r.status, json: j };
 };
