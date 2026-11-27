@@ -616,7 +616,10 @@ function stepLight(now) {
     z.lineMat.opacity = 0.85 - 0.45 * nk;
   }
   G.bloom.strength = 0.08 + 0.42 * L.night;
-  G.bloom.threshold = 1.9;          // 只让窗灯、路灯、示波黄发亮；唱臂的镀铬在月光下不该糊成一团
+  G.bloom.threshold = 1.9;          // 只让窗灯、路灯、示波黄发亮
+  // 唱盘顶面那圈金属边：平环像镜子，把月光整片反进镜头，峰值远超阈值，bloom 一放就是一团紫光。入夜压暗反射率、磨成缎面
+  G.lip.material.color.set('#D9DDE1').multiplyScalar(1 - 0.6 * L.night);
+  G.lip.material.roughness = 0.18 + 0.3 * L.night;
   const key = `${T.bg0.map(Math.round)}|${T.bg1.map(Math.round)}`;
   if (key !== bgKey) {
     bgKey = key;

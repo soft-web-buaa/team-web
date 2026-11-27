@@ -37,7 +37,7 @@ const heroObj = new Map();            // placeId → { group, pivot, base, size,
 const pickables = [];
 let waveTex = null, inscTex = null, inscCanvas = null;
 let platterMat = null, grooveTex = null, carriage = null, needleTip = null, ripples = [];
-let arm = null, contact = null, rim = null;
+let arm = null, contact = null, rim = null, lip = null;
 let pmrem = null;
 let composer = null, gtao = null, bloom = null, tiltH = null, tiltV = null, sun = null, hemi = null, labelMat = null;
 const U = { uNight: { value: 0 }, uLit: { value: 0 } };
@@ -658,7 +658,7 @@ function buildPlatter() {
   rim = new THREE.Mesh(new THREE.CylinderGeometry(PR, PR - 8, 34, 256, 1, true), metal);
   rim.position.y = -6 - 17;
   scene.add(rim);
-  const lip = new THREE.Mesh(new THREE.RingGeometry(RP, PR, 256, 1), new THREE.MeshStandardMaterial({ color: '#D9DDE1', metalness: 1, roughness: 0.18 }));
+  lip = new THREE.Mesh(new THREE.RingGeometry(RP, PR, 256, 1), new THREE.MeshStandardMaterial({ color: '#D9DDE1', metalness: 1, roughness: 0.18 }));
   lip.rotation.x = -Math.PI / 2;
   lip.position.y = -6;
   scene.add(lip);
@@ -1859,7 +1859,7 @@ export async function build(canvas, campusData, { tier: tn = 'mid', pause = asyn
   buildComposer(t);
   return {
     THREE, scene, camera, renderer, composer, gtao, bloom, tiltH, tiltV, sun, hemi, pmrem, labelMat, platterMat, grooveTex, waveTex, inscTex, inscCanvas,
-    zoneObj, pinObj, heroObj, pickables, ripples, nightMats, forest, seasonal, snowU, U, rim, arm, contact, needleTip, ARM, STUDIO, PLINTH,
+    zoneObj, pinObj, heroObj, pickables, ripples, nightMats, forest, seasonal, snowU, U, rim, lip, arm, contact, needleTip, ARM, STUDIO, PLINTH,
     armTo, studioEnv, paintBackdrop, get powerLed() { return powerLed; }, get shadowDisc() { return shadowDisc; }, campus,
   };
 }
