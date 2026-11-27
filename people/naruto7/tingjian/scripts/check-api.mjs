@@ -249,6 +249,29 @@ const raw = fs.readdirSync(dir2).filter((f) => f.endsWith('.json')).map((f) => f
 t('登记：库里不存学号原文、不存验证码原文、不存令牌原文', !raw.includes('21371234') && !raw.includes('2106123') && !raw.includes(v1.json.token) && !raw.includes(good));
 fs.rmSync(dir2, { recursive: true, force: true });
 
+// —— 采集入馆：组员在校园里录的声音，由审核口令收进馆藏（保留录下的时刻，不走限频，可撤下） ——
+{
+  const ADM = { 'x-ks-admin': 'adm' };
+  const src = { by: 'Sh1yuhang2008', file: '11月26日 19点 篮球场1.m4a', consent: true };
+  const one = (id, extra = {}) => ({ id, placeId: 'XY13', at: '2026-11-20T10:45:09Z', note: '篮球场', audio: wav(5), src, ...extra });
+  t('入馆：没有审核口令 403', (await call('POST', '/api/admin/discs', one('ds-sy-test-01'))).status === 403);
+  t('入馆：没写采集人同意 400', (await call('POST', '/api/admin/discs', one('ds-sy-test-01', { src: { by: 'x', consent: false } }), A, ADM)).status === 400);
+  t('入馆：录下的时刻在将来 400', (await call('POST', '/api/admin/discs', one('ds-sy-test-01', { at: new Date(T + 86400000).toISOString() }), A, ADM)).status === 400);
+  t('入馆：地点不对 400', (await call('POST', '/api/admin/discs', one('ds-sy-test-01', { placeId: 'XY99' }), A, ADM)).status === 400);
+  const g1 = await call('POST', '/api/admin/discs', one('ds-sy-test-01'), A, ADM);
+  t('入馆：201，时刻按录下的那一刻（北京 18:45，秋季学期）', g1.status === 201 && g1.json.disc.at === '2026-11-20T10:45:09.000Z' && Math.abs(g1.json.disc.hour - 18.75) < 0.01 && g1.json.disc.semester === '2026-2027-1' && g1.json.disc.slot === '晚');
+  t('入馆：再提交同一张是幂等的', (await call('POST', '/api/admin/discs', one('ds-sy-test-01'), A, ADM)).json.again === true);
+  let burst = true;
+  for (let i = 2; i <= 6; i++) burst = burst && (await call('POST', '/api/admin/discs', one(`ds-sy-test-0${i}`), A, ADM)).status === 201;
+  t('入馆：一口气收五张不被限频', burst);
+  const lst = (await call('GET', '/api/discs', null, C)).json.discs.find((d) => d.id === 'ds-sy-test-01');
+  t('入馆：大家都看得到，是真实，带采集人，不算谁的', !!lst && lst.tier === 'real' && lst.src && lst.src.by === 'Sh1yuhang2008' && !lst.src.file && lst.mine === false && lst.author === null);
+  t('入馆：声音取得到', (await call('GET', '/api/discs/ds-sy-test-01/audio', null, C)).status === 200);
+  t('入馆：普通用户删不了', (await call('DELETE', '/api/discs/ds-sy-test-01', null, A)).status === 403);
+  t('撤下：没有口令 403', (await call('DELETE', '/api/admin/discs/ds-sy-test-01', null, A)).status === 403);
+  t('撤下：有口令就撤，之后取声音 404', (await call('DELETE', '/api/admin/discs/ds-sy-test-01', null, A, ADM)).status === 200 && (await call('GET', '/api/discs/ds-sy-test-01/audio', null, C)).status === 404);
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`接口自检：${pass} 项通过，${fail} 项不通过`);
 process.exit(fail ? 1 : 0);

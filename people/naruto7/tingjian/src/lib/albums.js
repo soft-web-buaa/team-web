@@ -84,10 +84,11 @@ export async function removeAlbum(id) {
 // 连着听：一段放完接下一段（接力的「从第一棒连着听」也用它）。手动放了别的就停
 // ====================================================================================
 export const Q = reactive({ list: [], i: -1, name: '' });
-let qTimer = 0;
-export function playQueue(list, name = '') {
+let qTimer = 0, qHooks = {};
+/** opts：onStep(i) 每段开始前、onEnd() 放完或被打断、hourEach 每段都把整站钟点拨到那一段（默认只拨第一段） */
+export function playQueue(list, name = '', opts = {}) {
   stopQueue();
-  Q.list = list.filter(Boolean); Q.name = name;
+  Q.list = list.filter(Boolean); Q.name = name; qHooks = opts;
   if (!Q.list.length) return;
   step(0);
 }
@@ -96,7 +97,8 @@ async function step(i) {
   if (i >= Q.list.length) { stopQueue(); return; }
   Q.i = i;
   const e = Q.list[i];
-  await play(e, { hour: i === 0 });
+  if (qHooks.onStep) qHooks.onStep(i);
+  await play(e, { hour: i === 0 || !!qHooks.hourEach });
   const id = e.id;
   const wait = () => {
     if (!L.playing || L.playing.id !== id) { stopQueue(); return; }      // 中途放了别的
@@ -106,7 +108,9 @@ async function step(i) {
   };
   qTimer = setTimeout(wait, 400);
 }
-export function stopQueue() { clearTimeout(qTimer); Q.list = []; Q.i = -1; Q.name = ''; }
+export function stopQueue() { clearTimeout(qTimer); const end = qHooks.onEnd; qHooks = {}; Q.list = []; Q.i = -1; Q.name = ''; if (end) end(); }
+/** 跳到下一段（正在连着听时）。 */
+export function skipQueue() { if (Q.list.length && Q.i >= 0) step(Q.i + 1); }
 
 // ====================================================================================
 // 叠成一张：至多 8 段，统一成 48 kHz，各自先归一到同样的响度，再叠起来、压住峰值。刻成一张十秒的盘

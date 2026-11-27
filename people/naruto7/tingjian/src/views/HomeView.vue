@@ -6,6 +6,7 @@ import { RouterLink } from 'vue-router';
 import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
 import EchoBand from '../components/EchoBand.vue';
+import Evening from '../components/Evening.vue';
 import { L, shuffle, siteCounts, tallyText, isPublic } from '../lib/library.js';
 import { clock, fmtHour, cnHour } from '../lib/clock.js';
 import * as stage from '../stage/stage.js';
@@ -17,7 +18,9 @@ const sameHour = computed(() => {
   const h = clock.now, d = (e) => { const x = Math.abs(e.hour - h); return Math.min(x, 24 - x); };
   const near = L.entries.filter((e) => e.hour != null && isPublic(e) && d(e) < 0.75);
   const bySem = new Map();
-  for (const e of near.sort((a, b) => d(a) - d(b))) if (!bySem.has(e.semester)) bySem.set(e.semester, e);
+  // 同一学期只留一张：真实录音优先（有人真的在那儿听见过），其次史料，最后示意；同档里钟点近的先
+  const rank = (e) => (e.tier === 'real' ? 0 : e.tier === 'archival' ? 1 : 2);
+  for (const e of near.sort((a, b) => rank(a) - rank(b) || d(a) - d(b))) if (!bySem.has(e.semester)) bySem.set(e.semester, e);
   return [...bySem.values()].sort((a, b) => String(b.semester).localeCompare(String(a.semester))).slice(0, 5);
 });
 const c = computed(() => { void L.version; return siteCounts(); });
@@ -33,6 +36,7 @@ function zoom() { close.value = !close.value; stage.zoomGroove(close.value); }
       <DiscRow v-for="e in sameHour" :key="e.id" :e="e" />
     </ol>
     <p v-if="!sameHour.length" class="fine">这个钟点还没有人留下声音。按住下面那颗钮，你就是第一张。</p>
+    <Evening />
     <EchoBand />
     <div class="row" style="margin-top: 18px">
       <button type="button" class="btn small ghost" @click="shuffle()">随手放一张</button>
