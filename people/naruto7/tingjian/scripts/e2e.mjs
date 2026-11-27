@@ -28,7 +28,7 @@ async function open(ctx, url, { screen = false, w = 1440, h = 900 } = {}) {
   page.setDefaultNavigationTimeout(90000);
   await page.setViewport({ width: w, height: h });
   // 走查自己在真删之后去取那张的声音，预期就是 404：这一条不算问题
-  page.on('console', (m) => { if (m.type() === 'error' && !(deleted && (m.location().url || '').includes(deleted))) problems.push(`[console] ${m.text()} ${m.location().url || ''}`); });
+  page.on('console', (m) => { const u = m.location().url || ''; if (m.type() === 'error' && !/favicon/.test(u) && !(deleted && u.includes(deleted))) problems.push(`[console] ${m.text()} ${m.location().url || ''}`); });
   page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
   page.on('requestfailed', (r) => { if (!/favicon/.test(r.url())) problems.push(`[requestfailed] ${r.url()}`); });
   if (!screen) await page.evaluateOnNewDocument(() => { try { sessionStorage.setItem('tj-entered', '1'); } catch { /* */ } });
@@ -328,6 +328,8 @@ await p.click('.shelf .make button[type=submit]');
 await until(p, () => (document.querySelector('.shelf .h2') || {}).textContent === '走查用的合辑', null, 15000);
 const albumUrl = await p.evaluate(() => location.hash);
 t('建一张：进到这张合辑，网址里带着它', /album=al-/.test(albumUrl));
+// 两页同时软件渲染会互相拖到超时：开 B 之前让 A 先停下来，回头 go() 会重新进站
+await p.goto('about:blank');
 const B2 = await browser.createBrowserContext();
 const r = await open(B2, `?h=20${albumUrl}`);
 await until(r, () => (document.querySelector('.shelf .h2') || {}).textContent === '走查用的合辑', null, 30000);
@@ -363,6 +365,8 @@ t('盖章：卡上出现「北航」小印，学号打了码', (await text(p, '.
 const tokA = await p.evaluate(() => JSON.parse(localStorage.getItem('tj-seal-v1')).token);
 t('盖章：之后的请求带令牌', (await p.evaluate(async (tk) => (await fetch('/api/auth/me', { headers: { authorization: `Bearer ${tk}` } })).status, tokA)) === 200);
 await p.screenshot({ path: path.join(out, 'mine-card.png') });
+// 同 B2：A 停在不画三维的接口页上（下面还要用它带令牌问 /api），免得两页一起软件渲染
+await p.goto(base + 'api/health');
 const B3 = await browser.createBrowserContext();
 const s3 = await open(B3, '?h=19#/mine');
 await sleep(2500);
@@ -380,8 +384,9 @@ t('另一台设备用同一个学号盖章：A 建的合辑认得回来', (await
 await s3.evaluate(() => [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('刻声卡')).click());
 await sleep(300);
 const outBtn = () => s3.evaluate(() => [...document.querySelectorAll('.paper .btn')].find((b) => b.textContent.includes('退出这台设备')).click());
-await outBtn(); await sleep(150); await outBtn();
-await sleep(3500);
+await Promise.all([s3.waitForNavigation({ waitUntil: 'load', timeout: 60000 }), (async () => { await outBtn(); await sleep(150); await outBtn(); })()]);
+// 退出会重载页面，纸页回到默认页签：切回刻声卡再等盖章处出来
+await until(s3, () => { const t = [...document.querySelectorAll('.paper [role=tab]')].find((b) => b.textContent.includes('刻声卡')); if (t && t.getAttribute('aria-selected') !== 'true') t.click(); return !!document.querySelector('.slip .slot'); }, null, 30000).catch(() => {});
 t('退出这台设备：卡上回到盖章处，A 那台不受影响', !!(await s3.$('.slip .slot')) && (await p.evaluate(async (tk) => (await fetch('/api/auth/me', { headers: { authorization: `Bearer ${tk}` } })).status, tokA)) === 200);
 await s3.close();
 
