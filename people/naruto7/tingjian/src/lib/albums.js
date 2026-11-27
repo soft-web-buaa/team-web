@@ -85,7 +85,7 @@ export async function removeAlbum(id) {
 // ====================================================================================
 export const Q = reactive({ list: [], i: -1, name: '' });
 let qTimer = 0, qHooks = {};
-/** opts：onStep(i) 每段开始前、onEnd() 放完或被打断、hourEach 每段都把整站钟点拨到那一段（默认只拨第一段） */
+/** opts：onStep(i) 每段开始前、onEnd(done) 放完（done=true）或被打断、hourEach 每段都把整站钟点拨到那一段（默认只拨第一段） */
 export function playQueue(list, name = '', opts = {}) {
   stopQueue();
   Q.list = list.filter(Boolean); Q.name = name; qHooks = opts;
@@ -94,7 +94,7 @@ export function playQueue(list, name = '', opts = {}) {
 }
 async function step(i) {
   clearTimeout(qTimer);
-  if (i >= Q.list.length) { stopQueue(); return; }
+  if (i >= Q.list.length) { stopQueue(true); return; }
   Q.i = i;
   const e = Q.list[i];
   if (qHooks.onStep) qHooks.onStep(i);
@@ -108,7 +108,8 @@ async function step(i) {
   };
   qTimer = setTimeout(wait, 400);
 }
-export function stopQueue() { clearTimeout(qTimer); const end = qHooks.onEnd; qHooks = {}; Q.list = []; Q.i = -1; Q.name = ''; if (end) end(); }
+/** done 为真：一段段放完了（不是被打断）。onEnd 收到它，好决定要不要留一句收尾。 */
+export function stopQueue(done = false) { clearTimeout(qTimer); const end = qHooks.onEnd; qHooks = {}; Q.list = []; Q.i = -1; Q.name = ''; if (end) end(done === true); }
 /** 跳到下一段（正在连着听时）。 */
 export function skipQueue() { if (Q.list.length && Q.i >= 0) step(Q.i + 1); }
 

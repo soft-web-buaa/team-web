@@ -9,6 +9,7 @@ import puppeteer from 'puppeteer-core';
 
 const CHROME = process.env.CHROME_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find((p) => fs.existsSync(p));
 process.env.KS_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'tj-e2e-'));
+process.env.KS_ADMIN_TOKEN = 'e2e-' + Math.random().toString(36).slice(2);   // 走查自己的审核口令：只用来种「那一晚」的采集录音
 await build({ logLevel: 'error' });
 const server = await preview({ preview: { port: 5198, host: '127.0.0.1' }, logLevel: 'error' });
 const base = 'http://127.0.0.1:5198/';
@@ -91,6 +92,42 @@ await until(p, () => window.__stage.heroLift('XY01') < 2 && window.__stage.heroL
 t('换到体育馆：图书馆落回去，体育馆提起来', (await p.evaluate(() => window.__stage.heroLift('XY01'))) < 2 && (await p.evaluate(() => window.__stage.heroLift('XY06'))) > 20);
 t('体育馆的从前：奥运举重的史料', (await text(p, '.paper')).includes('这里的从前'));
 t('进地点的完整过场：每会话最多两次', (await p.evaluate(() => window.__stage.shows().enterPlace)) <= 3);
+
+// —— 2b. 那一晚：一个人一晚连录的几处，跟着走，舞台上一处一张字幕卡 ——
+console.log('— 2b. 那一晚');
+{
+  // 种三段：同一位采集人、同一晚 19:00–19:20、两处（体育馆两段、为民楼一段）。WAV 是 1 秒 440 Hz
+  const fs8 = 24000, n = fs8, wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(fs8, 24); wav.writeUInt32LE(fs8 * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / fs8) * 6000), 44 + i * 2);
+  const seed = [
+    { id: 'ds-e2e-eve-a', placeId: 'XY06', at: '2026-11-20T11:00:00Z', note: '羽毛球馆', spot: '羽毛球馆' },
+    { id: 'ds-e2e-eve-b', placeId: 'XY06', at: '2026-11-20T11:06:00Z', note: '台球室', spot: '台球室' },
+    { id: 'ds-e2e-eve-c', placeId: 'XY12', at: '2026-11-20T11:20:00Z', note: '唯实园', spot: '唯实园' },
+  ];
+  let ok = 0;
+  for (const s of seed) {
+    const r = await fetch(base + 'api/admin/discs', { method: 'POST', headers: { 'content-type': 'text/plain;charset=utf-8', 'x-ks-admin': process.env.KS_ADMIN_TOKEN },
+      body: JSON.stringify({ id: s.id, placeId: s.placeId, at: s.at, note: s.note, audio: wav.toString('base64'), src: { by: '走查', spot: s.spot, consent: true } }) });
+    if (r.status === 201 || r.status === 200) ok++;
+  }
+  t('那一晚：三段采集录音入馆', ok === 3);
+  await go(p, '?h=19#/');
+  await p.waitForFunction(() => !!document.querySelector('.evening .btn'), { timeout: 30000 }).catch(() => {});
+  t('那一晚：首页有入口，写着谁、几处', /走查/.test(await text(p, '.evening')) && /3 段/.test(await text(p, '.evening')));
+  await p.evaluate(() => document.querySelector('.evening .btn').click());
+  await p.waitForFunction(() => !!document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
+  const c1 = await text(p, '.walk-card');
+  t('那一晚：舞台上出现字幕卡，写着这一处的场地与时刻', /羽毛球馆/.test(c1) && /19:00/.test(c1));
+  await p.evaluate(() => [...document.querySelectorAll('.evening button')].find((b) => b.textContent.includes('下一处')).click());
+  await p.waitForFunction(() => /台球室/.test((document.querySelector('.walk-card') || {}).textContent || ''), { timeout: 20000 }).catch(() => {});
+  t('那一晚：下一处，卡换成下一段', /台球室/.test(await text(p, '.walk-card')));
+  t('那一晚：卡上写着第几处 / 共几处', /2\s*\/\s*3/.test(await text(p, '.walk-card')));
+  await p.evaluate(() => [...document.querySelectorAll('.evening button')].find((b) => b.textContent.includes('停下')).click());
+  await p.waitForFunction(() => !document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
+  t('那一晚：停下，字幕卡收走', !(await p.$('.walk-card')));
+}
 
 // —— 3. 社区：原始地图上空是星云 ——
 console.log('— 3. 社区：星云');
