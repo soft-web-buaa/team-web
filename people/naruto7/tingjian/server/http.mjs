@@ -6,7 +6,7 @@ export function nodeHandler(api) {
     let size = 0;
     for await (const c of req) {
       size += c.length;
-      if (size > 3.2 * 1024 * 1024) { res.writeHead(413, { 'content-type': 'application/json' }).end('{"ok":false,"error":"请求太大。"}'); return; }
+      if (size > 4.4 * 1024 * 1024) { res.writeHead(413, { 'content-type': 'application/json' }).end('{"ok":false,"error":"请求太大。"}'); return; }
       chunks.push(c);
     }
     let body = null;

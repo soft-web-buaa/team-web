@@ -40,7 +40,9 @@ export async function request(method, path, body = null, { timeout = 9000, creat
   try {
     const res = await fetch(apiBase() + path, {
       method,
-      headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(s ? { authorization: `Bearer ${s.token}` } : key ? { 'x-ks-key': key } : {}) },
+      // 请求体仍是 JSON，但声明成 text/plain：CloudBase HTTP 网关对 application/json 的请求体卡 100 KB（EXCEED_MAX_PAYLOAD_SIZE），
+      // 一张 10 秒的盘 base64 后约 625 KB，过不去；text/plain 走函数 event 的 6 MB 档。服务端不看 content-type，照样 JSON.parse
+      headers: { ...(body ? { 'content-type': 'text/plain;charset=utf-8' } : {}), ...(s ? { authorization: `Bearer ${s.token}` } : key ? { 'x-ks-key': key } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: ctl.signal,
       cache: 'no-store',
