@@ -677,6 +677,7 @@ const sunLast = new THREE.Vector3();
 const tmpC = new THREE.Color();
 // 夜观：数据地图选「夜观色」时，舞台的光与背景渐变到入夜的蓝紫（21:30），页面的纸照旧跟着钟点。离开就渐变回来
 const NIGHT_T = tokensAt(21.5);
+const MOON = new THREE.Color().setRGB(0.46, 0.58, 0.86), MOON_GROUND = new THREE.Color().setRGB(0.03, 0.045, 0.08);
 let nightK = 0, mixed = null;
 const lerpA = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 function toks() {
@@ -698,14 +699,18 @@ function stepLight(now) {
   if (G.sun.position.distanceToSquared(sunLast) > 4) { sunLast.copy(G.sun.position); shadowDirty = true; }
   G.sun.intensity = L.i;
   G.sun.color.setRGB(L.col[0] / 255, L.col[1] / 255, L.col[2] / 255, THREE.SRGBColorSpace);
+  G.sun.color.lerp(MOON, L.night * 0.4);   // 夜里这盏就是月亮：token 的紫只管纸和背景，打在楼顶上的光偏冷蓝
   const u = G.platterMat.uniforms;
   u.uSunDir.value.copy(G.sun.position).normalize();
   u.uSunCol.value.set(G.sun.color.r, G.sun.color.g, G.sun.color.b).multiplyScalar(L.i);
   const hexCol = toHex(L.col);
   const rig = rigFor(hexCol);
   u.uBoxCol.value.forEach((v, i) => v.set(rig.boxes[i][0], rig.boxes[i][1], rig.boxes[i][2]).multiplyScalar(G.STUDIO[i].i));
-  G.hemi.color.setRGB(rig.sky[0], rig.sky[1], rig.sky[2]);
-  G.hemi.groundColor.setRGB(rig.ground[0], rig.ground[1], rig.ground[2]);
+  // 月光（2026-11-27 夜景写实）：夜里的主光色偏紫（#A8A2E0），天光跟着它，整城是一层均匀的紫。
+  // 月下的天光其实是冷蓝的，暖的只有窗和路灯——入夜时把半球光的天色往冷蓝拉，地面反光也跟着冷，冷暖才分得开
+  const mk = L.night * 0.55;
+  G.hemi.color.setRGB(rig.sky[0], rig.sky[1], rig.sky[2]).lerp(MOON, mk);
+  G.hemi.groundColor.setRGB(rig.ground[0], rig.ground[1], rig.ground[2]).lerp(MOON_GROUND, mk);
   G.hemi.intensity = L.hemi;
   // 环境贴图（金属件、楼面上的软箱反射）：光色变了才重烘，最多 0.7 秒一次（PMREM 一次几十毫秒）
   if (hexCol !== envHex && now - envT > 700) {
@@ -721,7 +726,7 @@ function stepLight(now) {
   G.labelMat.emissiveIntensity = 0.55 * L.night;
   const placeDim = S.mode === 'place' ? 0.62 : 1;
   u.uBright.value = L.plat * placeDim;
-  G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.5 * L.night; });
+  G.zoneObj.forEach((o) => { o.poolMat.opacity = 0.75 * L.night; });   // 路灯下那一圈暖光：和冷的月光对着，灯下才像有灯
   // 操场（2026-11-26 组员：整站变色时操场一直不变，突兀）：草皮、塑胶跑道的饱和色在暗光下仍然显眼，
   // 画线是不受光的白线。入夜时两种场地色往这个钟点的天光色里褪、压暗；画线跟着天光的亮度走
   const nk = L.night, sunK = Math.min(1, L.i / 2.6);
