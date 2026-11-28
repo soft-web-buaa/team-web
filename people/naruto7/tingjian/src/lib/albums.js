@@ -84,8 +84,8 @@ export async function removeAlbum(id) {
 // 连着听：一段放完接下一段（接力的「从第一棒连着听」也用它）。手动放了别的就停
 // ====================================================================================
 export const Q = reactive({ list: [], i: -1, name: '' });
-let qTimer = 0, qHooks = {};
-/** opts：onStep(i) 每段开始前、onEnd() 放完或被打断、hourEach 每段都把整站钟点拨到那一段（默认只拨第一段） */
+let qTimer = 0, qHooks = {}, qSeq = 0;   // qSeq：每跳一段 +1。还在等 play() 的旧一段醒来时一看对不上就作罢，不再去「判打断」
+/** opts：onStep(i) 每段开始前、onEnd(done) 放完（done=true）或被打断、hourEach 每段都把整站钟点拨到那一段（默认只拨第一段） */
 export function playQueue(list, name = '', opts = {}) {
   stopQueue();
   Q.list = list.filter(Boolean); Q.name = name; qHooks = opts;
@@ -94,11 +94,13 @@ export function playQueue(list, name = '', opts = {}) {
 }
 async function step(i) {
   clearTimeout(qTimer);
-  if (i >= Q.list.length) { stopQueue(); return; }
+  const seq = ++qSeq;
+  if (i >= Q.list.length) { stopQueue(true); return; }
   Q.i = i;
   const e = Q.list[i];
   if (qHooks.onStep) qHooks.onStep(i);
   await play(e, { hour: i === 0 || !!qHooks.hourEach });
+  if (seq !== qSeq) return;   // 等的时候已经跳到下一段（或停了）：这一段不再管
   const id = e.id;
   const wait = () => {
     if (!L.playing || L.playing.id !== id) { stopQueue(); return; }      // 中途放了别的
@@ -108,7 +110,8 @@ async function step(i) {
   };
   qTimer = setTimeout(wait, 400);
 }
-export function stopQueue() { clearTimeout(qTimer); const end = qHooks.onEnd; qHooks = {}; Q.list = []; Q.i = -1; Q.name = ''; if (end) end(); }
+/** done 为真：一段段放完了（不是被打断）。onEnd 收到它，好决定要不要留一句收尾。 */
+export function stopQueue(done = false) { clearTimeout(qTimer); qSeq++; const end = qHooks.onEnd; qHooks = {}; Q.list = []; Q.i = -1; Q.name = ''; if (end) end(done === true); }
 /** 跳到下一段（正在连着听时）。 */
 export function skipQueue() { if (Q.list.length && Q.i >= 0) step(Q.i + 1); }
 

@@ -62,7 +62,7 @@ export function dropClick() {
 // —— 录 ——
 const MIC = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } };
 export function micError(err) {
-  if (err && err.name === 'NotAllowedError') return '浏览器没有允许用麦克风：点地址栏左侧的图标，改成允许，再按一次。';
+  if (err && err.name === 'NotAllowedError') return '浏览器没有允许用麦克风：在浏览器的网站设置里把麦克风改成允许，再按一次。';
   if (err && err.name === 'NotFoundError') return '这台设备没有找到麦克风。';
   if (typeof window !== 'undefined' && !window.isSecureContext) return '麦克风只能在 https 或本机地址上用。';
   return `麦克风打不开：${(err && err.message) || '未知原因'}。`;

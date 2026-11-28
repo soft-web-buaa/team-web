@@ -3,7 +3,8 @@
 // 正中一张盘、一句主句、一颗「按住　听」。按住时放一段真史料（口述北航 3 @ 0:43），刻纹在盘上一圈圈刻出来；
 // 松手或听完，屏风折起、向两边推开，同一段声音落到留声机的刻槽里，镜头从刻槽一镜拉出整台唱机（DESIGN.md §2）。
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { tokensAt, css, clock } from '../lib/clock.js';
+import { leafPalette, LEAF_ZONES, css, clock } from '../lib/clock.js';
+import { ui } from '../lib/ui.js';
 import { L, play } from '../lib/library.js';
 import * as stage from '../stage/stage.js';
 import { TURN, R0, R1, PITCH } from '../kesheng/web/groove.js';
@@ -14,7 +15,12 @@ const LEAF = [
   { h: 12.5, word: '午', hour: '正午', line: '地面只剩一米。', src: '口述北航 · 北京五号', range: [11, 16] },
   { h: 18.4, word: '昏', hour: '十八时', line: '二〇〇八年八月，体育馆里的十秒。', src: '奥运举重 · 赛场实况', range: [16, 20] },
   { h: 23, word: '夜', hour: '二十三时', line: '今天，你在听。', src: '此刻', range: [20, 29] },
-].map((x) => { const t = tokensAt(x.h); return { ...x, bg: `linear-gradient(180deg, ${css(t.bg0)}, ${css(t.bg1)})`, ink: css(t.dark ? t.ink : t.ink), paper: css(t.paper), dark: t.dark }; });
+];
+// 每扇屏的底色渐变和三段字的墨色一起挑（clock.js leafPalette）：昏那一扇上亮下暗，顶上用深墨、竖排和出处用白，每段都过 4.5:1
+const leaves = computed(() => LEAF.map((x) => {
+  const p = leafPalette(x.h, LEAF_ZONES[ui.narrow ? 'phone' : 'desk']);
+  return { ...x, style: { background: `linear-gradient(180deg, ${css(p.bg0)} ${p.a * 100}%, ${css(p.bg1)} ${p.b * 100}%)`, '--ink-top': css(p.ink.top), '--ink-line': css(p.ink.line), '--ink-src': css(p.ink.src || p.ink.line) } };
+}));
 const nowLeaf = computed(() => { const h = clock.now < 5 ? clock.now + 24 : clock.now; return LEAF.findIndex((x) => h >= x.range[0] && h < x.range[1]); });
 
 const CLIP = 'arc-oral-ep3-043';
@@ -116,7 +122,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf));
 <template>
   <section class="screen" :class="{ 'is-gone': state === 'gone' }" aria-label="屏风：听见校园">
     <div class="leaves" aria-hidden="true">
-      <div v-for="(f, i) in LEAF" :key="f.word" class="leaf" :class="{ now: i === nowLeaf, dark: f.dark }" :style="{ background: f.bg, color: f.ink, '--i': i }">
+      <div v-for="(f, i) in leaves" :key="f.word" class="leaf" :class="{ now: i === nowLeaf }" :style="{ ...f.style, '--i': i }">
         <div class="leaf-top"><b class="w">{{ f.word }}</b><i>{{ f.hour }}</i></div>
         <p class="line">{{ f.line }}</p>
         <p class="src">{{ i === nowLeaf ? '此刻在这一扇' : f.src }}</p>
@@ -146,17 +152,20 @@ onBeforeUnmount(() => cancelAnimationFrame(raf));
 .leaf:nth-child(odd) { --o: left; }
 .leaf:nth-child(even) { --o: right; }
 .leaf::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgb(0 0 0 / .14), transparent 18%, transparent 82%, rgb(0 0 0 / .1)); }
-.leaf-top { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.leaf-top { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--ink-top); }
 .leaf .w { font: 400 44px/1 var(--f-show); letter-spacing: 0; }
-.leaf i { font: 12px/1 var(--f-ui); font-style: normal; letter-spacing: .3em; writing-mode: vertical-rl; opacity: .7; }
-.leaf .line { writing-mode: vertical-rl; font: 400 22px/1.9 var(--f-show); letter-spacing: .32em; margin: 30px 0 0; align-self: start; max-height: 56vh; opacity: .9; }
-.leaf .src { writing-mode: vertical-rl; font: 12px/1.4 var(--f-ui); letter-spacing: .2em; opacity: .62; margin: 0; }
+.leaf i { font: 12px/1 var(--f-ui); font-style: normal; letter-spacing: .3em; writing-mode: vertical-rl; }
+/* 中间两扇的竖排句子靠外侧站，让开正中那张纸 */
+.leaf .line { writing-mode: vertical-rl; font: 400 22px/1.9 var(--f-show); letter-spacing: .32em; margin: 30px 0 0; align-self: start; max-height: 56vh; color: var(--ink-line); }
+.leaf:nth-child(2) .line { justify-self: start; margin-left: 28px; }
+.leaf:nth-child(3) .line { justify-self: end; margin-right: 28px; }
+.leaf .src { writing-mode: vertical-rl; font: 12px/1.4 var(--f-ui); letter-spacing: .2em; margin: 0; color: var(--ink-src); }
 .leaf.now { box-shadow: inset 0 0 0 1px rgb(230 190 58 / .55); }
 .leaf .here { position: absolute; left: 50%; bottom: 14px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--scope); box-shadow: 0 0 0 4px rgb(230 190 58 / .25); }
-.center { position: relative; z-index: 2; display: grid; justify-items: center; text-align: center; padding: 40px 44px 34px; max-width: 560px;
+.center { position: relative; z-index: 2; display: grid; justify-items: center; text-align: center; padding: 40px 36px 34px; width: min(560px, calc(50vw - 90px));
   background: radial-gradient(closest-side, var(--paper) 62%, rgb(0 0 0 / 0)); color: var(--ink); transition: opacity .5s, transform 1s cubic-bezier(.65, 0, .35, 1); }
 .disc { width: 232px; height: 232px; border-radius: 50%; box-shadow: 0 22px 40px -18px rgb(0 0 0 / .7); }
-.main { font: 400 40px/1.35 var(--f-show); letter-spacing: .08em; margin: 26px 0 12px; }
+.main { font: 400 clamp(28px, 2.8vw, 40px)/1.35 var(--f-show); letter-spacing: .08em; margin: 26px 0 12px; }
 .sub { font: 15px/1.8 var(--f-ui); color: var(--ink-2); margin: 0 0 22px; max-width: 26em; min-height: 3.6em; transition: opacity .6s; }
 .sub.on { font: 18px/1.7 var(--f-show); color: var(--ink); letter-spacing: .04em; }
 .hold { display: inline-flex; align-items: center; gap: 12px; height: 54px; padding: 0 26px 0 18px; border-radius: 999px; border: 0; background: var(--ink); color: var(--paper);
@@ -178,12 +187,15 @@ onBeforeUnmount(() => cancelAnimationFrame(raf));
 @media (max-width: 760px) {
   .leaf { padding: 18px 0 16px; }
   .leaf .w { font-size: 30px; }
-  .leaf .line { font-size: 14px; letter-spacing: .2em; margin-top: 14px; max-height: 30vh; overflow: hidden; }
+  .leaf .line { font-size: 13px; letter-spacing: .12em; margin-top: 12px; max-height: none; }
+  .leaf:nth-child(2) .line, .leaf:nth-child(3) .line { justify-self: center; margin-left: 0; margin-right: 0; }
+  /* 手机上四段字站在上半屏，纸和盘落到下半屏，谁也不压谁 */
+  .screen { place-items: end center; padding-bottom: 18px; }
   .leaf .src { display: none; }
-  .center { padding: 24px 18px; width: calc(100vw - 28px); max-width: none; background: radial-gradient(closest-side, var(--paper) 78%, rgb(0 0 0 / 0)); }
+  .center { padding: 22px 18px 16px; width: calc(100vw - 28px); max-width: none; border-radius: 18px; background: var(--paper); box-shadow: 0 18px 40px -20px rgb(0 0 0 / .6); }
   .sub { max-width: 19em; }
-  .disc { width: 168px; height: 168px; }
-  .main { font-size: 27px; margin-top: 18px; }
+  .disc { width: 120px; height: 120px; }
+  .main { font-size: 25px; margin-top: 14px; }
   .sub { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { .leaf, .center { transition: opacity .2s !important; } .is-gone .leaf { transform: none !important; } }

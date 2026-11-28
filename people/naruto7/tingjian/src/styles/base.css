@@ -208,7 +208,7 @@ a { color: inherit; }
   .paper.is-min { height: 132px; }
   .paper.is-full { max-height: calc(100vh - 110px); }
   .paper.is-min { max-height: 132px; }
-  .paper-scroll { padding: 2px 20px 150px; }
+  .paper-scroll { padding: 2px 20px 64px; }
   .grip { display: block; flex: none; height: 44px; border: 0; background: none; position: relative; }
   .grip::after { content: ''; position: absolute; left: 50%; top: 15px; width: 42px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--line) 72%, transparent); transform: translateX(-50%); transition: background-color .16s; }
   .grip:hover::after, .grip:active::after { background: var(--ink-2); }
@@ -216,9 +216,16 @@ a { color: inherit; }
   .nav a { min-height: 44px; display: inline-flex; align-items: center; }
   .chip { height: 44px; padding: 0 15px; font-size: 14px; }
   .btn, .btn.small { height: 44px; padding: 0 18px; font-size: 14px; }
-  .deck { left: 10px; right: auto; bottom: calc(52vh + 10px); max-width: calc(100vw - 20px); padding: 6px 12px 6px 6px; }
+  .deck { left: 10px; right: auto; bottom: calc(52vh + 10px); max-width: calc(100vw - 86px); padding: 6px 12px 6px 6px; }
   .deck .bar { display: none; }
-  .press { bottom: 14px; height: 50px; }
+  /* 刻钮不悬在纸面上：缩成圆钮，站在抽屉上沿右侧（和播放条同一行）；抽屉全开时收进把手那一行 */
+  .press { left: auto; right: 10px; bottom: 14px; transform: none; justify-content: center; width: 56px; height: 56px; padding: 0; border-radius: 50%; }
+  .press:active { transform: scale(.96); }
+  .press span { display: none; }
+  body.has-sheet .press { bottom: calc(52vh + 10px); }
+  body.has-sheet.sheet-min .press { bottom: 142px; }
+  body.has-sheet.sheet-full .press { right: 14px; bottom: calc(100vh - 152px); width: 40px; height: 40px; }
+  body.has-sheet.sheet-full .press .ring { width: 32px; height: 32px; }
   body.sheet-min .deck { bottom: 142px; }
   body.sheet-full .deck { display: none; }
 }

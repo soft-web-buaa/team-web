@@ -16,4 +16,11 @@ for (const k of Object.keys(need)) {
   if (!okk) bad++;
   console.log(`${okk ? '通过' : '不通过'}  ${k.padEnd(5)} 全天最低 ${worst[k].toFixed(2)}（${at[k]}），要求 ≥ ${need[k]}`);
 }
+// 屏风四扇：每扇的渐变和三段字的墨色由 leafPalette 一起挑，桌面、手机两种版面每段字都要 ≥ 4.5
+import { leafPalette, LEAF_ZONES } from '../src/lib/clock.js';
+for (const v of ['desk', 'phone']) for (const h of [6, 12.5, 18.4, 23]) {
+  const pl = leafPalette(h, LEAF_ZONES[v]), okk = pl.min >= 4.5;
+  if (!okk) bad++;
+  console.log(`${okk ? '通过' : '不通过'}  屏风 ${v} ${fmtHour(h)} 最差一段 ${pl.min.toFixed(2)}，要求 ≥ 4.5`);
+}
 process.exit(bad ? 1 : 0);

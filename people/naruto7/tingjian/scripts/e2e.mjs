@@ -9,6 +9,7 @@ import puppeteer from 'puppeteer-core';
 
 const CHROME = process.env.CHROME_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find((p) => fs.existsSync(p));
 process.env.KS_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'tj-e2e-'));
+process.env.KS_ADMIN_TOKEN = 'e2e-' + Math.random().toString(36).slice(2);   // 走查自己的审核口令：只用来种「那一晚」的采集录音
 await build({ logLevel: 'error' });
 const server = await preview({ preview: { port: 5198, host: '127.0.0.1' }, logLevel: 'error' });
 const base = 'http://127.0.0.1:5198/';
@@ -56,6 +57,21 @@ let p = await open(A, '?h=18.4', { screen: true });
 t('进站先看到屏风，四扇屏', (await p.$$('.screen .leaf')).length === 4);
 t('屏风上的主句', (await text(p, '.screen .main')).includes('比我们在这里待得久'));
 t('此刻所在的那一扇亮着（18:24 是昏）', (await text(p, '.leaf.now .w')) === '昏');
+// 四段「从前」读得全：桌面和手机上，竖排的句子既不被中间那张纸压住，也不被截断
+const leafRead = () => p.evaluate(() => {
+  const c = document.querySelector('.screen .center').getBoundingClientRect();
+  return [...document.querySelectorAll('.screen .leaf .line')].filter((el) => {
+    const r = el.getBoundingClientRect(), hit = r.left < c.right && r.right > c.left && r.top < c.bottom && r.bottom > c.top;
+    return hit || el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+  }).map((el) => el.textContent.slice(0, 6));
+});
+const leafBad = await leafRead();
+await p.setViewport({ width: 390, height: 844 });
+await sleep(600);
+leafBad.push(...(await leafRead()).map((x) => '手机 ' + x));
+await p.setViewport({ width: 1440, height: 900 });
+await sleep(400);
+t(`屏风：四段从前在桌面和手机上都读得全${leafBad.length ? '（' + leafBad.join(' | ') + '）' : ''}`, leafBad.length === 0);
 const css0 = await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper'));
 await p.waitForFunction(() => !document.querySelector('.hold[disabled]'), { timeout: 30000 });
 const hold = await p.$('.hold');
@@ -91,6 +107,80 @@ await until(p, () => window.__stage.heroLift('XY01') < 2 && window.__stage.heroL
 t('换到体育馆：图书馆落回去，体育馆提起来', (await p.evaluate(() => window.__stage.heroLift('XY01'))) < 2 && (await p.evaluate(() => window.__stage.heroLift('XY06'))) > 20);
 t('体育馆的从前：奥运举重的史料', (await text(p, '.paper')).includes('这里的从前'));
 t('进地点的完整过场：每会话最多两次', (await p.evaluate(() => window.__stage.shows().enterPlace)) <= 3);
+
+// —— 2a. 主楼：东面那座门廊是立体的（照片 06/08：六根方墩、门廊顶一道金色斗栱、红匾、七级台阶），进楼的机位对着它 ——
+console.log('— 2a. 主楼门廊');
+{
+  await p.evaluate(() => { location.hash = '#/place/XY02'; });
+  await until(p, () => window.__stage.mode === 'place' && window.__stage.place === 'XY02' && !window.__stage.flying && window.__stage.heroLift('XY02') > 20, null, 30000);
+  await sleep(600);
+  const part = (n) => p.evaluate((n) => window.__stage.part && window.__stage.part('XY02', n), n);
+  const pier = await part('portico-pier'), steps = await part('portico-steps'), plaque = await part('portico-plaque'), dg = await part('portico-dougong'), body = await part('portico'), eave = await part('zhulou-dougong');
+  console.log('  门廊实测：', JSON.stringify({ pier, steps, plaque, dg: dg && dg.n, body: body && body.size, eave: eave && eave.n }));
+  t('主楼门廊：六根方墩、七级台阶', pier && pier.n === 6 && steps && steps.levels === 7);
+  t('主楼门廊：红匾写着「为人民服务」，门廊顶一道斗栱', plaque && plaque.text === '为人民服务' && dg && dg.units >= 12);
+  t('主楼门廊是立体的：进门廊往外挑 5.6 米、连台阶 7 米以上', body && body.size[0] >= 5 && pier && pier.size[0] > 0 && body.size[2] >= 7);
+  t('主楼檐下一整圈立体的斗栱', eave && eave.units >= 150);
+  const cam = await p.evaluate(() => window.__stage.cam), box = await p.evaluate(() => window.__stage.partScreen && window.__stage.partScreen('XY02', 'portico'));
+  const vw = await p.evaluate(() => { const pp = document.querySelector('.paper'); return { w: innerWidth, paper: pp ? pp.getBoundingClientRect().left : innerWidth }; });
+  console.log('  机位：', JSON.stringify({ cam, box, vw }));
+  t('进主楼的机位从东面看门廊（偏南一点看得出进深）', cam && cam.az > Math.PI / 2 - 0.65 && cam.az < Math.PI / 2 - 0.15);
+  t('门廊在画面里够大、没被纸挡住', box && box.x1 - box.x0 >= vw.paper * 0.22 && box.x0 >= 0 && box.x1 <= vw.paper && box.y0 >= 0 && box.y1 <= 900);
+}
+
+// —— 2b. 那一晚：一个人一晚连录的几处，跟着走，舞台上一处一张字幕卡 ——
+console.log('— 2b. 那一晚');
+{
+  // 种三段：同一位采集人、同一晚 19:00–19:20、两处（体育馆两段、为民楼一段）。WAV 是 6 秒 440 Hz：
+  // 1 秒的话软件渲染下第一段常常在点「下一处」之前就放完、自己跳到第二段，再点就跳过了台球室
+  const fs8 = 24000, n = fs8 * 6, wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(fs8, 24); wav.writeUInt32LE(fs8 * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / fs8) * 6000), 44 + i * 2);
+  const seed = [
+    { id: 'ds-e2e-eve-a', placeId: 'XY06', at: '2026-11-20T11:00:00Z', note: '羽毛球馆', spot: '羽毛球馆' },
+    { id: 'ds-e2e-eve-b', placeId: 'XY06', at: '2026-11-20T11:06:00Z', note: '台球室', spot: '台球室' },
+    { id: 'ds-e2e-eve-c', placeId: 'XY12', at: '2026-11-20T11:20:00Z', note: '唯实园', spot: '唯实园' },
+  ];
+  let ok = 0;
+  for (const s of seed) {
+    const r = await fetch(base + 'api/admin/discs', { method: 'POST', headers: { 'content-type': 'text/plain;charset=utf-8', 'x-ks-admin': process.env.KS_ADMIN_TOKEN },
+      body: JSON.stringify({ id: s.id, placeId: s.placeId, at: s.at, note: s.note, audio: wav.toString('base64'), src: { by: '走查', spot: s.spot, consent: true } }) });
+    if (r.status === 201 || r.status === 200) ok++;
+  }
+  t('那一晚：三段采集录音入馆', ok === 3);
+  await go(p, '?h=19#/');
+  await p.waitForFunction(() => !!document.querySelector('.evening .btn'), { timeout: 30000 }).catch(() => {});
+  t('那一晚：首页有入口，写着谁、几处', /走查/.test(await text(p, '.evening')) && /3 段/.test(await text(p, '.evening')));
+  // 那一晚在首屏：纸上第一块就是它，「跟着走一遍」不用滚就点得到（桌面和手机）
+  const evFirst = () => p.evaluate(() => { const s = document.querySelector('.paper-scroll'), b = document.querySelector('.evening .btn.go'); if (!s || !b) return false; const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return s.firstElementChild === document.querySelector('.evening') && r.top >= 0 && r.bottom <= innerHeight && !!hit && b.contains(hit); });
+  const evDesk = await evFirst();
+  await p.setViewport({ width: 390, height: 844 }); await sleep(800);
+  const evPhone = await evFirst();
+  await p.setViewport({ width: 1440, height: 900 }); await sleep(600);
+  t('那一晚在首屏：纸上第一块，桌面和手机都不用滚就点得到', evDesk && evPhone);
+  await p.evaluate(() => document.querySelector('.evening .btn').click());
+  await p.waitForFunction(() => !!document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
+  const c1 = await text(p, '.walk-card');
+  t('那一晚：舞台上出现字幕卡，写着这一处的场地与时刻', /羽毛球馆/.test(c1) && /19:00/.test(c1));
+  await p.evaluate(() => { const b = [...document.querySelectorAll('.evening button')].find((x) => x.textContent.includes('下一处')); if (b) b.click(); });
+  await p.waitForFunction(() => /台球室/.test((document.querySelector('.walk-card') || {}).textContent || ''), { timeout: 20000 }).catch(() => {});
+  t('那一晚：下一处，卡换成下一段', /台球室/.test(await text(p, '.walk-card')));
+  t('那一晚：卡上写着第几处 / 共几处', /2\s*\/\s*3/.test(await text(p, '.walk-card')));
+  await p.evaluate(() => { const b = [...document.querySelectorAll('.evening button')].find((x) => x.textContent.includes('停下')); if (b) b.click(); });
+  await p.waitForFunction(() => !document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
+  t('那一晚：停下，字幕卡收走', !(await p.$('.walk-card')));
+  // 真录音前置：下午三点附近没有真录音，首页第一行钉上钟点最近的那张；地点页、广场顶上也先说真的
+  await go(p, '?h=15#/');
+  await sleep(1500);
+  t('真录音前置：下午首页第一行是最近的真录音', /最近的真录音/.test(await text(p, '.paper .disc-row')));
+  await p.evaluate(() => { location.hash = '#/place/XY06'; });
+  await sleep(1500);
+  t('真录音前置：地点页标题下写最近一张真录音', /最近一张真录音在 11 月 20 日 19:06/.test(await text(p, '.paper .lede')));
+  await p.evaluate(() => { location.hash = '#/community'; });
+  await sleep(1500);
+  t('真录音前置：广场顶上先摆真刻的', /真刻的 · 3 张/.test(await text(p, '.paper .real-strip')));
+}
 
 // —— 3. 社区：原始地图上空是星云 ——
 console.log('— 3. 社区：星云');
@@ -399,6 +489,27 @@ const ov = await m.evaluate(() => document.documentElement.scrollWidth > innerWi
 t('手机：没有横向滚动', !ov);
 t('手机：纸是底部抽屉', (await m.$eval('.paper', (el) => el.getBoundingClientRect().bottom)) >= 843);
 await m.screenshot({ path: path.join(out, 'm-home.png') });
+// 刻钮不压纸：抽屉里每颗看得见的按钮，中心点点下去落在它自己身上，不落在刻钮上
+const pressCovers = () => m.evaluate(() => {
+  const press = document.querySelector('.press');
+  return [...document.querySelectorAll('.paper button, .paper a, .paper [role=tab], .deck button')].filter((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) return false;
+    const hit = document.elementFromPoint(r.left + r.width / 2, Math.min(innerHeight - 1, r.top + r.height / 2));
+    return hit && press && press.contains(hit);
+  }).map((el) => el.textContent.trim().slice(0, 12) || el.getAttribute('aria-label'));
+});
+const covered = [];
+for (const u of ['?h=12#/', '?h=18.5#/time', '?h=12#/community', '?h=12#/place/XY02', '?h=12#/mine']) {
+  await go(m, u, { w: 390, h: 844 });
+  await sleep(1500);
+  for (const s of ['half', 'min', 'full']) {
+    await m.evaluate((s) => { const g = document.querySelector('.paper .grip'); for (let i = 0; i < 3 && g && !document.querySelector(`.paper${s === 'half' ? ':not(.is-min):not(.is-full)' : '.is-' + s}`); i++) g.click(); }, s);
+    await sleep(500);
+    covered.push(...(await pressCovers()).map((x) => `${u} ${s}：${x}`));
+  }
+}
+t(`手机：刻钮不压抽屉里的按钮${covered.length ? `（${covered.slice(0, 4).join(' | ')}）` : ''}`, covered.length === 0);
 await m.close();
 
 await browser.close();

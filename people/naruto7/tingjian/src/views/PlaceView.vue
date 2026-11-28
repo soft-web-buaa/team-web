@@ -9,7 +9,7 @@ import RingWood from '../components/RingWood.vue';
 import EchoBand from '../components/EchoBand.vue';
 import AddToAlbum from '../components/AddToAlbum.vue';
 import PaperSlip from '../components/PaperSlip.vue';
-import { L, atPlace, placeLine, play, isPublic, toggleHeard, toggleFav, isFav, title, laterOf, addLater, removeLater, dropEcho, say } from '../lib/library.js';
+import { L, atPlace, placeLine, placeLede, play, isPublic, toggleHeard, toggleFav, isFav, title, laterOf, addLater, removeLater, dropEcho, say } from '../lib/library.js';
 import { request, photoUrl } from '../lib/cloud.js';
 
 const route = useRoute(), router = useRouter();
@@ -70,7 +70,7 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
     <button type="button" class="link fine" @click="router.push('/')">← 回到整台唱机</button>
     <p class="kicker" style="margin-top: 18px">{{ zone ? zone.name : '' }} · {{ place.b }}</p>
     <h1 class="h1">{{ place.name }}</h1>
-    <p class="lede">{{ placeLine(pid) }}</p>
+    <p class="lede">{{ placeLede(pid) }}</p>
     <div v-if="sleeve" class="sleeve">
       <img :src="photoUrl(sleeve.id, 'full')" alt="这里的一张照片（来自社区）" loading="lazy">
       <span class="tier">来自社区</span>
@@ -125,7 +125,7 @@ const n = (k) => all.value.filter((e) => e.tier === k).length;
     </template>
 
     <p class="h3">这里的每一张 · {{ voices.length }}</p>
-    <p class="fine">{{ n('real') }} 张真实录音，{{ n('synthetic') }} 张示意。按住下面那颗钮，刻的就是{{ place.name }}。</p>
+    <p class="fine">{{ placeLine(pid) }}。{{ n('real') }} 张真实录音，{{ n('synthetic') }} 张示意。按住下面那颗钮，刻的就是{{ place.name }}。</p>
     <ol class="discs"><DiscRow v-for="e in voices" :key="e.id" :e="e" :show-place="false" /></ol>
 
     <template v-if="neighbors.length">

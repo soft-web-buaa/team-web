@@ -27,7 +27,7 @@ import { hourColor } from '../lib/wave.js';
 import * as stage from '../stage/stage.js';
 
 const route = useRoute(), router = useRouter();
-const TABS = [['square', '广场'], ['topics', '话题'], ['relay', '接力'], ['scene', '多机位'], ['albums', '合辑'], ['board', '看板'], ['sound', '声音']];
+const TABS = [['square', '广场'], ['scene', '多机位'], ['albums', '合辑'], ['topics', '话题'], ['relay', '接力'], ['board', '看板'], ['sound', '声音']];
 const tab = computed(() => route.query.tab || 'square');
 const view = computed(() => (route.query.map === 'data' ? 'data' : 'plain'));   // 原始地图 / 数据地图（学黄泰霖原型）
 const topic = computed(() => route.query.topic || null);
@@ -54,6 +54,8 @@ function startRelay() { ui.compose = { text: '', topics: ['tp-jieli'], placeId: 
 
 // —— 多机位 ——
 const realScenes = computed(() => scenes());
+// 广场顶上先摆真刻的：示例帖再多，第一眼也该是有人真的在这儿录过
+const realRecent = computed(() => { void L.version; return L.entries.filter((e) => e.tier === 'real' && isPublic(e) && e.at).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)); });
 const demoScenes = computed(() => sameSlot());
 const sceneOpen = ref(null), cam = ref(0);
 async function switchCam(group, i) {
@@ -126,6 +128,10 @@ const echoFeed = computed(() => L.feed.map((x) => ({ x, e: entryById(x.discId) }
           <button v-if="!writing" type="button" class="btn small" @click="ui.compose = ui.compose || { text: '', topics: topic ? [topic] : [], placeId: null, mood: null, soundId: null }; writing = true">写一帖</button>
         </div>
         <Compose v-if="writing" @done="onPosted" @cancel="writing = false" />
+        <div v-if="realRecent.length && !topic" class="real-strip">
+          <p class="h3">真刻的 · {{ realRecent.length }} 张<button v-if="realScenes.length" type="button" class="link fine" style="margin-left: 10px" @click="go({ tab: 'scene' })">{{ realScenes.length }} 场多机位 →</button></p>
+          <ol class="discs"><DiscRow v-for="e in realRecent.slice(0, 3)" :key="e.id" :e="e" /></ol>
+        </div>
         <p v-if="C.online === false" class="fine">连不上云：现在看到的是示例帖，发帖和回复要等连上。</p>
         <PostCard v-for="p in list" :key="p.id" :post="p" @open="(x) => go({ post: x.id })" @topic="(t) => go({ topic: t })" />
         <p v-if="!list.length" class="fine" style="margin-top: 16px">这个话题下还没有帖子。写第一帖。</p>

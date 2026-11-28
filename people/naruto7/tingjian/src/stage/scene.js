@@ -910,9 +910,9 @@ function plate(text, w, h, { color = '#24304A', bg = null, flat = true, size = 0
 
 // —— 主楼东立面：照着照片描的一张线稿（中青网 2022-10-17 老主楼正面照，out/r6/ref/zhulou-cyol-20221017.png）——
 // 不贴照片：照片带透视、树、天光，贴在卡纸模型上一眼就是「照片糊上去的」（out/r6/exp/facade/ 里试过，见回执）。
-// 从照片量出来的只有比例：窗宽 = 开间 × 0.57、窗高 = 层高 × 0.55、檐口一道深灰、底层石材、正中一个四柱门廊挂红匾。
-// 红匾上不写字：照片上的字认不全，不替它编。
-function elevation(wM, hM, { floors = 6, portico = false } = {}) {
+// 从照片量出来的只有比例：窗宽 = 开间 × 0.57、窗高 = 层高 × 0.55、檐口一道深灰、底层石材。
+// 门廊不再印在这张纸上：2026-11-28 起立在模型里（见 zhulouPortico），它把那一段墙整个挡住。
+function elevation(wM, hM, { floors = 6 } = {}) {
   const K = 12, c = document.createElement('canvas');
   c.width = Math.min(2048, Math.round(wM * K)); c.height = Math.round(hM * K);
   const g = c.getContext('2d'), kx = c.width / wM, ky = c.height / hM;
@@ -932,14 +932,6 @@ function elevation(wM, hM, { floors = 6, portico = false } = {}) {
       g.fillStyle = '#F4F1EA'; g.fillRect(x0 - 0.15 * kx, y0 + wh, ww + 0.3 * kx, 0.22 * ky);   // 窗台
     }
   }
-  if (portico) {
-    const pw = Math.min(wM * 0.42, 20), x0 = (wM - pw) / 2 * kx, top = (hM - fl * 1.35) * ky;
-    g.fillStyle = '#E8E4DA'; g.fillRect(x0, top, pw * kx, (hM * ky) - top);
-    g.fillStyle = '#9C988F'; g.fillRect(x0 - 0.5 * kx, top, (pw + 1) * kx, 0.7 * ky);
-    for (let i = 0; i < 4; i++) { g.fillStyle = '#F4F1EA'; g.fillRect(x0 + (pw * (0.08 + i * 0.28)) * kx, top + 0.7 * ky, 0.9 * kx, (hM * ky) - top); }
-    g.fillStyle = '#B8343C'; g.fillRect(x0 + pw * 0.3 * kx, top + 0.95 * ky, pw * 0.4 * kx, 1.1 * ky);
-    g.fillStyle = '#3B3A36'; for (let i = 0; i < 3; i++) g.fillRect(x0 + (pw * (0.13 + i * 0.28)) * kx, (hM - fl * 0.8) * ky, pw * 0.16 * kx, fl * 0.8 * ky);
-  }
   // 纸纹：极淡的横向纤维
   g.globalAlpha = 0.05; g.fillStyle = '#000';
   for (let i = 0; i < 600; i++) g.fillRect(((i * 7919) % 997) / 997 * c.width, ((i * 104729) % 991) / 991 * c.height, 6 + (i % 13) * 3, 1);
@@ -949,8 +941,123 @@ function elevation(wM, hM, { floors = 6, portico = false } = {}) {
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return t;
 }
-/** 主楼朝东（朝学院路）的几段墙：每段贴一张线稿；最东那一段（门廊所在）画门廊。 */
-function zhulouFront(b) {
+// —— 主楼的门廊与檐口（照片：_素材/主楼 原图 13/14/15 正面与两个斜侧、44 檐口近景；照片只在本机做参考，不进仓库）——
+// 门廊就是 OSM 轮廓东面那段 6 米的外凸：最东边 25.5 米、往外挑 5.6 米，七级台阶；
+// 照片上量的比例：六根方墩在 ±0.473 / ±0.297 / ±0.097 个门廊宽处，各 1.4 米见方；三门两窗；
+// 门廊顶一道浅色斗栱挂在暗色檐下；朱红匾「为人民服务」宽 ≈ 门廊 0.28、高宽比 1:3.1。
+// 局部坐标：x 沿立面（北为正），y 上，z 往东出挑（墙面在 z=0）。
+const ZL = { wall: '#DDD7CA', stone: '#C9C3B4', step: '#B4ADA0', door: '#2A2E33', gold: '#C9A46A', tooth: '#CFC3A8', dark: '#6B675F' };
+function zhulouPortico(q, mat) {
+  const g = new THREE.Group(), F = NONE_FAC(0.42), M = mat();
+  const W = q.L, D = 5.6, FL = 1.05, TOP = 10.4;
+  const cWall = paperOf(ZL.wall, '门廊'), cStone = paperOf(ZL.stone, '门廊石'), cStep = paperOf(ZL.step, '门廊台阶');
+  const cGold = paperOf(ZL.gold, '门廊斗栱'), cTooth = paperOf(ZL.tooth, '门廊栱'); const cDoor = new THREE.Color(ZL.door), cDark = new THREE.Color(ZL.dark);
+  const put = (geo, c, part, extra) => {
+    const m = new THREE.Mesh(dress(geo, c, c, F), M);
+    if (part) m.userData.part = part;
+    if (extra) Object.assign(m.userData, extra);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  const bx = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  // 台基（顶面 1.05 米）与七级台阶（级高 0.15、级深 0.30）
+  put(bx(W, FL, D, 0, FL / 2, D / 2), cStone, 'portico');
+  const st = [];
+  for (let k = 0; k < 7; k++) st.push(bx(W, (k + 1) * 0.15, 0.30, 0, (k + 1) * 0.15 / 2, D + (6 - k) * 0.30 + 0.15));
+  put(mergeGeometries(st), cStep, 'portico-steps');
+  // 台阶两端各接一段矮石台 + 望柱栏板（照片 13：栏杆在台前，方形望柱顶着圆头）
+  for (const s of [-1, 1]) {
+    const x0 = s * (W / 2 + 2.3), zr = 3.25;
+    put(bx(4.6, 1.05, 3.4, x0, 0.525, 1.7), cStone, 'portico');
+    put(bx(4.6, 0.26, 0.3, x0, 1.2, zr), cStone, 'portico');                          // 扶手
+    put(bx(4.6, 0.5, 0.18, x0, 0.82, zr), cStone, 'portico');                         // 栏板
+    for (let i = 0; i < 4; i++) {
+      const px = x0 + s * (-2.1 + i * 1.4);
+      put(bx(0.34, 0.62, 0.34, px, 1.36, zr), cStone, 'portico');
+      put(new THREE.SphereGeometry(0.2, 10, 8).translate(px, 1.75, zr), cStone, 'portico');
+    }
+  }
+  // 门廊后墙：一整面石材，把纸上的窗挡在后面；门与匾挂在这面墙上
+  put(bx(W - 0.3, TOP + 1.45, 0.4, 0, (TOP + 1.45) / 2, 0.2), cWall, 'portico');
+  // 六根方墩（柱础、柱身、柱头）
+  for (const f of [-0.473, -0.297, -0.097, 0.097, 0.297, 0.473]) {
+    const x = f * W, z = D - 0.75;
+    put(bx(1.4, TOP - FL - 0.2, 1.4, x, (TOP + FL) / 2, z), cWall, 'portico-pier');
+    put(bx(1.62, 0.2, 1.62, x, TOP - 0.1, z), cWall, 'portico');
+    put(bx(1.6, 0.2, 1.6, x, FL + 0.1, z), cWall, 'portico');
+  }
+  // 三个门洞（中间三开间）+ 两端各一扇窗（照片 13）：外面一圈深色门套，里面深木门
+  for (const x of [-5.02, 0, 5.02]) {
+    put(bx(3.36, 4.66, 0.1, x, FL + 2.15, 0.42), cDark, 'portico');                   // 门套
+    put(bx(3.0, 4.3, 0.16, x, FL + 2.15, 0.46), cDoor, 'portico');
+    put(bx(3.2, 0.34, 0.3, x, FL + 5.45, 0.5), cDark, 'portico');                    // 门楣
+    put(bx(2.7, 0.9, 0.06, x, FL + 4.75, 0.56), cGold, 'portico');                    // 亮窗格栅
+  }
+  for (const x of [-9.82, 9.82]) {
+    put(bx(2.76, 3.36, 0.1, x, FL + 3.5, 0.42), cDark, 'portico');
+    put(bx(2.4, 3.0, 0.14, x, FL + 3.5, 0.46), cDoor, 'portico');
+  }
+  // 门廊的顶：一块压在天花下的板，把檐下压暗，门廊才有进深（照片 08：里面有筒灯与格顶，这里只做体块）
+  put(bx(W, 0.3, D, 0, TOP - 0.15, D / 2), cWall, 'portico');
+  // 匾额：朱底金字（照片上认得的字：「为人民服务」），挂在门楣上方、柱身之间
+  const plaque = plate('为人民服务', 7.2, 2.3, { bg: '#B7353B', color: '#E9CF8C', flat: false, size: 0.6 });
+  plaque.position.set(0, FL + 7.9, 0.5);
+  g.add(plaque);
+  plaque.userData.part = 'portico-plaque'; plaque.userData.text = '为人民服务';
+  // 门廊顶：暗色檐槽里挂一排金色斗栱，上面一道出挑的檐口
+  put(bx(W - 1.6, 0.9, 0.5, 0, TOP + 0.45, D - 0.9), cDark, 'portico');
+  {
+    const teeth = [];
+    const add = (x, z, along) => {
+      const t = mergeGeometries([new THREE.BoxGeometry(along ? 0.9 : 0.32, 0.34, along ? 0.32 : 0.9).translate(0, 0.17, 0),
+        new THREE.BoxGeometry(along ? 0.62 : 0.5, 0.3, along ? 0.5 : 0.62).translate(0, -0.13, 0),
+        new THREE.BoxGeometry(along ? 0.9 : 0.3, 0.16, along ? 0.3 : 0.9).translate(0, 0.42, 0)]);
+      t.translate(x, 0, z);
+      teeth.push(t);
+    };
+    const nf = Math.round((W - 1.4) / 0.85), nb = Math.round((D - 1.4) / 0.85);
+    for (let i = 0; i < nf; i++) add(-W / 2 + 0.7 + (i + 0.5) * ((W - 1.4) / nf), D - 0.15, true);   // 正面
+    for (const s of [-1, 1]) for (let i = 0; i < nb; i++) add(s * (W / 2 - 0.15), 0.7 + (i + 0.5) * ((D - 1.4) / nb), false);   // 两侧转角
+    const mesh = put(mergeGeometries(teeth).translate(0, TOP, 0), cTooth, 'portico-dougong');
+    mesh.userData.units = nf + 2 * nb;
+  }
+  put(bx(W + 1.0, 0.45, D + 1.0, 0, TOP + 1.12, D / 2 + 0.5), cGold, 'portico');
+  put(bx(W + 1.1, 0.16, D + 1.1, 0, TOP + 1.42, D / 2 + 0.55), cTooth, 'portico');
+  // 门廊自己算进「楼」的外接盒里：枢轴还在楼心，镜头要对准这里（见 stage.js 的 h.focus）
+  return g;
+}
+/** 主楼檐下一圈斗栱（照片 44：浅色栱头一格格挂在暗色檐下，整圈都有）。用整圈轮廓撒，东面门廊那段也在内。 */
+function zhulouDougong(b, H, mat) {
+  const pts = ringM(b.r[0]), F = NONE_FAC(0.66), M = mat();
+  const cTooth = paperOf(ZL.tooth, '主楼栱'), cDark = paperOf(ZL.dark, '主楼檐下');
+  const geos = [];
+  let units = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [ax, ay] = pts[i], [bx2, by2] = pts[(i + 1) % pts.length];
+    const dx = bx2 - ax, dy = by2 - ay, L = Math.hypot(dx, dy);
+    if (L < 1.5) continue;
+    const nx = dy / L, ny = -dx / L, th = Math.atan2(-dy, dx);        // 外法线在行进方向右手边
+    const n = Math.max(1, Math.round(L / 1.5));
+    for (let k = 0; k < n; k++) {
+      const t = (k + 0.5) / n, t2 = mergeGeometries([
+        new THREE.BoxGeometry(0.95, 0.4, 0.34).translate(0, -0.2, 0),
+        new THREE.BoxGeometry(0.5, 0.3, 0.5).translate(0, -0.55, 0),
+      ]);
+      t2.rotateY(th);
+      t2.translate(ax + dx * t + nx * 0.22, H - 1.5 - 0.42, -(ay + dy * t + ny * 0.22));
+      geos.push(t2); units++;
+    }
+  }
+  const g = new THREE.Group();
+  const dark = new THREE.Mesh(dress(slab(offsetRing(pts, 0.3), H - 1.5 - 1.05, H - 1.5 + 0.02, { holes: [offsetRing(pts, -0.5).reverse()] }), cDark, cDark, F), M);
+  const teeth = new THREE.Mesh(dress(mergeGeometries(geos), cTooth, cTooth, F), M);
+  teeth.userData.part = 'zhulou-dougong'; teeth.userData.units = units;
+  for (const m of [dark, teeth]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  return g;
+}
+/** 主楼朝东（朝学院路）的几段墙：每段贴一张线稿；最东那一段立起 3D 门廊。 */
+function zhulouFront(b, mat) {
   const pts = ringM(b.r[0]), H = b.h * EX, g = new THREE.Group();
   const segs = [];
   for (let i = 0; i < pts.length; i++) {
@@ -961,16 +1068,22 @@ function zhulouFront(b) {
   if (!segs.length) return g;
   const east = Math.max(...segs.map((q) => q.x));
   for (const q of segs) {
-    const isFront = q.x === east;
-    const mat = new THREE.MeshStandardMaterial({ map: elevation(q.L, H, { floors: 6, portico: isFront }), roughness: 0.85 });
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(q.L, H), mat);
+    const wmat = new THREE.MeshStandardMaterial({ map: elevation(q.L, H, { floors: 6 }), roughness: 0.85 });
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(q.L, H), wmat);
     pl.rotation.y = Math.PI / 2;
     pl.position.set(q.x + 0.12, H / 2, -(q.ay + q.by) / 2);
     pl.scale.x = -1;                                          // 平面的正面朝 +x 时纹理是反的：翻回来
     pl.receiveShadow = true;
     pl.userData.zone = b.zone;
     g.add(pl);
+    if (q.x === east) {
+      const po = zhulouPortico(q, mat);
+      po.position.set(q.x + 0.12, 0, -(q.ay + q.by) / 2);
+      po.rotation.y = Math.PI / 2;
+      g.add(po);
+    }
   }
+  g.add(zhulouDougong(b, H, mat));
   return g;
 }
 
@@ -1504,7 +1617,7 @@ function buildCampus() {
       heroMeshes.set(b.n, [hm]);
     }
     const lmHere = [];
-    for (const b of bs) if (b.n === '主楼') { const f = zhulouFront({ ...b, zone: z.id }); bgroup.add(f); f.traverse((o) => { if (o.isMesh) { pickables.push(o); o.userData.place = heroOf.get('主楼')?.id; } }); heroMeshes.get('主楼')?.push(f); }
+    for (const b of bs) if (b.n === '主楼') { const f = zhulouFront({ ...b, zone: z.id }, heroMat); bgroup.add(f); f.traverse((o) => { if (o.isMesh) { pickables.push(o); o.userData.place = heroOf.get('主楼')?.id; } }); heroMeshes.get('主楼')?.push(f); }
     // 主楼屋顶那一排红字（照片：中青网 2022-10-17「一栋老主楼，一生北航情」）：立在东侧檐口上，朝学院路
     for (const b of bs) {
       if (b.n !== '主楼') continue;
@@ -1657,6 +1770,16 @@ function buildCampus() {
       for (const o of objs) o.traverse((q) => { if (q.isMesh) (Array.isArray(q.material) ? q.material : [q.material]).forEach((mt) => mats.add(mt)); });
       pivot.traverse((q) => q.layers.enable(1));   // 第 1 层：选择性聚焦时单独再画一遍，不虚
       heroObj.set(p.id, { pivot, pedestal, zone: z.id, base: pivot.position.clone(), size, R, lift: 0, spin: 0, mats, h: size.y });
+    }
+    // 主楼：进楼的机位对准东面那座门廊，不是楼心（楼长 161 米，对准楼心时 25 米宽的门廊只剩一小块）
+    for (const [pid, h] of heroObj) {
+      if (h.zone !== z.id) continue;
+      h.pivot.updateWorldMatrix(true, true);
+      const box = new THREE.Box3();
+      h.pivot.traverse((o) => { if (o.userData.part === 'portico' || o.userData.part === 'portico-pier') box.expandByObject(o); });
+      if (box.isEmpty()) continue;
+      const c = h.pivot.worldToLocal(box.getCenter(new THREE.Vector3()));   // expandByObject 给的是世界坐标，折回枢轴坐标
+      h.focus = { dx: c.x + 2.2, dz: c.z + 1.2, y: 7.2, r: 26, polar: 1.40, az: Math.PI / 2 - 0.34 };
     }
     group.add(bgroup);
 

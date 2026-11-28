@@ -12,6 +12,7 @@ import Deck from './components/Deck.vue';
 import Press from './components/Press.vue';
 import Screen from './components/Screen.vue';
 import RecordSheet from './components/RecordSheet.vue';
+import WalkCard from './components/WalkCard.vue';
 
 const route = useRoute(), router = useRouter();
 const cv = ref(null), lb = ref(null);
@@ -103,6 +104,7 @@ onMounted(async () => {
   <!-- 播放条和刻钮在屏风后面就挂好、只是藏着：原来屏风拿掉的那一刻才挂，这一下的排版落在进站的镜头里（约 70 毫秒的一帧） -->
   <Deck v-show="!ui.screen" />
   <Press v-show="!ui.screen" />
+  <WalkCard v-show="!ui.screen" />
   <RecordSheet v-if="!ui.screen && ui.take" />
 
   <Transition name="fade"><p v-if="L.toast" class="toast" role="status">{{ L.toast }}</p></Transition>
