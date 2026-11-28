@@ -3,6 +3,8 @@
 // 舞台上一颗示波黄的光点从一处走到下一处，地上留一道虚线；走到哪处放哪处，整站钟点跟着拨到那一刻（天一点点黑下去）。
 // 数据只认真实录音（library.evenings）：同一位采集人或我自己、同一晚两小时内、至少三段两处。没有就不出现。
 import { computed, onBeforeUnmount } from 'vue';
+
+defineProps({ hero: Boolean });   // 首页首屏：标题级的字号
 import { L, evenings, title } from '../lib/library.js';
 import { Q, playQueue, stopQueue, skipQueue } from '../lib/albums.js';
 import { backToNow, fmtHour } from '../lib/clock.js';
@@ -50,7 +52,7 @@ onBeforeUnmount(() => { if (on.value) stopQueue(); });
 </script>
 
 <template>
-  <section v-if="ev" class="evening" :class="{ on }" aria-label="那一晚">
+  <section v-if="ev" class="evening" :class="{ on, hero }" aria-label="那一晚">
     <p class="kicker">那一晚 · {{ dayText }} {{ fmtHour(ev.from) }}–{{ fmtHour(ev.to) }}</p>
     <p class="say"><b>{{ ev.who === '我' ? '你' : ev.who.replace(' 采集', '') }}</b> 在 {{ span }} 分钟里录下 {{ ev.items.length }} 段</p>
     <svg v-if="map" class="map" :viewBox="`0 0 ${map.W} ${map.H}`" aria-hidden="true">
@@ -100,5 +102,8 @@ onBeforeUnmount(() => { if (on.value) stopQueue(); });
 .steps li.done { color: var(--ink-2); opacity: .7; }
 .steps li.now { color: var(--ink); background: var(--wash); }
 .steps li.now .t { color: var(--ink); box-shadow: inset 3px 0 0 var(--scope); padding-left: 6px; }
+.hero { margin-top: 4px; padding: 18px 18px 16px; }
+.hero .say { font-size: 16px; }
+.hero .say b { display: block; font-size: 28px; line-height: 1.25; margin-bottom: 2px; }
 @media (prefers-reduced-motion: reduce) { .steps li { transition: none; } .map .route { animation: none; stroke-dashoffset: 0; } }
 </style>

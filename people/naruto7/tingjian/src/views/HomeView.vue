@@ -7,7 +7,7 @@ import Paper from '../components/Paper.vue';
 import DiscRow from '../components/DiscRow.vue';
 import EchoBand from '../components/EchoBand.vue';
 import Evening from '../components/Evening.vue';
-import { L, shuffle, siteCounts, isPublic, whenText, byline } from '../lib/library.js';
+import { L, shuffle, siteCounts, isPublic, whenText, byline, evenings } from '../lib/library.js';
 import { clock, fmtHour, cnHour } from '../lib/clock.js';
 import * as stage from '../stage/stage.js';
 import { ref } from 'vue';
@@ -32,20 +32,22 @@ const realPin = computed(() => {
 });
 const pinMeta = (e) => ['最近的真录音', e.place, whenText(e), byline(e)].filter(Boolean).join(' · ');
 const c = computed(() => { void L.version; return siteCounts(); });
+const hasEvening = computed(() => { void L.version; return evenings().length > 0; });
 function zoom() { close.value = !close.value; stage.zoomGroove(close.value); }
 </script>
 
 <template>
   <Paper slim label="留声机">
-    <p class="kicker">学院路 · 此刻 {{ fmtHour(clock.now) }}</p>
-    <h1 class="h1" style="font-size: 30px">{{ cnHour(clock.now) }}，<br>这里放过这些声音</h1>
+    <!-- 首屏先给一个人走过的一晚（真录音）；没有这样的一晚时，钟点那一段顶上来当标题 -->
+    <Evening hero />
+    <p class="kicker" :style="{ marginTop: hasEvening ? '26px' : 0 }">学院路 · 此刻 {{ fmtHour(clock.now) }}</p>
+    <component :is="hasEvening ? 'h2' : 'h1'" :class="hasEvening ? 'h3' : 'h1'" :style="hasEvening ? '' : 'font-size: 30px'">{{ cnHour(clock.now) }}，这里放过这些声音</component>
     <p class="lede">同一个钟点，不同年份的人在同一个地方听见的十秒。点一栋楼进去，或者按住外圈的刻纹搓一搓。</p>
     <ol class="discs">
       <DiscRow v-if="realPin" :key="realPin.id" :e="realPin" :meta="pinMeta(realPin)" />
       <DiscRow v-for="e in sameHour.slice(0, realPin ? 4 : 5)" :key="e.id" :e="e" />
     </ol>
     <p v-if="!sameHour.length" class="fine">这个钟点还没有人留下声音。按住下面那颗钮，你就是第一张。</p>
-    <Evening />
     <EchoBand />
     <div class="row" style="margin-top: 18px">
       <button type="button" class="btn small ghost" @click="shuffle()">随手放一张</button>

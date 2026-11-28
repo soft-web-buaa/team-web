@@ -152,6 +152,13 @@ console.log('— 2b. 那一晚');
   await go(p, '?h=19#/');
   await p.waitForFunction(() => !!document.querySelector('.evening .btn'), { timeout: 30000 }).catch(() => {});
   t('那一晚：首页有入口，写着谁、几处', /走查/.test(await text(p, '.evening')) && /3 段/.test(await text(p, '.evening')));
+  // 那一晚在首屏：纸上第一块就是它，「跟着走一遍」不用滚就点得到（桌面和手机）
+  const evFirst = () => p.evaluate(() => { const s = document.querySelector('.paper-scroll'), b = document.querySelector('.evening .btn.go'); if (!s || !b) return false; const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return s.firstElementChild === document.querySelector('.evening') && r.top >= 0 && r.bottom <= innerHeight && !!hit && b.contains(hit); });
+  const evDesk = await evFirst();
+  await p.setViewport({ width: 390, height: 844 }); await sleep(800);
+  const evPhone = await evFirst();
+  await p.setViewport({ width: 1440, height: 900 }); await sleep(600);
+  t('那一晚在首屏：纸上第一块，桌面和手机都不用滚就点得到', evDesk && evPhone);
   await p.evaluate(() => document.querySelector('.evening .btn').click());
   await p.waitForFunction(() => !!document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
   const c1 = await text(p, '.walk-card');
