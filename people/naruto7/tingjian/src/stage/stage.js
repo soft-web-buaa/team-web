@@ -55,7 +55,8 @@ function fitDist(radius) {
 const POSES = {
   // 首页（组长 2026-11-26：唱机小、镜头远，四周一大片空的纯色和它对着干）：镜头压近，盘心的校园撑满左边那块，
   // 唱机的底座和唱臂出画，画面里看不到「一台唱机悬在空里」的边；剩下的背景只是边角上的一点
-  home: () => ({ t: V(40, 0, 30), d: fitDist(RIN * 1.16), polar: 0.7, az: -0.36 }),
+  // 2026-11-28 再拉近（组长：校园在盘上像点缀）：校园外轮廓约 ±540 米，撑满纸左边那块，刻纹带只在四角露一截；手机窄，留宽一点免得两侧切掉
+  home: () => ({ t: V(10, 0, 30), d: fitDist(RIN * (canvas.clientWidth > 760 ? 0.8 : 0.95)), polar: 0.8, az: -0.36 }),
   community: () => {
     const f = S.data && S.data.form;
     if (f === 'lights') return { t: V(0, 0, 40), d: Math.max(2500, fitDist(RIN * 1.1)), polar: 0.42, az: -0.18 };       // 夜景：像卫星，偏俯看
