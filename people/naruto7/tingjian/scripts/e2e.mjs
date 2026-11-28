@@ -93,6 +93,26 @@ t('换到体育馆：图书馆落回去，体育馆提起来', (await p.evaluate
 t('体育馆的从前：奥运举重的史料', (await text(p, '.paper')).includes('这里的从前'));
 t('进地点的完整过场：每会话最多两次', (await p.evaluate(() => window.__stage.shows().enterPlace)) <= 3);
 
+// —— 2a. 主楼：东面那座门廊是立体的（照片 06/08：六根方墩、门廊顶一道金色斗栱、红匾、七级台阶），进楼的机位对着它 ——
+console.log('— 2a. 主楼门廊');
+{
+  await p.evaluate(() => { location.hash = '#/place/XY02'; });
+  await until(p, () => window.__stage.mode === 'place' && window.__stage.place === 'XY02' && !window.__stage.flying && window.__stage.heroLift('XY02') > 20, null, 30000);
+  await sleep(600);
+  const part = (n) => p.evaluate((n) => window.__stage.part && window.__stage.part('XY02', n), n);
+  const pier = await part('portico-pier'), steps = await part('portico-steps'), plaque = await part('portico-plaque'), dg = await part('portico-dougong'), body = await part('portico'), eave = await part('zhulou-dougong');
+  console.log('  门廊实测：', JSON.stringify({ pier, steps, plaque, dg: dg && dg.n, body: body && body.size, eave: eave && eave.n }));
+  t('主楼门廊：六根方墩、七级台阶', pier && pier.n === 6 && steps && steps.levels === 7);
+  t('主楼门廊：红匾写着「为人民服务」，门廊顶一道斗栱', plaque && plaque.text === '为人民服务' && dg && dg.units >= 12);
+  t('主楼门廊是立体的：进门廊往外挑 5.6 米、连台阶 7 米以上', body && body.size[0] >= 5 && pier && pier.size[0] > 0 && body.size[2] >= 7);
+  t('主楼檐下一整圈立体的斗栱', eave && eave.units >= 150);
+  const cam = await p.evaluate(() => window.__stage.cam), box = await p.evaluate(() => window.__stage.partScreen && window.__stage.partScreen('XY02', 'portico'));
+  const vw = await p.evaluate(() => { const pp = document.querySelector('.paper'); return { w: innerWidth, paper: pp ? pp.getBoundingClientRect().left : innerWidth }; });
+  console.log('  机位：', JSON.stringify({ cam, box, vw }));
+  t('进主楼的机位从东面看门廊（偏南一点看得出进深）', cam && cam.az > Math.PI / 2 - 0.65 && cam.az < Math.PI / 2 - 0.15);
+  t('门廊在画面里够大、没被纸挡住', box && box.x1 - box.x0 >= vw.paper * 0.22 && box.x0 >= 0 && box.x1 <= vw.paper && box.y0 >= 0 && box.y1 <= 900);
+}
+
 // —— 2b. 那一晚：一个人一晚连录的几处，跟着走，舞台上一处一张字幕卡 ——
 console.log('— 2b. 那一晚');
 {

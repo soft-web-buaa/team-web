@@ -73,6 +73,8 @@ function heroPose(pid, az = null) {
   const z = G.zoneObj.get(h.zone);
   const wp = new THREE.Vector3();
   h.pivot.getWorldPosition(wp);
+  // 专属机位（主楼：对着东面门廊）。偏移跟着枢轴走，楼被提起来时镜头一起升
+  if (h.focus) { const f = h.focus; return { t: V(wp.x + f.dx, wp.y + f.y, wp.z + f.dz), d: Math.max(120, fitDist(f.r)), polar: f.polar, az: f.az }; }
   const r = Math.max(h.size.x, h.size.z) * 0.62 + h.size.y * 0.8 + 14;   // 楼连同台座占画面一大半（2026-11-26 拉近：细节要看得见）
   return { t: V(wp.x, TILE_TOP + z.lift + LIFT(h) * 0.7 + h.size.y * 0.35, wp.z), d: Math.max(220, fitDist(r)), polar: 1.1, az: heroAz(h) };   // 放低一点：多看立面、少看屋顶
 }
@@ -167,6 +169,8 @@ export function setMode(mode, { pid = null } = {}) {
   if (built && G.ground) G.ground.visible = mode === 'community' && !!S.data && GROUND_FORMS.has(S.data.form);
   G.controls_minPolar = mode === 'time' ? 0.02 : 0.32;
   controls.minPolarAngle = G.controls_minPolar;
+  // 地点里能压得更低：门廊、台阶这些近人的构件要平着看，俯看只剩屋顶（其余板块仍是原来的 1.18）
+  controls.maxPolarAngle = mode === 'place' ? 1.46 : 1.18;
   if (!revealed) return;
   syncSplat();
 
@@ -1291,9 +1295,41 @@ export async function init(canvasNode, labelsNode, campus) {
     pinScreen: (pid) => { const o = G.pinObj.get(pid); const v = o.group.position.clone().setY(o.group.position.y + o.head.position.y - 2).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     heroScreen: (pid) => { const h = G.heroObj.get(pid); const v = h.pivot.getWorldPosition(new THREE.Vector3()).setY(TILE_TOP + h.size.y * 0.5).project(G.camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; },
     dbg: () => ({ calls: G.renderer.info.render.calls, tris: G.renderer.info.render.triangles }),
+    // 走查量构件：地点楼里标了 userData.part 的部件，数个数、数朝上的面有几层高度（台阶）、量外接盒（米）、投到屏幕上的外接框
+    part: (pid, name) => partOf(pid, name), partScreen: (pid, name) => partScreen(pid, name), get cam() { const p = poseNow(); return { az: p.az, polar: p.polar, d: p.d }; },
     get splat() { return splatState(); },
     look: (x, z, d, polar, az) => play([{ to: { t: V(x, TILE_TOP + 4, z), d, polar, az }, dur: 1, ease: 'out' }]) };   // 截图走查用：看某一处
   return true;
+}
+function partsOf(pid, name) {
+  const h = G.heroObj.get(pid), out = [];
+  if (h) h.pivot.traverse((o) => { if (o.userData.part === name) out.push(o); });
+  return out;
+}
+function partOf(pid, name) {
+  const ms = partsOf(pid, name);
+  if (!ms.length) return { n: 0, units: 0, levels: 0, size: [0, 0, 0], text: '' };
+  const box = new THREE.Box3(), levels = new Set();
+  let units = 0;
+  for (const o of ms) {
+    box.expandByObject(o);
+    units += o.userData.units || 1;
+    const g = o.geometry, p = g && g.attributes.position, nr = g && g.attributes.normal;
+    if (p && nr) for (let i = 0; i < p.count; i++) if (nr.getY(i) > 0.9) levels.add(Math.round(p.getY(i) * 100));
+  }
+  return { n: ms.length, units, levels: levels.size, size: box.getSize(new THREE.Vector3()).toArray().map((v) => +v.toFixed(2)), text: ms.map((o) => o.userData.text || '').join('') };
+}
+function partScreen(pid, name) {
+  const ms = partsOf(pid, name);
+  if (!ms.length) return null;
+  const box = new THREE.Box3();
+  for (const o of ms) box.expandByObject(o);
+  const r = canvas.getBoundingClientRect(), xs = [], ys = [];
+  for (let i = 0; i < 8; i++) {
+    const v = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(G.camera);
+    xs.push(r.left + ((v.x + 1) / 2) * r.width); ys.push(r.top + ((1 - v.y) / 2) * r.height);
+  }
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 }
 /** 预编译：第一帧要编译约 50 个着色器（实测核显上 3 秒 + 1.5 秒卡死）。
  *  先按真实的渲染目标异步编译场景材质（不卡主线程），再画一帧很小的，把阴影深度和后期的着色器编完；然后才开始画。 */
