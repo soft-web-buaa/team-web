@@ -16,6 +16,7 @@ import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftS
 import { TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { buildLandmarks, paintStreets } from './landmarks.js';
 import { TEX, loadCampusTex } from './campusTex.js';
+import { FIELD } from './soundfield.js';
 import { FUNC_CARD, ERA, ROOF_PAPER, POOL_STONE, STYLE, tintOf, facadeOf, offsetRing, ringArea, obbOf, SCENERY } from '../kesheng/web/plan3d/model.js';
 
 export const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量）
@@ -25,6 +26,21 @@ export const LABEL_R = RIN - 40;
 export const WAVE_FS = 8000, WAVE_W = 1024, WAVE_H = 80;
 export const TAU = Math.PI * 2;
 export const COL = { paper: '#F2F4F3', alu: '#D3D7DA', lathe: '#515C6A', ink: '#24304A', scope: '#E6BE3A' };
+// 盘面的三套做法（2026-11-28 组里对比后定了漆面）：默认漆面；?disc=card 是原来的彩色卡纸，?disc=ivory 是白模。只换颜色与材质，几何一样。
+// 两套都只让五十年代那批楼留着暗红出檐和黄椽：整盘一色，老楼自己跳出来
+const DISCS = {
+  // 白模：象牙白的楼、略深一档的地，形体全靠日影和接触影读出来；路是压低的亮纸
+  ivory: { base: '#A59D8E', side: '#D6CEBD', wall: '#ECE6D8', roof: '#F4EFE5', stone: '#E4DDCD', trunk: '#A39A8A', water: '#5B6B78',
+    pitch: '#BCC2A6', track: '#CDB1A0', road: { color: '#F1ECE1' },
+    scene: { tile: '#D3CCBC', road: '#F1ECE1', green: '#C6C5AF', crown: [['#C9CEBD', 0.4], ['#B8BFAC', 0.32], ['#D9D6C6', 0.28]] } },
+  // 藏青漆面：地块刷成标签那种藏青，路是黄铜，楼是奶白——和外圈的金刻度、藏青标签同一套颜色
+  lacquer: { base: '#12151C', side: '#2B3349', wall: '#EAE2D0', roof: '#F2ECDF', stone: '#E2D8C4', trunk: '#3A3530', water: '#0C1322',
+    pitch: '#3D5C4C', track: '#6E3E35', line: '#C9A85E', road: { color: '#B99A55', metalness: 0.85, roughness: 0.34 },
+    scene: { tile: '#222B42', road: '#B99A55', green: '#2E4842', crown: [['#5E7B63', 0.36], ['#4B6858', 0.34], ['#71896A', 0.3]] } },
+};
+const discQ = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('disc') : null;
+export const DISC_PAL = discQ === 'card' ? null : DISCS[discQ] || DISCS.lacquer;
+if (DISC_PAL) for (const k of Object.keys(SCENERY)) Object.assign(SCENERY[k], DISC_PAL.scene);
 export const MAXB = 32;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -198,14 +214,16 @@ function windowize(mat, { detail = false } = {}) {
     sh.uniforms.uSnow = snowU;
     sh.uniforms.uWallT = TEX.wall; sh.uniforms.uRoofT = TEX.roof;
     sh.uniforms.uWallOn = TEX.wallOn; sh.uniforms.uRoofOn = TEX.roofOn;
+    sh.uniforms.uFT = FIELD.tex; sh.uniforms.uFE = FIELD.ext; sh.uniforms.uFK = FIELD.k; sh.uniforms.uFC = FIELD.col; sh.uniforms.uFG = FIELD.gain; sh.uniforms.uFN = FIELD.now; sh.uniforms.uFI = FIELD.iso;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aFac; varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aFac; varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; varying vec2 vFW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac; vFW = (modelMatrix * vec4(position, 1.0)).xz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         ${detail ? '#define KS_DETAIL\n        uniform float uDetail;' : ''}
-        varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; uniform float uNight, uLit, uWin, uSnow;
+        varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; varying vec2 vFW; uniform float uNight, uLit, uWin, uSnow;
         uniform sampler2D uWallT, uRoofT; uniform float uWallOn, uRoofOn;
+        uniform sampler2D uFT; uniform vec3 uFE, uFC; uniform float uFK, uFG, uFN, uFI;
         float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         float box1(float x, float a, float b, float aa) { return smoothstep(a - aa, a + aa, x) * (1.0 - smoothstep(b - aa, b + aa, x)); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -316,9 +334,17 @@ function windowize(mat, { detail = false } = {}) {
             float lampI = (2.0 + 2.4 * wHash(cell + 3.1)) * mix(1.0, 0.32, drawn) * mix(1.0, 0.86, 1.0 - warm);
             totalEmissiveRadiance += lampC * lit * uNight * uWin * lampI;
           }
+          // 声场打在墙上：取墙外三米那一格的振幅，墙脚最亮、往上淡掉（波撞到这面墙、弹回去）
+          float sideF = 1.0 - smoothstep(0.3, 0.5, abs(vGN.y));
+          if (uFK > 0.001 && sideF > 0.01) {
+            vec4 fq = texture2D(uFT, (vFW + normalize(vGN.xz + 1e-5) * 3.0 - uFE.xy) * uFE.z);
+            float lit = fq.b * uFG / (fq.b * uFG + 0.6) * smoothstep(0.0012, 0.005, fq.b);
+            float age = uFN - fq.a, band = fq.a > 0.0 ? exp(-max(age, 0.0) * 14.0) * step(0.0, age) : 0.0;
+            totalEmissiveRadiance += uFC * (lit * 0.9 + band * 1.4) * sideF * exp(-vLoc.y / 10.0) * uFK;   // 墙脚被照亮：声音撞在这面墙上
+          }
         }`);
   };
-  mat.customProgramCacheKey = () => (detail ? 'ks-card-v2-d' : 'ks-card-v2');
+  mat.customProgramCacheKey = () => (detail ? 'ks-card-v3-d' : 'ks-card-v3');
 }
 
 // —— 地面的接触影：楼脚、树下的一圈柔和变暗。把楼底轮廓和树冠画进一张 1024 的图，模糊几遍，当 AO 贴在地面材质上（世界坐标采样）。
@@ -386,6 +412,7 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
     sh.uniforms.uChan = { value: chan }; sh.uniforms.uScl = { value: scale };
     sh.uniforms.uAmt = { value: amt }; sh.uniforms.uRgh = { value: rgh }; sh.uniforms.uStripe = { value: stripe };
     sh.uniforms.uGD = GD.tex; sh.uniforms.uGDe = GD.ext; sh.uniforms.uAOk = { value: ao };
+    sh.uniforms.uFT = FIELD.tex; sh.uniforms.uFE = FIELD.ext; sh.uniforms.uFK = FIELD.k; sh.uniforms.uFC = FIELD.col; sh.uniforms.uFG = FIELD.gain; sh.uniforms.uFN = FIELD.now; sh.uniforms.uFI = FIELD.iso;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vSLoc;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSLoc = position;');
@@ -393,6 +420,7 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
       .replace('#include <common>', `#include <common>
         varying vec3 vSLoc; uniform sampler2D uSurfT, uGD; uniform vec3 uGDe;
         uniform float uSurfOn, uChan, uScl, uAmt, uRgh, uStripe, uAOk;
+        uniform sampler2D uFT; uniform vec3 uFE, uFC; uniform float uFK, uFG, uFN, uFI;
         float surfCh(vec4 c) { return uChan < 0.5 ? c.r : (uChan < 1.5 ? c.g : c.b); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         if (uAOk > 0.001) diffuseColor.rgb *= mix(1.0, texture2D(uGD, (vSLoc.xz - uGDe.xy) * uGDe.z).r, uAOk);   // 楼脚、树下的接触影
@@ -409,9 +437,25 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
             float s = smoothstep(-0.06, 0.06, fract(vSLoc.x / 8.0 + vSLoc.z / 13.0) - 0.5);
             diffuseColor.rgb *= 1.0 + 0.1 * (s - 0.5) * keep;
           }
+        }
+        // 声场：波峰是一道亮的黄铜色，波谷把地面压暗一点（soundfield.js）
+        if (uFK > 0.001) {
+          vec4 fq = texture2D(uFT, (vSLoc.xz - uFE.xy) * uFE.z);
+          float lit = fq.b * uFG / (fq.b * uFG + 0.6) * smoothstep(0.0012, 0.005, fq.b);   // 此刻被这段声音照到多少
+          if (fq.a > 0.0) {
+            // 等时线：到达时刻每过 uFI 秒一道细线；远处线挤在一起时淡掉，不出摩尔纹
+            float g = fq.a / uFI, w = fwidth(g);
+            float ln = (1.0 - smoothstep(0.5 * w, 1.5 * w + 0.02, abs(fract(g + 0.5) - 0.5))) * (1.0 - smoothstep(0.22, 0.45, w));
+            float age = uFN - fq.a;                                   // 探测脉冲走过这里多久了
+            ln *= smoothstep(0.0, 0.04, age);                          // 线是脉冲走过时刻下的
+            float band = exp(-max(age, 0.0) * 18.0) * step(0.0, age);  // 脉冲本身：一道约 20 米宽的亮带往外扫
+            totalEmissiveRadiance += uFC * (ln * (0.07 + 1.6 * lit + 1.0 * exp(-age * 3.0)) + band * 0.5) * uFK;
+            diffuseColor.rgb *= 1.0 - 0.22 * ln * uFK;              // 白天：纹是刻进地面的一道暗线
+          }
+          totalEmissiveRadiance += uFC * lit * lit * 0.05 * uFK;
         }`);
   };
-  mat.customProgramCacheKey = () => 'ks-surf-v2';
+  mat.customProgramCacheKey = () => 'ks-surf-v3';
   return mat;
 }
 
@@ -1115,8 +1159,9 @@ function cardBuilding(b, zi, { detail = false } = {}) {
   const H = pool ? POOL_WALL : b.h * EX;
   const era = b.era && ERA[b.era];
   const key = b.n || `${zi}:${b.o[0]}:${b.o[1]}`;
-  const wall = paperOf(pool ? POOL_STONE : era ? era.wall : FUNC_CARD[b.f ?? 0], key);
-  const roof = paperOf(roofHex(key, b.rf === 'hipped'), key + '屋');
+  const P = DISC_PAL;
+  const wall = paperOf(pool ? (P ? P.stone : POOL_STONE) : era ? era.wall : P ? P.wall : FUNC_CARD[b.f ?? 0], key);
+  const roof = paperOf(P ? P.roof : roofHex(key, b.rf === 'hipped'), key + '屋');
   const fc = facadeOf(b, H);
   // 地点楼：名字以「馆」结尾的不全是体育馆（图书馆、博物馆、音乐厅都有窗）。特写时按公开照片给一种立面：
   // 图书馆是普通窗格，博物馆、音乐厅是横向带窗（照片上是成片的玻璃）。体育馆、游泳馆、看台另做，不在这里
@@ -1470,11 +1515,20 @@ function crownColor(i) {
 
 function buildCampus() {
   buildGroundDetail();
-  const base = new THREE.Mesh(extrude(campus.campus, BASE_TOP), new THREE.MeshStandardMaterial({ color: '#8C867B', roughness: 0.9 }));   // 底板：灰板纸
+  const base = new THREE.Mesh(extrude(campus.campus, BASE_TOP), new THREE.MeshStandardMaterial({ color: DISC_PAL ? DISC_PAL.base : '#8C867B', roughness: DISC_PAL === DISCS.lacquer ? 0.32 : 0.9, metalness: DISC_PAL === DISCS.lacquer ? 0.2 : 0 }));   // 底板：灰板纸
   base.position.y = 0.4;
   base.castShadow = true;
   base.receiveShadow = true;
   scene.add(base);
+  // 描金：校界与每个片区的地块边，一道 2.4 米宽的黄铜线（只有漆面那套有）
+  if (DISC_PAL && DISC_PAL.line) {
+    const loop = (r, w) => [w, ...r, r[0], r[1]];
+    const lines = [ribbon(loop(campus.campus[0], 36), BASE_TOP + 0.5)];
+    for (const z of campus.zones) for (const t of z.tiles) lines.push(ribbon(loop(t.r[0], 24), TILE_TOP + 0.1));
+    const gilt = new THREE.Mesh(mergeGeometries(lines), new THREE.MeshStandardMaterial({ color: DISC_PAL.line, metalness: 0.75, roughness: 0.3, emissive: DISC_PAL.line, emissiveIntensity: 0.12 }));
+    gilt.receiveShadow = true;
+    scene.add(gilt);
+  }
 
   const std = (o) => new THREE.MeshStandardMaterial(o);
   const glow = (mat, k) => { nightMats.push({ mat, k }); return mat; };
@@ -1528,7 +1582,7 @@ function buildCampus() {
   const poolGeo = new THREE.PlaneGeometry(1, 1);
   poolGeo.rotateX(-Math.PI / 2);
   const lampHeadMat = glow(std({ color: '#E9ECEC', emissive: '#FFD9A8', emissiveIntensity: 0, roughness: 0.4 }), 5);
-  const trunkMat = std({ color: '#6E655C', roughness: 0.9 });
+  const trunkMat = std({ color: DISC_PAL ? DISC_PAL.trunk : '#6E655C', roughness: 0.9 });
   const mtx = new THREE.Matrix4(), qt = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3();
   
   campus.zones.forEach((z, zi) => {
@@ -1542,11 +1596,11 @@ function buildCampus() {
       return mt;
     };
     const tileMat = surfaceTex(mat(SCENERY['秋'].tile, { roughness: 0.95 }, '#5C636D', '#B9B6AC'), 1, 1 / 5.2, { amt: 0.46, rgh: 0.1, ao: 1 });
-    const roadMat = surfaceTex(mat(SCENERY['秋'].road, { roughness: 0.95 }, '#8A9199'), 0, 1 / 7, { amt: 0.36, rgh: 0.12, ao: 0.85 });
+    const roadMat = surfaceTex(mat(SCENERY['秋'].road, { roughness: 0.95, ...(DISC_PAL ? DISC_PAL.road : {}) }, '#8A9199'), 0, 1 / 7, { amt: 0.36, rgh: 0.12, ao: 0.85 });
     const greenMat = surfaceTex(mat(SCENERY['秋'].green, {}, '#6C7775'), 2, 1 / 3.4, { amt: 0.6, rgh: 0.08, ao: 0.8 });
     seasonal.push({ tints, tileMat, roadMat, greenMat });
-    const pitchMat = surfaceTex(mat('#5E9A5A', {}, '#5B6968'), 2, 1 / 3.4, { amt: 0.5, rgh: 0.08, stripe: 1, ao: 0.5 });
-    const trackMat = surfaceTex(mat('#B85C45', {}, '#6B6466'), 0, 1 / 5, { amt: 0.28, rgh: 0.1, ao: 0.6 });
+    const pitchMat = surfaceTex(mat(DISC_PAL ? DISC_PAL.pitch : '#5E9A5A', {}, '#5B6968'), 2, 1 / 3.4, { amt: 0.5, rgh: 0.08, stripe: 1, ao: 0.5 });
+    const trackMat = surfaceTex(mat(DISC_PAL ? DISC_PAL.track : '#B85C45', {}, '#6B6466'), 0, 1 / 5, { amt: 0.28, rgh: 0.1, ao: 0.6 });
     seasonal.at(-1).pitchMat = pitchMat; seasonal.at(-1).trackMat = trackMat;
     const bldMat = mat('#FFFFFF', { roughness: 0.78, vertexColors: true }, '#A3A9B1');
     windowize(bldMat);
@@ -1558,7 +1612,7 @@ function buildCampus() {
 
     // 地块：一块一个网格。r9 把几块并成一个几何体（mergeGeometries 默认丢掉材质分组），配上 [顶面, 切边] 两个材质之后
     // three.js 既不画它也不拾取它——地块一直是看不见的，看到的「地面」其实是底板（r10 查出来的，见回执）
-    const sideMat = std({ color: '#C9BEA9', roughness: 0.9 });   // 卡纸板的切边
+    const sideMat = std({ color: DISC_PAL ? DISC_PAL.side : '#C9BEA9', roughness: 0.9 });   // 卡纸板的切边
     const tileList = z.tiles.map((t) => {
       const o = new THREE.Mesh(extrude(t.r, TILE_TOP - BASE_TOP), [tileMat, sideMat]);
       o.position.y = BASE_TOP;
@@ -1579,7 +1633,7 @@ function buildCampus() {
     ground(z.green, TILE_TOP + 0.03, greenMat);
     ground(z.track, TILE_TOP + 0.045, trackMat);
     ground(z.pitch, TILE_TOP + 0.05, pitchMat);
-    ground(z.water, TILE_TOP + 0.05, waterize(mat('#44749A', { metalness: 0.3, roughness: 0.12 }, '#4E5966')));
+    ground(z.water, TILE_TOP + 0.05, waterize(mat(DISC_PAL ? DISC_PAL.water : '#44749A', { metalness: 0.3, roughness: 0.12 }, '#4E5966')));
     // 场地画线：跑道分道线、球场边线
     if (z.lines.length) {
       const seg = [];
