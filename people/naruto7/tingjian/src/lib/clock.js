@@ -52,6 +52,29 @@ function mixFit(bg, ink, t0, min) {
 
 export const wrap = (h) => ((h % 24) + 24) % 24;
 
+/** 屏风一扇的字在哪几段（占一扇屏高度的比例，和 Screen.vue 的版面对应）：顶上的钟点字、竖排的那句、底下的出处。 */
+export const LEAF_ZONES = {
+  desk: { top: [0.03, 0.18], line: [0.2, 0.76], src: [0.8, 0.97] },
+  phone: { top: [0.02, 0.14], line: [0.15, 0.46] },
+};
+/** 屏风一扇的配色：底色在 a 之前是 bg0、到 b 渐成 bg1；每段字各取黑或白里对比度高的那个。
+ *  a、b 和墨色一起挑：每段字都过 4.5 时取渐变最缓的一组，都过不了时取最差那段最高的一组。返回 { a, b, ink: {段: rgb}, cr: {段: 对比度}, min }。 */
+export function leafPalette(h, zones) {
+  const t = tokensAt(h), DK = [16, 12, 12], WT = [255, 250, 242];
+  let best = null;
+  const score = (x) => (x.min >= 4.5 ? 100 + (x.b - x.a) : x.min);
+  for (let a = 0; a <= 0.201; a += 0.02) for (let e = a + 0.06; e <= 1.0001; e += 0.02) {
+    const bg = (s) => lerp(t.bg0, t.bg1, Math.max(0, Math.min(1, (s - a) / (e - a))));
+    const span = (c, [a, b]) => { let m = 99; for (let s = a; s <= b + 1e-9; s += 0.01) m = Math.min(m, contrast(c, bg(s))); return m; };
+    const ink = {}, cr = {};
+    for (const [k, z] of Object.entries(zones)) { const d = span(DK, z), w = span(WT, z); ink[k] = d >= w ? DK : WT; cr[k] = Math.max(d, w); }
+    const min = Math.min(...Object.values(cr));
+    const x = { a: +a.toFixed(2), b: +Math.min(1, e).toFixed(2), ink, cr, min };
+    if (!best || score(x) > score(best) + 1e-6) best = x;
+  }
+  return { ...best, bg0: t.bg0, bg1: t.bg1 };
+}
+
 /** 钟点 h 的全部颜色与光（数组是 0–255 的 [r,g,b]）。 */
 export function tokensAt(h) {
   const x = wrap(h);

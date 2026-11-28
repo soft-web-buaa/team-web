@@ -57,6 +57,21 @@ let p = await open(A, '?h=18.4', { screen: true });
 t('进站先看到屏风，四扇屏', (await p.$$('.screen .leaf')).length === 4);
 t('屏风上的主句', (await text(p, '.screen .main')).includes('比我们在这里待得久'));
 t('此刻所在的那一扇亮着（18:24 是昏）', (await text(p, '.leaf.now .w')) === '昏');
+// 四段「从前」读得全：桌面和手机上，竖排的句子既不被中间那张纸压住，也不被截断
+const leafRead = () => p.evaluate(() => {
+  const c = document.querySelector('.screen .center').getBoundingClientRect();
+  return [...document.querySelectorAll('.screen .leaf .line')].filter((el) => {
+    const r = el.getBoundingClientRect(), hit = r.left < c.right && r.right > c.left && r.top < c.bottom && r.bottom > c.top;
+    return hit || el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1;
+  }).map((el) => el.textContent.slice(0, 6));
+});
+const leafBad = await leafRead();
+await p.setViewport({ width: 390, height: 844 });
+await sleep(600);
+leafBad.push(...(await leafRead()).map((x) => '手机 ' + x));
+await p.setViewport({ width: 1440, height: 900 });
+await sleep(400);
+t(`屏风：四段从前在桌面和手机上都读得全${leafBad.length ? '（' + leafBad.join(' | ') + '）' : ''}`, leafBad.length === 0);
 const css0 = await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--paper'));
 await p.waitForFunction(() => !document.querySelector('.hold[disabled]'), { timeout: 30000 });
 const hold = await p.$('.hold');
