@@ -456,6 +456,27 @@ const ov = await m.evaluate(() => document.documentElement.scrollWidth > innerWi
 t('手机：没有横向滚动', !ov);
 t('手机：纸是底部抽屉', (await m.$eval('.paper', (el) => el.getBoundingClientRect().bottom)) >= 843);
 await m.screenshot({ path: path.join(out, 'm-home.png') });
+// 刻钮不压纸：抽屉里每颗看得见的按钮，中心点点下去落在它自己身上，不落在刻钮上
+const pressCovers = () => m.evaluate(() => {
+  const press = document.querySelector('.press');
+  return [...document.querySelectorAll('.paper button, .paper a, .paper [role=tab], .deck button')].filter((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) return false;
+    const hit = document.elementFromPoint(r.left + r.width / 2, Math.min(innerHeight - 1, r.top + r.height / 2));
+    return hit && press && press.contains(hit);
+  }).map((el) => el.textContent.trim().slice(0, 12) || el.getAttribute('aria-label'));
+});
+const covered = [];
+for (const u of ['?h=12#/', '?h=18.5#/time', '?h=12#/community', '?h=12#/place/XY02', '?h=12#/mine']) {
+  await go(m, u, { w: 390, h: 844 });
+  await sleep(1500);
+  for (const s of ['half', 'min', 'full']) {
+    await m.evaluate((s) => { const g = document.querySelector('.paper .grip'); for (let i = 0; i < 3 && g && !document.querySelector(`.paper${s === 'half' ? ':not(.is-min):not(.is-full)' : '.is-' + s}`); i++) g.click(); }, s);
+    await sleep(500);
+    covered.push(...(await pressCovers()).map((x) => `${u} ${s}：${x}`));
+  }
+}
+t(`手机：刻钮不压抽屉里的按钮${covered.length ? `（${covered.slice(0, 4).join(' | ')}）` : ''}`, covered.length === 0);
 await m.close();
 
 await browser.close();
