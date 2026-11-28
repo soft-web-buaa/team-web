@@ -176,6 +176,14 @@ function tally(list) {
   return c;
 }
 export function placeLine(pid) { return tallyText(tally(atPlace(pid).filter(isPublic))) || '这里还没有声音。'; }
+/** 地点页标题下那一句：先说有什么、最近一张真录音是哪天；计数口径句（placeLine）退到列表上方的小字。 */
+export function placeLede(pid) {
+  const list = atPlace(pid).filter(isPublic), real = list.filter((e) => e.tier === 'real' && e.at).sort((a, b) => T(b) - T(a));
+  if (!list.length) return '这里还没有声音。按住刻钮，刻下第一张。';
+  if (!real.length) return `这里收着 ${list.length} 张声音，还等着第一张真录音。`;
+  const b = bj(real[0].at), hm = `${String(Math.floor(b.h)).padStart(2, '0')}:${String(Math.floor((b.h % 1) * 60)).padStart(2, '0')}`;
+  return `这里收着 ${list.length} 张声音 · 最近一张真录音在 ${b.mo} 月 ${b.d} 日 ${hm}`;
+}
 export function siteCounts() { return tally(L.entries.filter(isPublic)); }
 /** 那一晚：同一个人（同一位采集人，或我自己）在同一个晚上、两小时之内接连录下的真实声音，至少三处、跨两个地点。
  *  按时间排好，返回 [{ who, day, from, to, items }]，最新的在前。 */

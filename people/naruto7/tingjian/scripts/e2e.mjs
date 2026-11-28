@@ -116,8 +116,9 @@ console.log('— 2a. 主楼门廊');
 // —— 2b. 那一晚：一个人一晚连录的几处，跟着走，舞台上一处一张字幕卡 ——
 console.log('— 2b. 那一晚');
 {
-  // 种三段：同一位采集人、同一晚 19:00–19:20、两处（体育馆两段、为民楼一段）。WAV 是 1 秒 440 Hz
-  const fs8 = 24000, n = fs8, wav = Buffer.alloc(44 + n * 2);
+  // 种三段：同一位采集人、同一晚 19:00–19:20、两处（体育馆两段、为民楼一段）。WAV 是 6 秒 440 Hz：
+  // 1 秒的话软件渲染下第一段常常在点「下一处」之前就放完、自己跳到第二段，再点就跳过了台球室
+  const fs8 = 24000, n = fs8 * 6, wav = Buffer.alloc(44 + n * 2);
   wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVE', 8); wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
   wav.writeUInt32LE(fs8, 24); wav.writeUInt32LE(fs8 * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
   for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / fs8) * 6000), 44 + i * 2);
@@ -140,13 +141,23 @@ console.log('— 2b. 那一晚');
   await p.waitForFunction(() => !!document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
   const c1 = await text(p, '.walk-card');
   t('那一晚：舞台上出现字幕卡，写着这一处的场地与时刻', /羽毛球馆/.test(c1) && /19:00/.test(c1));
-  await p.evaluate(() => [...document.querySelectorAll('.evening button')].find((b) => b.textContent.includes('下一处')).click());
+  await p.evaluate(() => { const b = [...document.querySelectorAll('.evening button')].find((x) => x.textContent.includes('下一处')); if (b) b.click(); });
   await p.waitForFunction(() => /台球室/.test((document.querySelector('.walk-card') || {}).textContent || ''), { timeout: 20000 }).catch(() => {});
   t('那一晚：下一处，卡换成下一段', /台球室/.test(await text(p, '.walk-card')));
   t('那一晚：卡上写着第几处 / 共几处', /2\s*\/\s*3/.test(await text(p, '.walk-card')));
-  await p.evaluate(() => [...document.querySelectorAll('.evening button')].find((b) => b.textContent.includes('停下')).click());
+  await p.evaluate(() => { const b = [...document.querySelectorAll('.evening button')].find((x) => x.textContent.includes('停下')); if (b) b.click(); });
   await p.waitForFunction(() => !document.querySelector('.walk-card'), { timeout: 20000 }).catch(() => {});
   t('那一晚：停下，字幕卡收走', !(await p.$('.walk-card')));
+  // 真录音前置：下午三点附近没有真录音，首页第一行钉上钟点最近的那张；地点页、广场顶上也先说真的
+  await go(p, '?h=15#/');
+  await sleep(1500);
+  t('真录音前置：下午首页第一行是最近的真录音', /最近的真录音/.test(await text(p, '.paper .disc-row')));
+  await p.evaluate(() => { location.hash = '#/place/XY06'; });
+  await sleep(1500);
+  t('真录音前置：地点页标题下写最近一张真录音', /最近一张真录音在 11 月 20 日 19:06/.test(await text(p, '.paper .lede')));
+  await p.evaluate(() => { location.hash = '#/community'; });
+  await sleep(1500);
+  t('真录音前置：广场顶上先摆真刻的', /真刻的 · 3 张/.test(await text(p, '.paper .real-strip')));
 }
 
 // —— 3. 社区：原始地图上空是星云 ——
