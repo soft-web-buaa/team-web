@@ -14,6 +14,7 @@ import * as audio from '../lib/audio.js';
 import { paintGround, paintMedal, medalSpec } from './ground.js';
 import { createDataFx } from './datafx.js';
 import { attachSplat, detachSplat, stepSplat, splatState } from './splat.js';
+import { createField, FIELD } from './soundfield.js';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let G = null;                 // scene.js 返回的句柄
@@ -677,6 +678,8 @@ let envHex = '', envT = 0, bgKey = '';
 // 阴影（2026-11-26，进站掉帧）：阴影贴图原来每帧都把整个校园再画一遍。现在只在有东西动的时候重画：太阳挪了、区块在立起或抬起、
 // 地点楼在提起或转、盘落到针上、唱臂在动、季节换了、校园在沉。其余的帧沿用上一张
 let shadowDirty = true;
+let fieldIdle = 0;
+const fieldTap = (x, z) => { G.field.tap(x, z); fieldIdle = 0; };
 const sunLast = new THREE.Vector3();
 const tmpC = new THREE.Color();
 // 夜观：数据地图选「夜观色」时，舞台的光与背景渐变到入夜的蓝紫（21:30），页面的纸照旧跟着钟点。离开就渐变回来
@@ -792,6 +795,7 @@ export const season = () => seasonCur;
 // 指针：搓盘 / 转视角 / 点选
 // ====================================================================================
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -TILE_TOP);
 function toNdc(ev) {
   const r = canvas.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
@@ -857,6 +861,7 @@ function wirePointer() {
     if (!down) return;
     const moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
     if (moved < 5 && ev.timeStamp - down.t < 500 && !shot) {
+      if (G.field.ok && !reduced) { toNdc(ev); const p = new THREE.Vector3(); if (ray.ray.intersectPlane(groundPlane, p) && Math.hypot(p.x, p.z) < LABEL_R) fieldTap(p.x, p.z); }
       const h = pick(ev);
       if (h && h.place) cb.place(h.place);
       else if (h && h.zone) cb.zone(h.zone);
@@ -1107,7 +1112,7 @@ function frame(now) {
   // 正在放的地点：地面上一圈圈往外走的刻纹（地点模式下落在楼的台座下面）
   const pid = current && current.e.placeId;
   const pin = pid && G.pinObj.get(pid);
-  if (pin && !cut) {
+  if (pin && !cut && (!G.field.ok || S.mode === 'place')) {   // 有声场时只在地点页留这几圈（楼被提起来，台座下面一圈圈）
     const z = G.zoneObj.get(pin.zone), h = G.heroObj.get(pid);
     const base = h ? h.pivot.getWorldPosition(v3).clone() : pin.group.position.clone();
     const yy = h && h.lift > 0.5 ? base.y - 5.4 : TILE_TOP + z.lift + 0.3;
@@ -1121,6 +1126,19 @@ function frame(now) {
       rp.material.color.set(COL.scope).multiplyScalar(1 + 2.2 * G.U.uNight.value);
     });
   } else G.ripples.forEach((rp) => { rp.visible = false; });
+  // 声场（soundfield.js）：正在放的那一处是声源，响度跟着这一段的包络走；声速 343 米每秒，楼挡、楼缝绕、树林吸
+  // 一张盘开始放：从这一处开一场，探测脉冲刻出等时线；之后录音的响度沿着纹往外走。停下六秒后淡出
+  if (G.field.ok && !reduced) {
+    const here = pin && live && !cut;
+    if (here && (!G.field.active || G.field.origin !== pid)) pin.fieldAt = G.field.start(pin.group.position.x, pin.group.position.z, pid);
+    G.field.live = !!here;
+    G.field.step(dt, here && pin.fieldAt ? [{ x: pin.fieldAt[0], z: pin.fieldAt[1], a: lvl }] : []);
+    fieldIdle = here ? 0 : fieldIdle + dt;
+    const show = G.field.active && fieldIdle < 6;
+    const kGoal = !show || S.mode === 'time' ? 0 : G.ground.visible ? 0.35 : S.mode === 'place' ? 0.7 : 1;
+    FIELD.k.value += (kGoal - FIELD.k.value) * (1 - Math.exp(-dt / 0.4));
+    if (!show && FIELD.k.value < 0.01 && G.field.active) G.field.stop();
+  }
   updateTags();
   stepLight(now);
   const at = current && current.e.at ? current.e.at : current && current.e.date ? `${current.e.date}T12:00:00` : null;
@@ -1238,6 +1256,7 @@ export async function init(canvasNode, labelsNode, campus) {
   await pause();
   await document.fonts.load('30px "Zhuque"').catch(() => {});
   G = await build(canvas, campus, { tier: t, pause });
+  G.field = createField(G.renderer, campus, { n: lite ? 256 : 512 });
   // 数据地图的地面：一块画布贴图，铺在区块地面上方一点（ground.js 画）
   G.groundCanvas = document.createElement('canvas');
   G.groundCanvas.width = G.groundCanvas.height = lite ? 1024 : 2048;
@@ -1298,6 +1317,7 @@ export async function init(canvasNode, labelsNode, campus) {
     // 走查量构件：地点楼里标了 userData.part 的部件，数个数、数朝上的面有几层高度（台阶）、量外接盒（米）、投到屏幕上的外接框
     part: (pid, name) => partOf(pid, name), partScreen: (pid, name) => partScreen(pid, name), get cam() { const p = poseNow(); return { az: p.az, polar: p.polar, d: p.d }; },
     get splat() { return splatState(); },
+    field: () => (G.field.ok ? G.field.probe() : null), tap: (x, z) => fieldTap(x, z), fieldGain: (g) => { FIELD.gain.value = g; },
     look: (x, z, d, polar, az) => play([{ to: { t: V(x, TILE_TOP + 4, z), d, polar, az }, dur: 1, ease: 'out' }]) };   // 截图走查用：看某一处
   return true;
 }

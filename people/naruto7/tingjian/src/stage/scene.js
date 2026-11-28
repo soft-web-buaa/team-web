@@ -16,6 +16,7 @@ import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftS
 import { TURN, TEX_W, BANDS, R0, R1, PITCH, MAX_SEC } from '../kesheng/web/groove.js';
 import { buildLandmarks, paintStreets } from './landmarks.js';
 import { TEX, loadCampusTex } from './campusTex.js';
+import { FIELD } from './soundfield.js';
 import { FUNC_CARD, ERA, ROOF_PAPER, POOL_STONE, STYLE, tintOf, facadeOf, offsetRing, ringArea, obbOf, SCENERY } from '../kesheng/web/plan3d/model.js';
 
 export const EX = 1.6;                       // 竖向放大（楼高是作者估算，放大只为看得清体量）
@@ -213,14 +214,16 @@ function windowize(mat, { detail = false } = {}) {
     sh.uniforms.uSnow = snowU;
     sh.uniforms.uWallT = TEX.wall; sh.uniforms.uRoofT = TEX.roof;
     sh.uniforms.uWallOn = TEX.wallOn; sh.uniforms.uRoofOn = TEX.roofOn;
+    sh.uniforms.uFT = FIELD.tex; sh.uniforms.uFE = FIELD.ext; sh.uniforms.uFK = FIELD.k; sh.uniforms.uFC = FIELD.col; sh.uniforms.uFG = FIELD.gain; sh.uniforms.uFN = FIELD.now; sh.uniforms.uFI = FIELD.iso;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aFac; varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aFac; varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; varying vec2 vFW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLoc = position; vGN = normal; vFac = aFac; vFW = (modelMatrix * vec4(position, 1.0)).xz;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         ${detail ? '#define KS_DETAIL\n        uniform float uDetail;' : ''}
-        varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; uniform float uNight, uLit, uWin, uSnow;
+        varying vec4 vFac; varying vec3 vLoc; varying vec3 vGN; varying vec2 vFW; uniform float uNight, uLit, uWin, uSnow;
         uniform sampler2D uWallT, uRoofT; uniform float uWallOn, uRoofOn;
+        uniform sampler2D uFT; uniform vec3 uFE, uFC; uniform float uFK, uFG, uFN, uFI;
         float wHash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         float box1(float x, float a, float b, float aa) { return smoothstep(a - aa, a + aa, x) * (1.0 - smoothstep(b - aa, b + aa, x)); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -331,9 +334,17 @@ function windowize(mat, { detail = false } = {}) {
             float lampI = (2.0 + 2.4 * wHash(cell + 3.1)) * mix(1.0, 0.32, drawn) * mix(1.0, 0.86, 1.0 - warm);
             totalEmissiveRadiance += lampC * lit * uNight * uWin * lampI;
           }
+          // 声场打在墙上：取墙外三米那一格的振幅，墙脚最亮、往上淡掉（波撞到这面墙、弹回去）
+          float sideF = 1.0 - smoothstep(0.3, 0.5, abs(vGN.y));
+          if (uFK > 0.001 && sideF > 0.01) {
+            vec4 fq = texture2D(uFT, (vFW + normalize(vGN.xz + 1e-5) * 3.0 - uFE.xy) * uFE.z);
+            float lit = fq.b * uFG / (fq.b * uFG + 0.6) * smoothstep(0.0012, 0.005, fq.b);
+            float age = uFN - fq.a, band = fq.a > 0.0 ? exp(-max(age, 0.0) * 14.0) * step(0.0, age) : 0.0;
+            totalEmissiveRadiance += uFC * (lit * 0.9 + band * 1.4) * sideF * exp(-vLoc.y / 10.0) * uFK;   // 墙脚被照亮：声音撞在这面墙上
+          }
         }`);
   };
-  mat.customProgramCacheKey = () => (detail ? 'ks-card-v2-d' : 'ks-card-v2');
+  mat.customProgramCacheKey = () => (detail ? 'ks-card-v3-d' : 'ks-card-v3');
 }
 
 // —— 地面的接触影：楼脚、树下的一圈柔和变暗。把楼底轮廓和树冠画进一张 1024 的图，模糊几遍，当 AO 贴在地面材质上（世界坐标采样）。
@@ -401,6 +412,7 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
     sh.uniforms.uChan = { value: chan }; sh.uniforms.uScl = { value: scale };
     sh.uniforms.uAmt = { value: amt }; sh.uniforms.uRgh = { value: rgh }; sh.uniforms.uStripe = { value: stripe };
     sh.uniforms.uGD = GD.tex; sh.uniforms.uGDe = GD.ext; sh.uniforms.uAOk = { value: ao };
+    sh.uniforms.uFT = FIELD.tex; sh.uniforms.uFE = FIELD.ext; sh.uniforms.uFK = FIELD.k; sh.uniforms.uFC = FIELD.col; sh.uniforms.uFG = FIELD.gain; sh.uniforms.uFN = FIELD.now; sh.uniforms.uFI = FIELD.iso;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vSLoc;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSLoc = position;');
@@ -408,6 +420,7 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
       .replace('#include <common>', `#include <common>
         varying vec3 vSLoc; uniform sampler2D uSurfT, uGD; uniform vec3 uGDe;
         uniform float uSurfOn, uChan, uScl, uAmt, uRgh, uStripe, uAOk;
+        uniform sampler2D uFT; uniform vec3 uFE, uFC; uniform float uFK, uFG, uFN, uFI;
         float surfCh(vec4 c) { return uChan < 0.5 ? c.r : (uChan < 1.5 ? c.g : c.b); }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         if (uAOk > 0.001) diffuseColor.rgb *= mix(1.0, texture2D(uGD, (vSLoc.xz - uGDe.xy) * uGDe.z).r, uAOk);   // 楼脚、树下的接触影
@@ -424,9 +437,25 @@ function surfaceTex(mat, chan, scale, { amt = 0.4, rgh = 0.14, stripe = 0, ao = 
             float s = smoothstep(-0.06, 0.06, fract(vSLoc.x / 8.0 + vSLoc.z / 13.0) - 0.5);
             diffuseColor.rgb *= 1.0 + 0.1 * (s - 0.5) * keep;
           }
+        }
+        // 声场：波峰是一道亮的黄铜色，波谷把地面压暗一点（soundfield.js）
+        if (uFK > 0.001) {
+          vec4 fq = texture2D(uFT, (vSLoc.xz - uFE.xy) * uFE.z);
+          float lit = fq.b * uFG / (fq.b * uFG + 0.6) * smoothstep(0.0012, 0.005, fq.b);   // 此刻被这段声音照到多少
+          if (fq.a > 0.0) {
+            // 等时线：到达时刻每过 uFI 秒一道细线；远处线挤在一起时淡掉，不出摩尔纹
+            float g = fq.a / uFI, w = fwidth(g);
+            float ln = (1.0 - smoothstep(0.5 * w, 1.5 * w + 0.02, abs(fract(g + 0.5) - 0.5))) * (1.0 - smoothstep(0.22, 0.45, w));
+            float age = uFN - fq.a;                                   // 探测脉冲走过这里多久了
+            ln *= smoothstep(0.0, 0.04, age);                          // 线是脉冲走过时刻下的
+            float band = exp(-max(age, 0.0) * 18.0) * step(0.0, age);  // 脉冲本身：一道约 20 米宽的亮带往外扫
+            totalEmissiveRadiance += uFC * (ln * (0.07 + 1.6 * lit + 1.0 * exp(-age * 3.0)) + band * 0.5) * uFK;
+            diffuseColor.rgb *= 1.0 - 0.22 * ln * uFK;              // 白天：纹是刻进地面的一道暗线
+          }
+          totalEmissiveRadiance += uFC * lit * lit * 0.05 * uFK;
         }`);
   };
-  mat.customProgramCacheKey = () => 'ks-surf-v2';
+  mat.customProgramCacheKey = () => 'ks-surf-v3';
   return mat;
 }
 
